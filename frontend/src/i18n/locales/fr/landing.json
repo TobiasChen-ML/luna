@@ -1,0 +1,56 @@
+{
+  "hero": {
+    "title": "Votre compagnon IA vous attend",
+    "subtitle": "Connectez-vous avec des personnages IA qui vous comprennent. Engagez des conversations significatives, explorez des histoires et créez de vraies connexions.",
+    "cta": "Commencer à discuter",
+    "ctaFree": "Commencer gratuitement",
+    "learnMore": "En savoir plus"
+  },
+  "discover": {
+    "title": "Découvrez les personnages IA",
+    "subtitle": "Trouvez votre compagnon IA parfait",
+    "viewAll": "Voir tout",
+    "categories": {
+      "all": "Tous",
+      "girls": "Filles",
+      "anime": "Anime",
+      "guys": "Garçons",
+      "fantasy": "Fantaisie",
+      "romance": "Romance"
+    }
+  },
+  "features": {
+    "title": "Pourquoi nous choisir",
+    "subtitle": "Découvrez l'avenir de la compagnie IA",
+    "chat": {
+      "title": "Conversations naturelles",
+      "description": "Engagez des conversations fluides et naturelles avec des personnages IA qui se souviennent de vos préférences et s'adaptent à votre style."
+    },
+    "voice": {
+      "title": "Chat vocal",
+      "description": "Parlez à votre compagnon IA en utilisant des interactions vocales naturelles pour une expérience plus immersive."
+    },
+    "image": {
+      "title": "Génération d'images",
+      "description": "Générez des images époustouflantes avec votre compagnon IA et donnez vie à vos conversations."
+    },
+    "memory": {
+      "title": "Mémoire intelligente",
+      "description": "Votre compagnon IA se souvient de vos conversations et préférences pour une expérience personnalisée."
+    }
+  },
+  "testimonials": {
+    "title": "Ce que disent nos utilisateurs"
+  },
+  "cta": {
+    "title": "Prêt à commencer ?",
+    "subtitle": "Rejoignez des milliers d'utilisateurs profitant de la compagnie IA",
+    "button": "Commencer gratuitement"
+  },
+  "stats": {
+    "characters": "Personnages IA",
+    "users": "Utilisateurs actifs",
+    "messages": "Messages envoyés",
+    "countries": "Pays"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "title": "Settings",
+  "general": "General",
+  "appearance": "Appearance",
+  "notifications": "Notifications",
+  "privacy": "Privacy",
+  "language": "Language",
+  "theme": {
+    "title": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "notification": {
+    "title": "Notifications",
+    "email": "Email Notifications",
+    "push": "Push Notifications",
+    "marketing": "Marketing Emails"
+  },
+  "privacy": {
+    "title": "Privacy",
+    "profileVisibility": "Profile Visibility",
+    "public": "Public",
+    "private": "Private",
+    "friendsOnly": "Friends Only"
+  },
+  "mature": {
+    "title": "Mature Content",
+    "enabled": "Enable Mature Content",
+    "warning": "You must be 18+ to enable this feature"
+  },
+  "account": {
+    "title": "Account",
+    "changePassword": "Change Password",
+    "logout": "Log Out",
+    "deleteAccount": "Delete Account"
+  }
+}

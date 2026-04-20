@@ -1,0 +1,33 @@
+{
+  "home": "Startseite",
+  "discover": "Entdecken",
+  "chat": "Chat",
+  "characters": "Charaktere",
+  "profile": "Profil",
+  "settings": "Einstellungen",
+  "create": "Erstellen",
+  "community": "Community",
+  "gallery": "Galerie",
+  "pricing": "Preise",
+  "faq": "FAQ",
+  "about": "Über uns",
+  "contact": "Kontakt",
+  "blog": "Blog",
+  "terms": "Nutzungsbedingungen",
+  "privacy": "Datenschutzerklärung",
+  "login": "Anmelden",
+  "register": "Registrieren",
+  "logout": "Abmelden",
+  "gameplay": "Spiel",
+  "getStarted": "Loslegen",
+  "subscriptions": "Abonnements",
+  "footer": {
+    "description": "Spiele story-basierte Gespräche mit KI-Begleitern, die mit dir wachsen.",
+    "product": "Produkt",
+    "company": "Unternehmen",
+    "support": "Support",
+    "contactSupport": "Support kontaktieren",
+    "madeWith": "Gemacht mit",
+    "byTeam": "von unserem Team"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "hero": {
+    "title": "Dein KI-Begleiter wartet",
+    "subtitle": "Verbinde dich mit KI-Charakteren, die dich verstehen. Führe bedeutungsvolle Gespräche, erkunde Geschichten und baue echte Verbindungen auf.",
+    "cta": "Chat starten",
+    "ctaFree": "Kostenlos starten",
+    "learnMore": "Mehr erfahren"
+  },
+  "discover": {
+    "title": "Entdecke KI-Charaktere",
+    "subtitle": "Finde deinen perfekten KI-Begleiter",
+    "viewAll": "Alle anzeigen",
+    "categories": {
+      "all": "Alle",
+      "girls": "Frauen",
+      "anime": "Anime",
+      "guys": "Männer",
+      "fantasy": "Fantasy",
+      "romance": "Romantik"
+    }
+  },
+  "features": {
+    "title": "Warum uns wählen",
+    "subtitle": "Erlebe die Zukunft der KI-Begleitung",
+    "chat": {
+      "title": "Natürliche Gespräche",
+      "description": "Führe fließende, natürliche Gespräche mit KI-Charakteren, die sich an deine Vorlieben erinnern und sich an deinen Stil anpassen."
+    },
+    "voice": {
+      "title": "Sprach-Chat",
+      "description": "Sprich mit deinem KI-Begleiter durch natürliche Sprachinteraktionen für ein immersiveres Erlebnis."
+    },
+    "image": {
+      "title": "Bildgenerierung",
+      "description": "Erstelle atemberaubende Bilder mit deinem KI-Begleiter und erwecke deine Gespräche zum Leben."
+    },
+    "memory": {
+      "title": "Intelligentes Gedächtnis",
+      "description": "Dein KI-Begleiter erinnert sich an deine Gespräche und Vorlieben für ein personalisiertes Erlebnis."
+    }
+  },
+  "testimonials": {
+    "title": "Was unsere Nutzer sagen"
+  },
+  "cta": {
+    "title": "Bereit anzufangen?",
+    "subtitle": "Schließe dich tausenden von Nutzern an, die KI-Begleitung genießen",
+    "button": "Kostenlos starten"
+  },
+  "stats": {
+    "characters": "KI-Charaktere",
+    "users": "Aktive Nutzer",
+    "messages": "Gesendete Nachrichten",
+    "countries": "Länder"
+  }
+}

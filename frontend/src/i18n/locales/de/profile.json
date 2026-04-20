@@ -1,0 +1,87 @@
+{
+  "title": "Profileinstellungen",
+  "edit": "Profil bearbeiten",
+  "save": "Speichern",
+  "saving": "Speichern…",
+  "cancel": "Abbrechen",
+  "language": "Sprache",
+  "fields": {
+    "username": "Benutzername",
+    "email": "E-Mail",
+    "displayName": "Spitzname",
+    "bio": "Biografie",
+    "avatar": "Avatar",
+    "birthday": "Geburtstag",
+    "gender": "Geschlecht",
+    "password": "Passwort"
+  },
+  "genders": {
+    "male": "Männlich",
+    "female": "Weiblich",
+    "nonBinary": "Nicht-binär",
+    "other": "Andere",
+    "prefer_not_to_say": "Möchte ich nicht sagen"
+  },
+  "changeAvatar": "Avatar ändern",
+  "removeAvatar": "Avatar entfernen",
+  "subscription": {
+    "title": "Abonnement",
+    "plan": "Aktueller Plan",
+    "free": "Kostenlos",
+    "premium": "Premium",
+    "upgrade": "Auf Premium upgraden",
+    "manage": "Abonnement verwalten",
+    "cancel": "Abonnement kündigen",
+    "nextBilling": "Nächstes Abrechnungsdatum",
+    "expires": "Läuft ab"
+  },
+  "notifications": {
+    "title": "Automatische Benachrichtigungen",
+    "description": "Als Benutzer erhältst du automatisch Benachrichtigungen von uns. Wenn du keine Benachrichtigungen möchtest, deaktiviere das Kontrollkästchen."
+  },
+  "feedback": {
+    "title": "Beschwerde / Vorschlag",
+    "complaint": "Beschwerde",
+    "suggestion": "Vorschlag",
+    "placeholder": "Erzähle uns, was passiert ist oder was wir verbessern können...",
+    "send": "Feedback senden",
+    "sending": "Senden...",
+    "success": "Danke. Dein Feedback wurde gesendet.",
+    "error": "Feedback konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "minLength": "Bitte gib mindestens 10 Zeichen ein."
+  },
+  "stats": {
+    "messages": "Gesendete Nachrichten",
+    "characters": "Erstellte Charaktere",
+    "memberSince": "Mitglied seit"
+  },
+  "dangerZone": {
+    "title": "Gefahrenbereich",
+    "deleteAccount": "Konto löschen",
+    "warning": "Wenn du dieses Konto und alle seine Daten dauerhaft löschen möchtest."
+  },
+  "account": {
+    "title": "Konto",
+    "changePassword": "Passwort ändern",
+    "logout": "Abmelden"
+  },
+  "editModal": {
+    "nickname": "Spitzname bearbeiten",
+    "nicknamePlaceholder": "Dein Spitzname",
+    "gender": "Geschlecht bearbeiten",
+    "currentPassword": "Aktuelles Passwort",
+    "newPassword": "Neues Passwort (min. 8 Zeichen)",
+    "confirmPassword": "Neues Passwort bestätigen"
+  },
+  "errors": {
+    "nicknameEmpty": "Spitzname darf nicht leer sein",
+    "nicknameFailed": "Spitzname konnte nicht aktualisiert werden. Bitte versuche es erneut.",
+    "genderRequired": "Bitte wähle ein Geschlecht",
+    "genderFailed": "Geschlecht konnte nicht aktualisiert werden. Bitte versuche es erneut.",
+    "currentPasswordRequired": "Gib dein aktuelles Passwort ein",
+    "currentPasswordIncorrect": "Das aktuelle Passwort ist falsch",
+    "passwordMinLength": "Das neue Passwort muss mindestens 8 Zeichen haben",
+    "passwordMismatch": "Passwörter stimmen nicht überein",
+    "passwordChangeFailed": "Passwort konnte nicht geändert werden. Bitte versuche es erneut."
+  }
+}

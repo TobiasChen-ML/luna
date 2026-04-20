@@ -1,0 +1,15 @@
+{
+  "errors": {
+    "generic": "Algo salió mal. Por favor, inténtalo de nuevo.",
+    "network": "Error de red. Por favor, verifica tu conexión.",
+    "unauthorized": "No estás autorizado para realizar esta acción.",
+    "forbidden": "Acceso denegado.",
+    "notFound": "El recurso solicitado no fue encontrado.",
+    "serverError": "Error del servidor. Por favor, inténtalo más tarde.",
+    "timeout": "La solicitud ha expirado. Por favor, inténtalo de nuevo.",
+    "validation": "Por favor, verifica tus datos e inténtalo de nuevo.",
+    "sessionExpired": "Tu sesión ha expirado. Por favor, inicia sesión de nuevo.",
+    "rateLimit": "Demasiadas solicitudes. Por favor, espera e inténtalo de nuevo.",
+    "maintenance": "El servicio está actualmente en mantenimiento. Por favor, vuelve más tarde."
+  }
+}

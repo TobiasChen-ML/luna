@@ -1,0 +1,56 @@
+{
+  "create": {
+    "title": "Create Character",
+    "subtitle": "Design your perfect AI companion",
+    "name": "Name",
+    "namePlaceholder": "Enter character name",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe your character's personality and background...",
+    "personality": "Personality",
+    "personalityPlaceholder": "Describe personality traits...",
+    "greeting": "Greeting Message",
+    "greetingPlaceholder": "First message your character will send...",
+    "avatar": "Avatar",
+    "uploadAvatar": "Upload Avatar",
+    "generateAvatar": "Generate with AI",
+    "visibility": {
+      "title": "Visibility",
+      "private": "Private",
+      "public": "Public"
+    },
+    "category": "Category",
+    "tags": "Tags",
+    "save": "Create Character",
+    "saving": "Creating...",
+    "success": "Character created successfully!"
+  },
+  "edit": {
+    "title": "Edit Character",
+    "save": "Save Changes",
+    "saving": "Saving...",
+    "success": "Character updated successfully!"
+  },
+  "delete": {
+    "title": "Delete Character",
+    "confirm": "Are you sure you want to delete this character?",
+    "warning": "This action cannot be undone.",
+    "button": "Delete"
+  },
+  "myCharacters": {
+    "title": "My Characters",
+    "empty": "You haven't created any characters yet.",
+    "createFirst": "Create Your First Character"
+  },
+  "categories": {
+    "all": "All",
+    "girls": "Girls",
+    "guys": "Guys",
+    "anime": "Anime",
+    "fantasy": "Fantasy",
+    "romance": "Romance",
+    "adventure": "Adventure"
+  },
+  "chat": "Chat",
+  "edit": "Edit",
+  "delete": "Delete"
+}

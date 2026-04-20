@@ -1,0 +1,35 @@
+{
+  "email": {
+    "required": "Email is required",
+    "invalid": "Invalid email address"
+  },
+  "password": {
+    "required": "Password is required",
+    "minLength": "Password must be at least {{count}} characters",
+    "maxLength": "Password must be less than {{count}} characters",
+    "mismatch": "Passwords do not match"
+  },
+  "username": {
+    "required": "Username is required",
+    "minLength": "Username must be at least {{count}} characters",
+    "maxLength": "Username must be less than {{count}} characters",
+    "invalid": "Username can only contain letters, numbers, and underscores",
+    "taken": "This username is already taken"
+  },
+  "phone": {
+    "invalid": "Invalid phone number"
+  },
+  "required": "This field is required",
+  "min": "Minimum value is {{min}}",
+  "max": "Maximum value is {{max}}",
+  "minLength": "Must be at least {{count}} characters",
+  "maxLength": "Must be less than {{count}} characters",
+  "pattern": "Invalid format",
+  "number": "Must be a number",
+  "integer": "Must be a whole number",
+  "positive": "Must be a positive number",
+  "url": "Must be a valid URL",
+  "date": "Must be a valid date",
+  "dateMin": "Date must be after {{min}}",
+  "dateMax": "Date must be before {{max}}"
+}

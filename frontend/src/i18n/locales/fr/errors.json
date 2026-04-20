@@ -1,0 +1,15 @@
+{
+  "errors": {
+    "generic": "Une erreur s'est produite. Veuillez réessayer.",
+    "network": "Erreur réseau. Veuillez vérifier votre connexion.",
+    "unauthorized": "Vous n'êtes pas autorisé à effectuer cette action.",
+    "forbidden": "Accès refusé.",
+    "notFound": "La ressource demandée n'a pas été trouvée.",
+    "serverError": "Erreur serveur. Veuillez réessayer plus tard.",
+    "timeout": "La demande a expiré. Veuillez réessayer.",
+    "validation": "Veuillez vérifier vos données et réessayer.",
+    "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "rateLimit": "Trop de requêtes. Veuillez patienter et réessayer.",
+    "maintenance": "Le service est actuellement en maintenance. Veuillez réessayer plus tard."
+  }
+}

@@ -1,0 +1,522 @@
+[
+  {
+    "id": "angst_001",
+    "title": "替身情人",
+    "title_en": "Substitute Lover",
+    "summary": "他把你当她的替身，你却动了真心",
+    "emotion_tones": ["angst"],
+    "relation_types": ["contract_lovers", "substitute"],
+    "contrast_types": ["relationship", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他对你温柔体贴，满足你一切物质需求",
+    "contrast_truth": "他只是把你当作前女友的替身，从未真正爱你",
+    "contrast_hook": "当你发现真相后，他却开始慌了",
+    "script_seed": {
+      "character": {
+        "name": "陆景深",
+        "age": 29,
+        "surface_identity": "温柔体贴的金主，完美男友",
+        "true_identity": "心中住着另一个女人的痴情人",
+        "profession": "集团总裁"
+      },
+      "contrast": {
+        "surface": "他对你百依百顺，给你最好的一切",
+        "truth": "每次看你，他都在找另一个人的影子",
+        "hook": "你的存在，只是因为你的眼睛像她"
+      },
+      "progression": {
+        "start": "你被他的温柔打动，以为遇到真爱",
+        "build": "你发现他书房里全是另一个女人的照片",
+        "climax": "她回来了，他毫不犹豫地推开你",
+        "resolve": "你转身离开，他却发现没有你活不下去"
+      },
+      "key_nodes": [
+        {"name": "初次相遇", "description": "他在人群中一眼看中你", "trigger": "开场"},
+        {"name": "温柔陷阱", "description": "他对你百般呵护，你逐渐沦陷", "trigger": "intimacy>=20"},
+        {"name": "书房秘密", "description": "你意外发现满墙的照片，全是另一个女人", "trigger": "intimacy>=40"},
+        {"name": "她的归来", "description": "前女友回国，他丢下你去见她", "trigger": "intimacy>=60"},
+        {"name": "真相大白", "description": "他说'你的眼睛很像她'", "trigger": "intimacy>=70"},
+        {"name": "选择时刻", "description": "你离开，他追来", "trigger": "intimacy>=80"}
+      ],
+      "endings": {
+        "good": "他终于明白，爱的是你，不是影子",
+        "neutral": "你们和平分手，各自安好",
+        "bad": "他选择了前女友，你独自离开",
+        "secret": "原来你也一直在利用他复仇"
+      }
+    }
+  },
+  {
+    "id": "angst_002",
+    "title": "复仇之爱",
+    "title_en": "Revenge Love",
+    "summary": "接近她是为了复仇，却爱上了她",
+    "emotion_tones": ["angst", "revenge"],
+    "relation_types": ["revenge_target", "enemy_to_lovers"],
+    "contrast_types": ["relationship", "loyalty"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "female_char",
+    "profession": "business",
+    "length": "long",
+    "age_rating": "adult",
+    "contrast_surface": "她是你仇人的女儿，你接近她是为了报复",
+    "contrast_truth": "在复仇过程中，你爱上了她",
+    "contrast_hook": "当复仇完成时，你该如何选择",
+    "script_seed": {
+      "character": {
+        "name": "沈清欢",
+        "age": 24,
+        "surface_identity": "豪门千金，天真烂漫",
+        "true_identity": "父亲的棋子，家族的牺牲品",
+        "profession": "集团千金"
+      },
+      "contrast": {
+        "surface": "她看起来是无忧无虑的公主",
+        "truth": "她其实一直活在父亲的操控之下",
+        "hook": "你们的相遇是复仇的开始，还是命运的安排"
+      },
+      "progression": {
+        "start": "你蓄意接近，她毫无防备地爱上你",
+        "build": "你发现她并不像她父亲那样邪恶",
+        "climax": "复仇计划即将实施，你却犹豫了",
+        "resolve": "你选择了她，与她一起对抗她的家族"
+      },
+      "key_nodes": [
+        {"name": "精心策划", "description": "你伪装身份接近她", "trigger": "开场"},
+        {"name": "意外心动", "description": "她的善良让你开始动摇", "trigger": "intimacy>=30"},
+        {"name": "真相渐露", "description": "你发现她父亲对她也不好", "trigger": "intimacy>=50"},
+        {"name": "复仇之夜", "description": "计划实施当晚，你却下不了手", "trigger": "intimacy>=70"},
+        {"name": "坦白时刻", "description": "你告诉她真相", "trigger": "intimacy>=85"},
+        {"name": "共同对抗", "description": "你们联手对抗她的父亲", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们一起摧毁了她的家族，获得自由",
+        "neutral": "你放弃了复仇，但也无法在一起",
+        "bad": "你完成了复仇，却失去了她",
+        "secret": "她早就知道你的目的，却在赌你的爱"
+      }
+    }
+  },
+  {
+    "id": "angst_003",
+    "title": "错爱三年",
+    "title_en": "Three Years of Wrong Love",
+    "summary": "分手三年，发现当初全是误会",
+    "emotion_tones": ["angst", "healing"],
+    "relation_types": ["ex_lovers", "first_love_reunion"],
+    "contrast_types": ["memory", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "三年前他抛弃了你，你认为他爱上了别人",
+    "contrast_truth": "三年前他得了绝症，不想拖累你",
+    "contrast_hook": "当你发现真相，他已经是别人的未婚夫",
+    "script_seed": {
+      "character": {
+        "name": "顾言深",
+        "age": 28,
+        "surface_identity": "冷漠无情的负心汉",
+        "true_identity": "为了你选择独自承受的傻男人",
+        "profession": "投资银行家"
+      },
+      "contrast": {
+        "surface": "他当年无情分手，转身娶了别的女人",
+        "truth": "他被诊断出癌症，不想让你看着他死",
+        "hook": "三年后，他还活着，但已经订婚了"
+      },
+      "progression": {
+        "start": "三年后你们在朋友婚礼上重逢",
+        "build": "你发现当年分手的原因不是你想的那样",
+        "climax": "他承认当年撒谎，是因为爱你",
+        "resolve": "你决定再次选择他，还是放手"
+      },
+      "key_nodes": [
+        {"name": "重逢", "description": "婚礼上，你们四目相对", "trigger": "开场"},
+        {"name": "回忆涌来", "description": "你想起三年前的分手", "trigger": "intimacy>=20"},
+        {"name": "意外发现", "description": "你从朋友口中得知当年的真相", "trigger": "intimacy>=40"},
+        {"name": "质问", "description": "你冲去找他问清楚", "trigger": "intimacy>=60"},
+        {"name": "真相大白", "description": "他承认当年得了癌症", "trigger": "intimacy>=75"},
+        {"name": "选择", "description": "他和未婚妻的婚礼在即", "trigger": "intimacy>=85"}
+      ],
+      "endings": {
+        "good": "他在婚礼上选择了你",
+        "neutral": "你们做回朋友，各自生活",
+        "bad": "他还是娶了未婚妻，你祝福他们",
+        "secret": "未婚妻其实是他妹妹，一直在帮他"
+      }
+    }
+  },
+  {
+    "id": "angst_004",
+    "title": "禁忌师生",
+    "title_en": "Forbidden Teacher",
+    "summary": "他知道不该，却无法控制",
+    "emotion_tones": ["angst", "ethical"],
+    "relation_types": ["teacher_student", "professor_student"],
+    "contrast_types": ["morality", "relationship"],
+    "era": "modern_campus",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "campus",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他是德高望重的教授，从不近女色",
+    "contrast_truth": "他对自己的学生动了心，内心煎熬",
+    "contrast_hook": "禁果的诱惑，谁能先低头",
+    "script_seed": {
+      "character": {
+        "name": "傅寒川",
+        "age": 32,
+        "surface_identity": "冷面教授，学术男神",
+        "true_identity": "压抑自己感情的普通人",
+        "profession": "大学教授"
+      },
+      "contrast": {
+        "surface": "他对所有学生一视同仁，冷淡疏离",
+        "truth": "他一直在克制对你的心动",
+        "hook": "师生的界限，在深夜的办公室变得模糊"
+      },
+      "progression": {
+        "start": "你选修了他的课，成为他的学生",
+        "build": "频繁的学术交流让你们越走越近",
+        "climax": "深夜的办公室，界限被打破",
+        "resolve": "毕业时，你们要面对所有人的目光"
+      },
+      "key_nodes": [
+        {"name": "初见", "description": "第一堂课，他的眼神在你身上多停留了一秒", "trigger": "开场"},
+        {"name": "课后答疑", "description": "你经常去找他，他从不拒绝", "trigger": "intimacy>=20"},
+        {"name": "校外偶遇", "description": "在校外遇到，他不再那么冷淡", "trigger": "intimacy>=40"},
+        {"name": "深夜办公室", "description": "你们独处到很晚，气氛暧昧", "trigger": "intimacy>=60"},
+        {"name": "越界", "description": "理智崩塌的那一刻", "trigger": "intimacy>=75"},
+        {"name": "公开", "description": "毕业典礼，你们的选择", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你毕业那天，他向所有人公开你们的关系",
+        "neutral": "你们地下恋情，毕业后结婚",
+        "bad": "他被学校解雇，你转学离开",
+        "secret": "原来他也一直在等毕业这一天"
+      }
+    }
+  },
+  {
+    "id": "angst_005",
+    "title": "上司的秘密",
+    "title_en": "Boss's Secret",
+    "summary": "办公室的秘密，谁能先动心",
+    "emotion_tones": ["angst", "sweet"],
+    "relation_types": ["boss_subordinate", "boss_secretary"],
+    "contrast_types": ["identity", "power"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他在公司雷厉风行，从不近女色",
+    "contrast_truth": "他对你有着无法言说的占有欲",
+    "contrast_hook": "权力与欲望的边界，一触即破",
+    "script_seed": {
+      "character": {
+        "name": "霍景琛",
+        "age": 31,
+        "surface_identity": "冷血总裁，商业机器",
+        "true_identity": "内心孤独，渴望被爱的人",
+        "profession": "集团CEO"
+      },
+      "contrast": {
+        "surface": "他对所有人都冷漠，只当你是工具",
+        "truth": "他早已把你放在心上，却不敢说",
+        "hook": "他爱你，却用工作把你绑在身边"
+      },
+      "progression": {
+        "start": "你是他的秘书，每天被各种工作折磨",
+        "build": "一次出差让你看到了他的另一面",
+        "climax": "公司危机，他宁愿失去一切也不愿你受伤",
+        "resolve": "他终于放下架子，向你表白"
+      },
+      "key_nodes": [
+        {"name": "入职", "description": "你成为他的秘书，噩梦开始", "trigger": "开场"},
+        {"name": "深夜加班", "description": "他给你点的外卖，多了一份甜点", "trigger": "intimacy>=20"},
+        {"name": "出差意外", "description": "酒店只剩一间房", "trigger": "intimacy>=40"},
+        {"name": "生病", "description": "他亲自照顾发烧的你", "trigger": "intimacy>=60"},
+        {"name": "公司危机", "description": "对手用你威胁他", "trigger": "intimacy>=75"},
+        {"name": "表白", "description": "他说'从今以后，你是我的人'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "他公开你们的关系，给你一个盛大婚礼",
+        "neutral": "你们保持地下恋情",
+        "bad": "他为了保护你，让你辞职离开",
+        "secret": "原来他当初故意面试你，因为你是他的救命恩人"
+      }
+    }
+  },
+  {
+    "id": "angst_006",
+    "title": "替嫁新娘",
+    "title_en": "Substitute Bride",
+    "summary": "替姐姐出嫁，却意外爱上他",
+    "emotion_tones": ["angst", "sweet"],
+    "relation_types": ["arranged_marriage", "substitute"],
+    "contrast_types": ["relationship", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "你只是替身，他爱的是你的姐姐",
+    "contrast_truth": "他从一开始就知道是你，选择的也是你",
+    "contrast_hook": "当姐姐回来要人时，他会怎么选",
+    "script_seed": {
+      "character": {
+        "name": "薄夜寒",
+        "age": 30,
+        "surface_identity": "冷酷无情的商业帝王",
+        "true_identity": "一眼就认出你，选择你的人",
+        "profession": "集团总裁"
+      },
+      "contrast": {
+        "surface": "他被迫娶你，对你冷若冰霜",
+        "truth": "他一直在等你的心向他敞开",
+        "hook": "你以为他是被迫，其实他求之不得"
+      },
+      "progression": {
+        "start": "姐姐逃婚，你被迫替嫁",
+        "build": "他对你的态度逐渐改变",
+        "climax": "姐姐回来，要夺回属于她的一切",
+        "resolve": "他选择了你，从始至终都是你"
+      },
+      "key_nodes": [
+        {"name": "替嫁之夜", "description": "你战战兢兢走进洞房", "trigger": "开场"},
+        {"name": "意外温柔", "description": "他对你比想象中好", "trigger": "intimacy>=20"},
+        {"name": "发现秘密", "description": "你发现他书房里有你的照片", "trigger": "intimacy>=40"},
+        {"name": "姐姐归来", "description": "姐姐回来要夺回未婚夫", "trigger": "intimacy>=60"},
+        {"name": "选择", "description": "他在众人面前牵起你的手", "trigger": "intimacy>=80"},
+        {"name": "真相", "description": "他说'我从一开始要娶的就是你'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们幸福生活，姐姐黯然离开",
+        "neutral": "你们维持婚姻，但爱情需要时间",
+        "bad": "他选择姐姐，你离婚离开",
+        "secret": "原来是你小时候救过他，他一直在找你"
+      }
+    }
+  },
+  {
+    "id": "angst_007",
+    "title": "敌营卧底",
+    "title_en": "Undercover in Enemy Camp",
+    "summary": "你是卧底，却爱上了目标",
+    "emotion_tones": ["angst", "suspense"],
+    "relation_types": ["enemy_to_lovers", "revenge_target"],
+    "contrast_types": ["loyalty", "relationship"],
+    "era": "modern_urban",
+    "gender_target": "general",
+    "character_gender": "female_char",
+    "profession": "crime",
+    "length": "long",
+    "age_rating": "adult",
+    "contrast_surface": "你是警察派来的卧底，任务是收集他的犯罪证据",
+    "contrast_truth": "你发现他不是真正的坏人，真正的罪犯另有其人",
+    "contrast_hook": "当你必须逮捕他时，你会怎么选",
+    "script_seed": {
+      "character": {
+        "name": "秦若雪",
+        "age": 26,
+        "surface_identity": "黑帮老大最信任的人",
+        "true_identity": "警方卧底，却动摇了",
+        "profession": "卧底警察/黑帮骨干"
+      },
+      "contrast": {
+        "surface": "她忠诚、能干，是他的左膀右臂",
+        "truth": "她是卧底，每天都在收集证据",
+        "hook": "但她发现他其实一直在保护她"
+      },
+      "progression": {
+        "start": "你成功潜伏，成为他的心腹",
+        "build": "你发现他的秘密——他不是真正的坏人",
+        "climax": "收网行动开始，你必须做出选择",
+        "resolve": "你选择站在他这边，一起对抗真正的罪犯"
+      },
+      "key_nodes": [
+        {"name": "潜伏成功", "description": "你成为他的左右手", "trigger": "开场"},
+        {"name": "怀疑", "description": "你发现他在暗中帮助警方", "trigger": "intimacy>=30"},
+        {"name": "真相", "description": "他告诉你他的真实身份", "trigger": "intimacy>=50"},
+        {"name": "信任", "description": "他为你挡了一颗子弹", "trigger": "intimacy>=70"},
+        {"name": "抉择", "description": "收网行动，你站在哪一边", "trigger": "intimacy>=85"},
+        {"name": "共同作战", "description": "你们联手对付真正的罪犯", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们一起洗清了他的罪名",
+        "neutral": "他选择离开，你们天各一方",
+        "bad": "你执行任务，他被捕",
+        "secret": "他早就知道你是卧底，一直在等你选择他"
+      }
+    }
+  },
+  {
+    "id": "angst_008",
+    "title": "失忆的爱人",
+    "title_en": "Amnesiac Lover",
+    "summary": "她忘了你，你要重新追回",
+    "emotion_tones": ["angst", "healing"],
+    "relation_types": ["ex_lovers", "childhood_friends"],
+    "contrast_types": ["memory", "relationship"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "她完全忘记了你，像对待陌生人一样",
+    "contrast_truth": "她的失忆是为了保护自己，潜意识里还记得你",
+    "contrast_hook": "你要让她重新爱上你",
+    "script_seed": {
+      "character": {
+        "name": "林晚晚",
+        "age": 25,
+        "surface_identity": "单纯善良的陌生人",
+        "true_identity": "曾经深爱你的女孩，因创伤选择遗忘",
+        "profession": "插画师"
+      },
+      "contrast": {
+        "surface": "她对你毫无印象，礼貌又疏离",
+        "truth": "她的潜意识在抗拒回忆，因为那段记忆太痛",
+        "hook": "你要让她重新爱上你，而不是强迫她想起"
+      },
+      "progression": {
+        "start": "你找到她，她却不认识你",
+        "build": "你以朋友身份重新接近她",
+        "climax": "她开始恢复记忆，却选择逃跑",
+        "resolve": "你追上去，告诉她无论她记不记得，你都爱她"
+      },
+      "key_nodes": [
+        {"name": "重逢", "description": "你在咖啡馆看到她，她却视你为陌生人", "trigger": "开场"},
+        {"name": "重新认识", "description": "你自我介绍，开始以朋友身份相处", "trigger": "intimacy>=20"},
+        {"name": "似曾相识", "description": "她对某些事有模糊的熟悉感", "trigger": "intimacy>=40"},
+        {"name": "记忆闪回", "description": "她开始做噩梦，梦里有你", "trigger": "intimacy>=60"},
+        {"name": "逃避", "description": "她发现真相后选择逃离", "trigger": "intimacy>=75"},
+        {"name": "选择", "description": "你找到她，她决定是否面对过去", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "她恢复记忆，但选择重新开始，不是回到过去",
+        "neutral": "她没有恢复记忆，但你们重新相爱",
+        "bad": "她选择彻底忘记你，重新开始",
+        "secret": "她的失忆是假装的，她在测试你是否还爱她"
+      }
+    }
+  },
+  {
+    "id": "angst_009",
+    "title": "契约婚姻",
+    "title_en": "Contract Marriage",
+    "summary": "一纸契约，谁能全身而退",
+    "emotion_tones": ["angst", "sweet"],
+    "relation_types": ["contract_lovers", "arranged_marriage"],
+    "contrast_types": ["relationship", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他签下契约，说绝不会爱上你",
+    "contrast_truth": "他从第一天就爱上了你，契约只是为了留住你",
+    "contrast_hook": "契约到期那天，他要你留下",
+    "script_seed": {
+      "character": {
+        "name": "陆言泽",
+        "age": 28,
+        "surface_identity": "冷血商人，用婚姻做交易",
+        "true_identity": "爱上你却不敢说的胆小鬼",
+        "profession": "集团总裁"
+      },
+      "contrast": {
+        "surface": "他说这只是一场交易，期限一到就结束",
+        "truth": "他一直在想办法延长契约，怕你离开",
+        "hook": "契约期限是三年，他每天都在倒计时"
+      },
+      "progression": {
+        "start": "你们签订契约婚姻",
+        "build": "同居生活中，界限逐渐模糊",
+        "climax": "契约到期，他要你选择",
+        "resolve": "他撕毁契约，向你表白"
+      },
+      "key_nodes": [
+        {"name": "契约签订", "description": "你们约定三年后离婚", "trigger": "开场"},
+        {"name": "新婚之夜", "description": "分房睡，但你的房间满了鲜花", "trigger": "intimacy>=10"},
+        {"name": "日常相处", "description": "他对你越来越好，却说只是履行义务", "trigger": "intimacy>=30"},
+        {"name": "意外心动", "description": "你生病，他三天三夜守着你", "trigger": "intimacy>=50"},
+        {"name": "吃醋", "description": "有男人接近你，他撕掉了合同", "trigger": "intimacy>=70"},
+        {"name": "告白", "description": "契约到期，他说'我不想离婚'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们撕毁契约，开始真正的婚姻",
+        "neutral": "契约继续，但你们都知道这不是交易了",
+        "bad": "你选择离开，他独自守着空房子",
+        "secret": "契约是他设计的，目的就是让你成为他的妻子"
+      }
+    }
+  },
+  {
+    "id": "angst_010",
+    "title": "爱上仇人",
+    "title_en": "Falling for the Enemy",
+    "summary": "你的父亲毁了他家，他却爱上了你",
+    "emotion_tones": ["angst", "revenge"],
+    "relation_types": ["enemy_child", "enemy_to_lovers"],
+    "contrast_types": ["relationship", "loyalty"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "long",
+    "age_rating": "adult",
+    "contrast_surface": "他接近你是为了复仇，让你父亲付出代价",
+    "contrast_truth": "他爱上了仇人的女儿，内心极度挣扎",
+    "contrast_hook": "当你知道真相，你会选择原谅还是离开",
+    "script_seed": {
+      "character": {
+        "name": "谢寒渊",
+        "age": 29,
+        "surface_identity": "温柔体贴的完美男友",
+        "true_identity": "背负家仇的复仇者，却动了真心",
+        "profession": "投资公司CEO"
+      },
+      "contrast": {
+        "surface": "他对你很好，把你宠成公主",
+        "truth": "他一直计划用你来报复你父亲",
+        "hook": "但计划永远赶不上心动"
+      },
+      "progression": {
+        "start": "他以完美男友身份出现在你身边",
+        "build": "他发现你和你父亲完全不同",
+        "climax": "复仇计划实施，他必须伤害你",
+        "resolve": "他放弃复仇，选择和你在一起"
+      },
+      "key_nodes": [
+        {"name": "相遇", "description": "他在你最低落时出现，成为你的依靠", "trigger": "开场"},
+        {"name": "相恋", "description": "你们开始交往，他对你无微不至", "trigger": "intimacy>=20"},
+        {"name": "动摇", "description": "他发现你其实也恨你父亲做的那些事", "trigger": "intimacy>=40"},
+        {"name": "计划", "description": "他的同伙催促他实施计划", "trigger": "intimacy>=60"},
+        {"name": "抉择", "description": "他选择了你，但代价是背负背叛的骂名", "trigger": "intimacy>=80"},
+        {"name": "坦白", "description": "他告诉你一切，等待你的判决", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你原谅了他，你们一起面对一切",
+        "neutral": "你需要时间，但愿意给他机会",
+        "bad": "你无法原谅，你们分道扬镳",
+        "secret": "你早就知道他的身份，你在等他做出选择"
+      }
+    }
+  }
+]

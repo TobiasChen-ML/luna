@@ -1,0 +1,35 @@
+{
+  "placeholder": "Nachricht eingeben...",
+  "send": "Senden",
+  "typing": "schreibt...",
+  "thinking": "Denkt nach...",
+  "newChat": "Neuer Chat",
+  "clearChat": "Chat löschen",
+  "deleteChat": "Chat entfernen",
+  "chatHistory": "Chat-Verlauf",
+  "noMessages": "Noch keine Nachrichten. Beginne die Konversation!",
+  "loadMore": "Mehr laden",
+  "retry": "Erneut versuchen",
+  "copy": "Kopieren",
+  "copied": "Kopiert",
+  "regenerate": "Neu generieren",
+  "stop": "Stopp",
+  "continue": "Fortsetzen",
+  "error": {
+    "failed": "Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "rateLimit": "Zu viele Nachrichten. Bitte warte einen Moment.",
+    "connection": "Verbindung verloren. Verbinde erneut..."
+  },
+  "voice": {
+    "start": "Sprach-Chat starten",
+    "stop": "Sprach-Chat beenden",
+    "connecting": "Verbinde...",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt"
+  },
+  "image": {
+    "generate": "Bild generieren",
+    "generating": "Generiere...",
+    "failed": "Bild konnte nicht generiert werden"
+  }
+}

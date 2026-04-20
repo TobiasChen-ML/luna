@@ -1,0 +1,87 @@
+{
+  "title": "Paramètres du profil",
+  "edit": "Modifier le profil",
+  "save": "Enregistrer",
+  "saving": "Enregistrement…",
+  "cancel": "Annuler",
+  "language": "Langue",
+  "fields": {
+    "username": "Nom d'utilisateur",
+    "email": "E-mail",
+    "displayName": "Pseudo",
+    "bio": "Biographie",
+    "avatar": "Avatar",
+    "birthday": "Date de naissance",
+    "gender": "Genre",
+    "password": "Mot de passe"
+  },
+  "genders": {
+    "male": "Homme",
+    "female": "Femme",
+    "nonBinary": "Non-binaire",
+    "other": "Autre",
+    "prefer_not_to_say": "Préfère ne pas dire"
+  },
+  "changeAvatar": "Changer d'avatar",
+  "removeAvatar": "Supprimer l'avatar",
+  "subscription": {
+    "title": "Abonnement",
+    "plan": "Plan actuel",
+    "free": "Gratuit",
+    "premium": "Premium",
+    "upgrade": "Passer à Premium",
+    "manage": "Gérer l'abonnement",
+    "cancel": "Annuler l'abonnement",
+    "nextBilling": "Prochaine date de facturation",
+    "expires": "Expire"
+  },
+  "notifications": {
+    "title": "Notifications automatiques",
+    "description": "En tant qu'utilisateur, tu recevras automatiquement des notifications de notre part. Si tu ne veux pas de notifications, décoche la case."
+  },
+  "feedback": {
+    "title": "Réclamation / Suggestion",
+    "complaint": "Réclamation",
+    "suggestion": "Suggestion",
+    "placeholder": "Dis-nous ce qui s'est passé ou ce que nous pouvons améliorer...",
+    "send": "Envoyer le feedback",
+    "sending": "Envoi...",
+    "success": "Merci. Ton feedback a été envoyé.",
+    "error": "Échec de l'envoi du feedback. Veuillez réessayer.",
+    "minLength": "Veuillez saisir au moins 10 caractères."
+  },
+  "stats": {
+    "messages": "Messages envoyés",
+    "characters": "Personnages créés",
+    "memberSince": "Membre depuis"
+  },
+  "dangerZone": {
+    "title": "Zone de danger",
+    "deleteAccount": "Supprimer le compte",
+    "warning": "Si tu veux supprimer définitivement ce compte et toutes ses données."
+  },
+  "account": {
+    "title": "Compte",
+    "changePassword": "Changer le mot de passe",
+    "logout": "Se déconnecter"
+  },
+  "editModal": {
+    "nickname": "Modifier le pseudo",
+    "nicknamePlaceholder": "Ton pseudo",
+    "gender": "Modifier le genre",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe (min 8 caractères)",
+    "confirmPassword": "Confirmer le nouveau mot de passe"
+  },
+  "errors": {
+    "nicknameEmpty": "Le pseudo ne peut pas être vide",
+    "nicknameFailed": "Échec de la mise à jour du pseudo. Veuillez réessayer.",
+    "genderRequired": "Veuillez sélectionner un genre",
+    "genderFailed": "Échec de la mise à jour du genre. Veuillez réessayer.",
+    "currentPasswordRequired": "Entre ton mot de passe actuel",
+    "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+    "passwordMinLength": "Le nouveau mot de passe doit contenir au moins 8 caractères",
+    "passwordMismatch": "Les mots de passe ne correspondent pas",
+    "passwordChangeFailed": "Échec du changement de mot de passe. Veuillez réessayer."
+  }
+}

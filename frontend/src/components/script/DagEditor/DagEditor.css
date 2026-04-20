@@ -1,0 +1,190 @@
+@import 'reactflow/dist/style.css';
+
+.dag-editor {
+  width: 100%;
+  height: 100%;
+  background: #18181b;
+}
+
+.dag-editor .react-flow__node {
+  border-radius: 8px;
+  border: 1px solid #3f3f46;
+  padding: 10px;
+  font-size: 12px;
+  min-width: 150px;
+}
+
+.dag-editor .react-flow__node.selected {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.3);
+}
+
+.dag-editor .react-flow__edge-path {
+  stroke: #71717a;
+  stroke-width: 2;
+}
+
+.dag-editor .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #a855f7;
+}
+
+.dag-editor .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #52525b;
+  border: 2px solid #3f3f46;
+}
+
+.dag-editor .react-flow__handle:hover {
+  background: #a855f7;
+  border-color: #a855f7;
+}
+
+.dag-editor .react-flow__controls {
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+}
+
+.dag-editor .react-flow__controls-button {
+  background: #27272a;
+  border-bottom: 1px solid #3f3f46;
+  color: #a1a1aa;
+}
+
+.dag-editor .react-flow__controls-button:hover {
+  background: #3f3f46;
+  color: #ffffff;
+}
+
+.dag-editor .react-flow__minimap {
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+}
+
+.dag-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dag-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.dag-node-type {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.dag-node-title {
+  color: #ffffff;
+}
+
+.dag-node-description {
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.dag-node-choices {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dag-node-choice {
+  font-size: 10px;
+  color: #71717a;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.dag-node.scene {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+}
+
+.dag-node.choice {
+  background: linear-gradient(135deg, #164e63 0%, #155e75 100%);
+}
+
+.dag-node.ending {
+  background: linear-gradient(135deg, #14532d 0%, #166534 100%);
+}
+
+.dag-node.ending.bad {
+  background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%);
+}
+
+.dag-node.ending.secret {
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%);
+}
+
+.cycle-warning {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #7f1d1d;
+  color: #fecaca;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-palette {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-palette-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: grab;
+  font-size: 12px;
+  color: #a1a1aa;
+  transition: all 0.2s;
+}
+
+.node-palette-item:hover {
+  background: #3f3f46;
+  color: #ffffff;
+}
+
+.node-palette-item.scene {
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.node-palette-item.choice {
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.node-palette-item.ending {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}

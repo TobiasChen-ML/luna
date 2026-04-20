@@ -1,0 +1,33 @@
+{
+  "home": "Accueil",
+  "discover": "Découvrir",
+  "chat": "Chat",
+  "characters": "Personnages",
+  "profile": "Profil",
+  "settings": "Paramètres",
+  "create": "Créer",
+  "community": "Communauté",
+  "gallery": "Galerie",
+  "pricing": "Tarifs",
+  "faq": "FAQ",
+  "about": "À propos",
+  "contact": "Contact",
+  "blog": "Blog",
+  "terms": "Conditions d'utilisation",
+  "privacy": "Politique de confidentialité",
+  "login": "Connexion",
+  "register": "S'inscrire",
+  "logout": "Déconnexion",
+  "gameplay": "Jeu",
+  "getStarted": "Commencer",
+  "subscriptions": "Abonnements",
+  "footer": {
+    "description": "Jouez des conversations basées sur des histoires avec des compagnons IA qui évoluent avec vous.",
+    "product": "Produit",
+    "company": "Entreprise",
+    "support": "Support",
+    "contactSupport": "Contacter le support",
+    "madeWith": "Fait avec",
+    "byTeam": "par notre équipe"
+  }
+}

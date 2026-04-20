@@ -1,0 +1,87 @@
+{
+  "title": "Configuración de perfil",
+  "edit": "Editar perfil",
+  "save": "Guardar",
+  "saving": "Guardando…",
+  "cancel": "Cancelar",
+  "language": "Idioma",
+  "fields": {
+    "username": "Nombre de usuario",
+    "email": "Correo electrónico",
+    "displayName": "Apodo",
+    "bio": "Biografía",
+    "avatar": "Avatar",
+    "birthday": "Fecha de nacimiento",
+    "gender": "Género",
+    "password": "Contraseña"
+  },
+  "genders": {
+    "male": "Masculino",
+    "female": "Femenino",
+    "nonBinary": "No binario",
+    "other": "Otro",
+    "prefer_not_to_say": "Prefiero no decir"
+  },
+  "changeAvatar": "Cambiar avatar",
+  "removeAvatar": "Eliminar avatar",
+  "subscription": {
+    "title": "Suscripción",
+    "plan": "Plan actual",
+    "free": "Gratis",
+    "premium": "Premium",
+    "upgrade": "Actualizar a Premium",
+    "manage": "Gestionar suscripción",
+    "cancel": "Cancelar suscripción",
+    "nextBilling": "Próxima fecha de facturación",
+    "expires": "Expira"
+  },
+  "notifications": {
+    "title": "Notificaciones automáticas",
+    "description": "Como usuario, recibirás notificaciones automáticas de nosotros. Si no quieres notificaciones, desmarca la casilla."
+  },
+  "feedback": {
+    "title": "Queja / Sugerencia",
+    "complaint": "Queja",
+    "suggestion": "Sugerencia",
+    "placeholder": "Cuéntanos qué sucedió o qué podemos mejorar...",
+    "send": "Enviar comentario",
+    "sending": "Enviando...",
+    "success": "Gracias. Tu comentario ha sido enviado.",
+    "error": "Error al enviar el comentario. Por favor, inténtalo de nuevo.",
+    "minLength": "Por favor, ingresa al menos 10 caracteres."
+  },
+  "stats": {
+    "messages": "Mensajes enviados",
+    "characters": "Personajes creados",
+    "memberSince": "Miembro desde"
+  },
+  "dangerZone": {
+    "title": "Zona de peligro",
+    "deleteAccount": "Eliminar cuenta",
+    "warning": "Si quieres eliminar permanentemente esta cuenta y todos sus datos."
+  },
+  "account": {
+    "title": "Cuenta",
+    "changePassword": "Cambiar contraseña",
+    "logout": "Cerrar sesión"
+  },
+  "editModal": {
+    "nickname": "Editar apodo",
+    "nicknamePlaceholder": "Tu apodo",
+    "gender": "Editar género",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña (mín. 8 caracteres)",
+    "confirmPassword": "Confirmar nueva contraseña"
+  },
+  "errors": {
+    "nicknameEmpty": "El apodo no puede estar vacío",
+    "nicknameFailed": "Error al actualizar el apodo. Por favor, inténtalo de nuevo.",
+    "genderRequired": "Por favor, selecciona un género",
+    "genderFailed": "Error al actualizar el género. Por favor, inténtalo de nuevo.",
+    "currentPasswordRequired": "Ingresa tu contraseña actual",
+    "currentPasswordIncorrect": "La contraseña actual es incorrecta",
+    "passwordMinLength": "La nueva contraseña debe tener al menos 8 caracteres",
+    "passwordMismatch": "Las contraseñas no coinciden",
+    "passwordChangeFailed": "Error al cambiar la contraseña. Por favor, inténtalo de nuevo."
+  }
+}

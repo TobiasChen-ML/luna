@@ -1,0 +1,15 @@
+{
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "network": "Network error. Please check your connection.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "forbidden": "Access denied.",
+    "notFound": "The requested resource was not found.",
+    "serverError": "Server error. Please try again later.",
+    "timeout": "Request timed out. Please try again.",
+    "validation": "Please check your input and try again.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "rateLimit": "Too many requests. Please wait and try again.",
+    "maintenance": "The service is currently under maintenance. Please check back later."
+  }
+}

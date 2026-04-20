@@ -1,0 +1,37 @@
+{
+  "title": "Facturación",
+  "currentPlan": "Plan actual",
+  "free": "Gratis",
+  "premium": "Premium",
+  "upgrade": "Mejorar plan",
+  "manage": "Gestionar suscripción",
+  "cancel": "Cancelar suscripción",
+  "paymentMethod": "Método de pago",
+  "addPaymentMethod": "Añadir método de pago",
+  "history": {
+    "title": "Historial de facturación",
+    "date": "Fecha",
+    "amount": "Cantidad",
+    "status": "Estado",
+    "receipt": "Recibo"
+  },
+  "status": {
+    "paid": "Pagado",
+    "pending": "Pendiente",
+    "failed": "Fallido",
+    "refunded": "Reembolsado"
+  },
+  "success": {
+    "title": "Pago exitoso",
+    "message": "¡Gracias por tu compra! Tu suscripción ahora está activa."
+  },
+  "cancel": {
+    "title": "Pago cancelado",
+    "message": "Tu pago fue cancelado. Por favor, inténtalo de nuevo si deseas continuar."
+  },
+  "support": {
+    "title": "Soporte de facturación",
+    "description": "¿Tienes problemas con tu pago? Contacta a nuestro equipo de soporte.",
+    "contact": "Contactar soporte"
+  }
+}

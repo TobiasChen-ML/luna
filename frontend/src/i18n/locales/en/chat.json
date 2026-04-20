@@ -1,0 +1,35 @@
+{
+  "placeholder": "Type a message...",
+  "send": "Send",
+  "typing": "is typing...",
+  "thinking": "Thinking...",
+  "newChat": "New Chat",
+  "clearChat": "Clear Chat",
+  "deleteChat": "Delete Chat",
+  "chatHistory": "Chat History",
+  "noMessages": "No messages yet. Start the conversation!",
+  "loadMore": "Load More",
+  "retry": "Retry",
+  "copy": "Copy",
+  "copied": "Copied",
+  "regenerate": "Regenerate",
+  "stop": "Stop",
+  "continue": "Continue",
+  "error": {
+    "failed": "Failed to send message. Please try again.",
+    "rateLimit": "Too many messages. Please wait a moment.",
+    "connection": "Connection lost. Reconnecting..."
+  },
+  "voice": {
+    "start": "Start Voice Chat",
+    "stop": "Stop Voice Chat",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  },
+  "image": {
+    "generate": "Generate Image",
+    "generating": "Generating...",
+    "failed": "Failed to generate image"
+  }
+}

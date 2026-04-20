@@ -1,0 +1,37 @@
+{
+  "title": "Facturation",
+  "currentPlan": "Plan actuel",
+  "free": "Gratuit",
+  "premium": "Premium",
+  "upgrade": "Mettre à niveau",
+  "manage": "Gérer l'abonnement",
+  "cancel": "Annuler l'abonnement",
+  "paymentMethod": "Moyen de paiement",
+  "addPaymentMethod": "Ajouter un moyen de paiement",
+  "history": {
+    "title": "Historique de facturation",
+    "date": "Date",
+    "amount": "Montant",
+    "status": "Statut",
+    "receipt": "Reçu"
+  },
+  "status": {
+    "paid": "Payé",
+    "pending": "En attente",
+    "failed": "Échoué",
+    "refunded": "Remboursé"
+  },
+  "success": {
+    "title": "Paiement réussi",
+    "message": "Merci pour votre achat ! Votre abonnement est maintenant actif."
+  },
+  "cancel": {
+    "title": "Paiement annulé",
+    "message": "Votre paiement a été annulé. Veuillez réessayer si vous souhaitez continuer."
+  },
+  "support": {
+    "title": "Support facturation",
+    "description": "Des problèmes avec votre paiement ? Contactez notre équipe de support.",
+    "contact": "Contacter le support"
+  }
+}

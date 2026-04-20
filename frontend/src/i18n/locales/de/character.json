@@ -1,0 +1,56 @@
+{
+  "create": {
+    "title": "Charakter erstellen",
+    "subtitle": "Gestalte deinen perfekten KI-Begleiter",
+    "name": "Name",
+    "namePlaceholder": "Charaktername eingeben",
+    "description": "Beschreibung",
+    "descriptionPlaceholder": "Beschreibe die Persönlichkeit und den Hintergrund deines Charakters...",
+    "personality": "Persönlichkeit",
+    "personalityPlaceholder": "Beschreibe Persönlichkeitsmerkmale...",
+    "greeting": "Begrüßungsnachricht",
+    "greetingPlaceholder": "Erste Nachricht, die dein Charakter senden wird...",
+    "avatar": "Avatar",
+    "uploadAvatar": "Avatar hochladen",
+    "generateAvatar": "Mit KI generieren",
+    "visibility": {
+      "title": "Sichtbarkeit",
+      "private": "Privat",
+      "public": "Öffentlich"
+    },
+    "category": "Kategorie",
+    "tags": "Schlagwörter",
+    "save": "Charakter erstellen",
+    "saving": "Erstelle...",
+    "success": "Charakter erfolgreich erstellt!"
+  },
+  "edit": {
+    "title": "Charakter bearbeiten",
+    "save": "Änderungen speichern",
+    "saving": "Speichere...",
+    "success": "Charakter erfolgreich aktualisiert!"
+  },
+  "delete": {
+    "title": "Charakter löschen",
+    "confirm": "Bist du sicher, dass du diesen Charakter löschen möchtest?",
+    "warning": "Diese Aktion kann nicht rückgängig gemacht werden.",
+    "button": "Löschen"
+  },
+  "myCharacters": {
+    "title": "Meine Charaktere",
+    "empty": "Du hast noch keine Charaktere erstellt.",
+    "createFirst": "Erstelle deinen ersten Charakter"
+  },
+  "categories": {
+    "all": "Alle",
+    "girls": "Frauen",
+    "guys": "Männer",
+    "anime": "Anime",
+    "fantasy": "Fantasy",
+    "romance": "Romantik",
+    "adventure": "Abenteuer"
+  },
+  "chat": "Chatten",
+  "edit": "Bearbeiten",
+  "delete": "Löschen"
+}

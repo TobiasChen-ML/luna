@@ -1,0 +1,56 @@
+{
+  "create": {
+    "title": "Crear personaje",
+    "subtitle": "Diseña tu compañero IA perfecto",
+    "name": "Nombre",
+    "namePlaceholder": "Ingresa el nombre del personaje",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Describe la personalidad y el trasfondo de tu personaje...",
+    "personality": "Personalidad",
+    "personalityPlaceholder": "Describe los rasgos de personalidad...",
+    "greeting": "Mensaje de bienvenida",
+    "greetingPlaceholder": "Primer mensaje que tu personaje enviará...",
+    "avatar": "Avatar",
+    "uploadAvatar": "Subir avatar",
+    "generateAvatar": "Generar con IA",
+    "visibility": {
+      "title": "Visibilidad",
+      "private": "Privado",
+      "public": "Público"
+    },
+    "category": "Categoría",
+    "tags": "Etiquetas",
+    "save": "Crear personaje",
+    "saving": "Creando...",
+    "success": "¡Personaje creado exitosamente!"
+  },
+  "edit": {
+    "title": "Editar personaje",
+    "save": "Guardar cambios",
+    "saving": "Guardando...",
+    "success": "¡Personaje actualizado exitosamente!"
+  },
+  "delete": {
+    "title": "Eliminar personaje",
+    "confirm": "¿Estás seguro de que quieres eliminar este personaje?",
+    "warning": "Esta acción no se puede deshacer.",
+    "button": "Eliminar"
+  },
+  "myCharacters": {
+    "title": "Mis personajes",
+    "empty": "Aún no has creado ningún personaje.",
+    "createFirst": "Crea tu primer personaje"
+  },
+  "categories": {
+    "all": "Todos",
+    "girls": "Chicas",
+    "guys": "Chicos",
+    "anime": "Anime",
+    "fantasy": "Fantasía",
+    "romance": "Romance",
+    "adventure": "Aventura"
+  },
+  "chat": "Chatear",
+  "edit": "Editar",
+  "delete": "Eliminar"
+}

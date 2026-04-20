@@ -1,0 +1,87 @@
+{
+  "title": "Profile Settings",
+  "edit": "Edit Profile",
+  "save": "Save",
+  "saving": "Saving…",
+  "cancel": "Cancel",
+  "language": "Language",
+  "fields": {
+    "username": "Username",
+    "email": "E-mail",
+    "displayName": "Nickname",
+    "bio": "Bio",
+    "avatar": "Avatar",
+    "birthday": "Birthday",
+    "gender": "Gender",
+    "password": "Password"
+  },
+  "genders": {
+    "male": "Male",
+    "female": "Female",
+    "nonBinary": "Non-binary",
+    "other": "Other",
+    "prefer_not_to_say": "Prefer not to say"
+  },
+  "changeAvatar": "Change Avatar",
+  "removeAvatar": "Remove Avatar",
+  "subscription": {
+    "title": "Subscription",
+    "plan": "Current Plan",
+    "free": "Free",
+    "premium": "Premium",
+    "upgrade": "Upgrade to Premium",
+    "manage": "Manage Subscription",
+    "cancel": "Cancel Subscription",
+    "nextBilling": "Next billing date",
+    "expires": "Expires"
+  },
+  "notifications": {
+    "title": "Automatic Notifications",
+    "description": "As a user, you will receive automatic notifications from us. If you don't want any notifications, uncheck the box by clicking on it."
+  },
+  "feedback": {
+    "title": "Complaint / Suggestion",
+    "complaint": "Complaint",
+    "suggestion": "Suggestion",
+    "placeholder": "Tell us what happened or what we can improve...",
+    "send": "Send Feedback",
+    "sending": "Sending...",
+    "success": "Thanks. Your feedback has been sent.",
+    "error": "Failed to send feedback. Please try again.",
+    "minLength": "Please enter at least 10 characters."
+  },
+  "stats": {
+    "messages": "Messages Sent",
+    "characters": "Characters Created",
+    "memberSince": "Member Since"
+  },
+  "dangerZone": {
+    "title": "Danger Zone",
+    "deleteAccount": "Delete Account",
+    "warning": "If you want to permanently delete this account and all of its data."
+  },
+  "account": {
+    "title": "Account",
+    "changePassword": "Change Password",
+    "logout": "Sign out"
+  },
+  "editModal": {
+    "nickname": "Edit Nickname",
+    "nicknamePlaceholder": "Your nickname",
+    "gender": "Edit Gender",
+    "currentPassword": "Current password",
+    "newPassword": "New password (min 8 chars)",
+    "confirmPassword": "Confirm new password"
+  },
+  "errors": {
+    "nicknameEmpty": "Nickname cannot be empty",
+    "nicknameFailed": "Failed to update nickname. Please try again.",
+    "genderRequired": "Please select a gender",
+    "genderFailed": "Failed to update gender. Please try again.",
+    "currentPasswordRequired": "Enter your current password",
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "passwordMinLength": "New password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "passwordChangeFailed": "Failed to change password. Please try again."
+  }
+}

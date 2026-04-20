@@ -1,0 +1,137 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - RoxyClub</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      opacity: 0.9;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background: white;
+      color: #667eea;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      border: none;
+      font-size: 16px;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .status {
+      margin-top: 24px;
+      font-size: 14px;
+      opacity: 0.7;
+    }
+
+    .online {
+      color: #10b981;
+    }
+
+    .offline {
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">馃摗</div>
+    <h1>You're Offline</h1>
+    <p>
+      It looks like you've lost your internet connection.
+      Your AI companion is waiting for you to come back online!
+    </p>
+    <button class="button" onclick="window.location.reload()">
+      Try Again
+    </button>
+    <div class="status" id="status">
+      <span id="statusText">Checking connection...</span>
+    </div>
+  </div>
+
+  <script>
+    // Monitor connection status
+    function updateConnectionStatus() {
+      const statusText = document.getElementById('statusText');
+      const isOnline = navigator.onLine;
+
+      if (isOnline) {
+        statusText.innerHTML = '<span class="online">鈼?Connected</span>';
+        // Auto-reload when back online
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        statusText.innerHTML = '<span class="offline">鈼?Offline</span>';
+      }
+    }
+
+    // Initial check
+    updateConnectionStatus();
+
+    // Listen for connection changes
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+
+    // Periodic check
+    setInterval(updateConnectionStatus, 3000);
+  </script>
+</body>
+</html>
+

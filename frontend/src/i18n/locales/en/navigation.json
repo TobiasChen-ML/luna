@@ -1,0 +1,33 @@
+{
+  "home": "Home",
+  "discover": "Discover",
+  "chat": "Chat",
+  "characters": "Characters",
+  "profile": "Profile",
+  "settings": "Settings",
+  "create": "Create",
+  "community": "Community",
+  "gallery": "Gallery",
+  "pricing": "Pricing",
+  "faq": "FAQ",
+  "about": "About",
+  "contact": "Contact",
+  "blog": "Blog",
+  "terms": "Terms of Service",
+  "privacy": "Privacy Policy",
+  "login": "Login",
+  "register": "Sign Up",
+  "logout": "Logout",
+  "gameplay": "Gameplay",
+  "getStarted": "Get Started",
+  "subscriptions": "Subscriptions",
+  "footer": {
+    "description": "Play story-driven conversations with AI companions you can grow with.",
+    "product": "Product",
+    "company": "Company",
+    "support": "Support",
+    "contactSupport": "Contact Support",
+    "madeWith": "Made with",
+    "byTeam": "by our team"
+  }
+}

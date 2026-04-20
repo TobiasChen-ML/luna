@@ -1,0 +1,38 @@
+{
+  "title": "Configuración",
+  "general": "General",
+  "appearance": "Apariencia",
+  "notifications": "Notificaciones",
+  "privacy": "Privacidad",
+  "language": "Idioma",
+  "theme": {
+    "title": "Tema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema"
+  },
+  "notification": {
+    "title": "Notificaciones",
+    "email": "Notificaciones por correo",
+    "push": "Notificaciones push",
+    "marketing": "Correos de marketing"
+  },
+  "privacy": {
+    "title": "Privacidad",
+    "profileVisibility": "Visibilidad del perfil",
+    "public": "Público",
+    "private": "Privado",
+    "friendsOnly": "Solo amigos"
+  },
+  "mature": {
+    "title": "Contenido adulto",
+    "enabled": "Habilitar contenido adulto",
+    "warning": "Debes tener 18 años o más para habilitar esta función"
+  },
+  "account": {
+    "title": "Cuenta",
+    "changePassword": "Cambiar contraseña",
+    "logout": "Cerrar sesión",
+    "deleteAccount": "Eliminar cuenta"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "title": "Billing",
+  "currentPlan": "Current Plan",
+  "free": "Free",
+  "premium": "Premium",
+  "upgrade": "Upgrade Plan",
+  "manage": "Manage Subscription",
+  "cancel": "Cancel Subscription",
+  "paymentMethod": "Payment Method",
+  "addPaymentMethod": "Add Payment Method",
+  "history": {
+    "title": "Billing History",
+    "date": "Date",
+    "amount": "Amount",
+    "status": "Status",
+    "receipt": "Receipt"
+  },
+  "status": {
+    "paid": "Paid",
+    "pending": "Pending",
+    "failed": "Failed",
+    "refunded": "Refunded"
+  },
+  "success": {
+    "title": "Payment Successful",
+    "message": "Thank you for your purchase! Your subscription is now active."
+  },
+  "cancel": {
+    "title": "Payment Cancelled",
+    "message": "Your payment was cancelled. Please try again if you wish to continue."
+  },
+  "support": {
+    "title": "Billing Support",
+    "description": "Having issues with your payment? Contact our support team.",
+    "contact": "Contact Support"
+  }
+}

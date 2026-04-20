@@ -1,0 +1,15 @@
+{
+  "errors": {
+    "generic": "Etwas ist schief gelaufen. Bitte versuche es erneut.",
+    "network": "Netzwerkfehler. Bitte überprüfe deine Verbindung.",
+    "unauthorized": "Du bist nicht berechtigt, diese Aktion auszuführen.",
+    "forbidden": "Zugriff verweigert.",
+    "notFound": "Die angeforderte Ressource wurde nicht gefunden.",
+    "serverError": "Serverfehler. Bitte versuche es später erneut.",
+    "timeout": "Anfrage hat das Zeitlimit überschritten. Bitte versuche es erneut.",
+    "validation": "Bitte überprüfe deine Eingaben und versuche es erneut.",
+    "sessionExpired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+    "rateLimit": "Zu viele Anfragen. Bitte warte und versuche es erneut.",
+    "maintenance": "Der Dienst wird derzeit gewartet. Bitte versuche es später erneut."
+  }
+}

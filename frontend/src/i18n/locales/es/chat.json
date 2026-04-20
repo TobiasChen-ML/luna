@@ -1,0 +1,35 @@
+{
+  "placeholder": "Escribe un mensaje...",
+  "send": "Enviar",
+  "typing": "está escribiendo...",
+  "thinking": "Pensando...",
+  "newChat": "Nuevo chat",
+  "clearChat": "Limpiar chat",
+  "deleteChat": "Eliminar chat",
+  "chatHistory": "Historial de chat",
+  "noMessages": "Aún no hay mensajes. ¡Comienza la conversación!",
+  "loadMore": "Cargar más",
+  "retry": "Reintentar",
+  "copy": "Copiar",
+  "copied": "Copiado",
+  "regenerate": "Regenerar",
+  "stop": "Detener",
+  "continue": "Continuar",
+  "error": {
+    "failed": "Error al enviar el mensaje. Por favor, inténtalo de nuevo.",
+    "rateLimit": "Demasiados mensajes. Por favor, espera un momento.",
+    "connection": "Conexión perdida. Reconectando..."
+  },
+  "voice": {
+    "start": "Iniciar chat de voz",
+    "stop": "Detener chat de voz",
+    "connecting": "Conectando...",
+    "connected": "Conectado",
+    "disconnected": "Desconectado"
+  },
+  "image": {
+    "generate": "Generar imagen",
+    "generating": "Generando...",
+    "failed": "Error al generar la imagen"
+  }
+}

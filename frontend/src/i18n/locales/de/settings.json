@@ -1,0 +1,38 @@
+{
+  "title": "Einstellungen",
+  "general": "Allgemein",
+  "appearance": "Erscheinungsbild",
+  "notifications": "Benachrichtigungen",
+  "privacy": "Datenschutz",
+  "language": "Sprache",
+  "theme": {
+    "title": "Design",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System"
+  },
+  "notification": {
+    "title": "Benachrichtigungen",
+    "email": "E-Mail-Benachrichtigungen",
+    "push": "Push-Benachrichtigungen",
+    "marketing": "Marketing-E-Mails"
+  },
+  "privacy": {
+    "title": "Datenschutz",
+    "profileVisibility": "Profil-Sichtbarkeit",
+    "public": "Öffentlich",
+    "private": "Privat",
+    "friendsOnly": "Nur Freunde"
+  },
+  "mature": {
+    "title": "Erwachseneninhalte",
+    "enabled": "Erwachseneninhalte aktivieren",
+    "warning": "Du musst 18 Jahre oder älter sein, um diese Funktion zu aktivieren"
+  },
+  "account": {
+    "title": "Konto",
+    "changePassword": "Passwort ändern",
+    "logout": "Abmelden",
+    "deleteAccount": "Konto löschen"
+  }
+}

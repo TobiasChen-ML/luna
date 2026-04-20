@@ -1,0 +1,37 @@
+{
+  "title": "Abrechnung",
+  "currentPlan": "Aktueller Plan",
+  "free": "Kostenlos",
+  "premium": "Premium",
+  "upgrade": "Plan upgraden",
+  "manage": "Abonnement verwalten",
+  "cancel": "Abonnement kündigen",
+  "paymentMethod": "Zahlungsmethode",
+  "addPaymentMethod": "Zahlungsmethode hinzufügen",
+  "history": {
+    "title": "Abrechnungsverlauf",
+    "date": "Datum",
+    "amount": "Betrag",
+    "status": "Status",
+    "receipt": "Quittung"
+  },
+  "status": {
+    "paid": "Bezahlt",
+    "pending": "Ausstehend",
+    "failed": "Fehlgeschlagen",
+    "refunded": "Erstattet"
+  },
+  "success": {
+    "title": "Zahlung erfolgreich",
+    "message": "Vielen Dank für deinen Kauf! Dein Abonnement ist jetzt aktiv."
+  },
+  "cancel": {
+    "title": "Zahlung abgebrochen",
+    "message": "Deine Zahlung wurde abgebrochen. Bitte versuche es erneut, wenn du fortfahren möchtest."
+  },
+  "support": {
+    "title": "Abrechnungs-Support",
+    "description": "Probleme mit deiner Zahlung? Kontaktiere unser Support-Team.",
+    "contact": "Support kontaktieren"
+  }
+}

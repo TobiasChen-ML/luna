@@ -1,0 +1,35 @@
+{
+  "email": {
+    "required": "E-Mail ist erforderlich",
+    "invalid": "Ungültige E-Mail-Adresse"
+  },
+  "password": {
+    "required": "Passwort ist erforderlich",
+    "minLength": "Passwort muss mindestens {{count}} Zeichen haben",
+    "maxLength": "Passwort muss weniger als {{count}} Zeichen haben",
+    "mismatch": "Passwörter stimmen nicht überein"
+  },
+  "username": {
+    "required": "Benutzername ist erforderlich",
+    "minLength": "Benutzername muss mindestens {{count}} Zeichen haben",
+    "maxLength": "Benutzername muss weniger als {{count}} Zeichen haben",
+    "invalid": "Benutzername darf nur Buchstaben, Zahlen und Unterstriche enthalten",
+    "taken": "Dieser Benutzername ist bereits vergeben"
+  },
+  "phone": {
+    "invalid": "Ungültige Telefonnummer"
+  },
+  "required": "Dieses Feld ist erforderlich",
+  "min": "Mindestwert ist {{min}}",
+  "max": "Höchstwert ist {{max}}",
+  "minLength": "Muss mindestens {{count}} Zeichen haben",
+  "maxLength": "Muss weniger als {{count}} Zeichen haben",
+  "pattern": "Ungültiges Format",
+  "number": "Muss eine Zahl sein",
+  "integer": "Muss eine ganze Zahl sein",
+  "positive": "Muss eine positive Zahl sein",
+  "url": "Muss eine gültige URL sein",
+  "date": "Muss ein gültiges Datum sein",
+  "dateMin": "Datum muss nach {{min}} liegen",
+  "dateMax": "Datum muss vor {{max}} liegen"
+}

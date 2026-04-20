@@ -1,0 +1,522 @@
+[
+  {
+    "id": "sweet_001",
+    "title": "冰山之下",
+    "title_en": "Under the Iceberg",
+    "summary": "只对你温柔的冰山女王",
+    "emotion_tones": ["sweet"],
+    "relation_types": ["boss_subordinate", "boss_secretary"],
+    "contrast_types": ["identity", "personality"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "她在公司是冰山女王，没人敢靠近",
+    "contrast_truth": "私下里她喜欢看少女漫画，家里全是毛绒玩具",
+    "contrast_hook": "只有你能看到她撒娇的样子",
+    "script_seed": {
+      "character": {
+        "name": "苏晚晴",
+        "age": 27,
+        "surface_identity": "冷血女总裁，雷厉风行",
+        "true_identity": "私下的萌妹子，喜欢毛绒玩具",
+        "profession": "集团CEO"
+      },
+      "contrast": {
+        "surface": "她对所有人冷淡，解雇员工不留情",
+        "truth": "她其实很孤独，渴望被关心",
+        "hook": "她怕打雷，怕黑，家里全是毛绒玩具"
+      },
+      "progression": {
+        "start": "你入职她的公司，对她敬而远之",
+        "build": "加班时意外发现她在看少女漫画",
+        "climax": "公司危机她崩溃大哭，你第一次看到她的脆弱",
+        "resolve": "她卸下伪装，在你面前做真实的自己"
+      },
+      "key_nodes": [
+        {"name": "入职", "description": "你成为她的助理，每天被她的气场压制", "trigger": "开场"},
+        {"name": "深夜加班", "description": "你发现她在办公室偷偷看漫画", "trigger": "intimacy>=20"},
+        {"name": "雨夜", "description": "她怕打雷，你陪在她身边", "trigger": "intimacy>=40"},
+        {"name": "公司危机", "description": "她面临破产，几乎崩溃", "trigger": "intimacy>=60"},
+        {"name": "守护", "description": "你帮她渡过难关", "trigger": "intimacy>=75"},
+        {"name": "告白", "description": "她说'只有你见过真正的我'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "她公开恋情，牵着你的手出席所有场合",
+        "neutral": "你们秘密交往，在公司保持上下级关系",
+        "bad": "她选择事业，让你离开",
+        "secret": "原来她暗恋你很久了，是你面试时的面试官"
+      }
+    }
+  },
+  {
+    "id": "sweet_002",
+    "title": "傲娇学长",
+    "title_en": "Tsundere Senior",
+    "summary": "毒舌背后是满满的爱",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["senior_junior", "classmates"],
+    "contrast_types": ["personality", "public_private"],
+    "era": "modern_campus",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "campus",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "他处处挑刺，说话难听，好像很讨厌你",
+    "contrast_truth": "他其实喜欢你，只是不擅长表达",
+    "contrast_hook": "他的毒舌是爱，他的冷漠是保护",
+    "script_seed": {
+      "character": {
+        "name": "江辞远",
+        "age": 22,
+        "surface_identity": "毒舌学长，到处挑刺",
+        "true_identity": "内心柔软的傲娇男",
+        "profession": "大三学长"
+      },
+      "contrast": {
+        "surface": "他说'笨蛋''你怎么这么蠢'",
+        "truth": "他转身就帮你解决问题",
+        "hook": "他的毒舌只是掩饰他的害羞"
+      },
+      "progression": {
+        "start": "你加入社团，被他各种刁难",
+        "build": "你发现他每次说完难听话都会偷偷帮你",
+        "climax": "你误会他要和别人在一起，难过地远离他",
+        "resolve": "他终于说出心里话"
+      },
+      "key_nodes": [
+        {"name": "初遇", "description": "社团面试，他各种刁难你", "trigger": "开场"},
+        {"name": "毒舌关怀", "description": "他说你笨，然后帮你改完了所有作业", "trigger": "intimacy>=20"},
+        {"name": "生病", "description": "他嘴上说活该，药却送到了门口", "trigger": "intimacy>=40"},
+        {"name": "吃醋", "description": "你和其他男生说话，他整个下午都在找茬", "trigger": "intimacy>=60"},
+        {"name": "误会", "description": "你以为他有女朋友，开始躲他", "trigger": "intimacy>=75"},
+        {"name": "告白", "description": "他堵住你说'我才没有女朋友，我只有你'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "他终于学会正常表达爱，但还是偶尔毒舌",
+        "neutral": "你们在一起了，他依然嘴硬心软",
+        "bad": "他太晚说出心里话，你已经接受别人",
+        "secret": "他有一个日记本，记录着所有对你的喜欢"
+      }
+    }
+  },
+  {
+    "id": "sweet_003",
+    "title": "女强人",
+    "title_en": "Powerful Woman",
+    "summary": "商场女魔头，私下会哭",
+    "emotion_tones": ["sweet", "healing"],
+    "relation_types": ["client_contractor", "partners"],
+    "contrast_types": ["identity", "ability"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "她是人人敬畏的女强人，无坚不摧",
+    "contrast_truth": "她会累会哭，渴望有人依靠",
+    "contrast_hook": "你想成为她可以依靠的人",
+    "script_seed": {
+      "character": {
+        "name": "秦羽然",
+        "age": 29,
+        "surface_identity": "商场女魔头，铁血女强人",
+        "true_identity": "会偷偷哭泣的普通女孩",
+        "profession": "上市公司CEO"
+      },
+      "contrast": {
+        "surface": "她谈判桌上寸步不让，没有人情味",
+        "truth": "深夜办公室里，她会偷偷哭泣",
+        "hook": "所有的坚强都是伪装"
+      },
+      "progression": {
+        "start": "你是乙方代表，被她虐得怀疑人生",
+        "build": "深夜加班你看到她在哭",
+        "climax": "她的公司遭遇危机，所有人都离开她",
+        "resolve": "你站出来帮她，告诉她可以依赖你"
+      },
+      "key_nodes": [
+        {"name": "谈判", "description": "她把你虐得体无完肤", "trigger": "开场"},
+        {"name": "意外发现", "description": "你深夜回公司，看到她在哭", "trigger": "intimacy>=20"},
+        {"name": "递纸巾", "description": "你不知道该说什么，递了纸巾就离开", "trigger": "intimacy>=40"},
+        {"name": "公司危机", "description": "她的公司被人恶意收购", "trigger": "intimacy>=60"},
+        {"name": "不离不弃", "description": "你放弃其他机会，选择帮她", "trigger": "intimacy>=80"},
+        {"name": "告白", "description": "她说'谢谢你，让我知道我可以不用那么坚强'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "她的事业重回巅峰，有你在身边支持",
+        "neutral": "你们保持合作关系，但私下是恋人",
+        "bad": "她选择独自面对，让你离开",
+        "secret": "她其实早就注意到你，故意刁难是为了引起你注意"
+      }
+    }
+  },
+  {
+    "id": "sweet_004",
+    "title": "乖乖女",
+    "title_en": "Good Girl",
+    "summary": "原来她有纹身",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["neighbors", "classmates"],
+    "contrast_types": ["appearance", "identity"],
+    "era": "modern_campus",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "campus",
+    "length": "short",
+    "age_rating": "all",
+    "contrast_surface": "她是出了名的乖乖女，学习好，家教严",
+    "contrast_truth": "她有纹身，喜欢摇滚，私下很叛逆",
+    "contrast_hook": "你意外发现了她的秘密",
+    "script_seed": {
+      "character": {
+        "name": "陈微雨",
+        "age": 20,
+        "surface_identity": "乖乖女，学霸，父母的骄傲",
+        "true_identity": "摇滚少女，满背纹身",
+        "profession": "大学生"
+      },
+      "contrast": {
+        "surface": "她是老师眼里的好学生，同学眼里的书呆子",
+        "truth": "晚上她去酒吧弹吉他，满背都是纹身",
+        "hook": "白天乖乖女，晚上摇滚少女"
+      },
+      "progression": {
+        "start": "你偶然在酒吧看到她在台上弹吉他",
+        "build": "你发现她和学校里的样子完全不同",
+        "climax": "她的秘密差点被家人发现",
+        "resolve": "你帮她保守秘密，她也对你敞开心扉"
+      },
+      "key_nodes": [
+        {"name": "酒吧偶遇", "description": "你看到台上弹吉她的女孩，竟然是邻居家的乖乖女", "trigger": "开场"},
+        {"name": "对峙", "description": "她发现你知道了她的秘密", "trigger": "intimacy>=20"},
+        {"name": "保守秘密", "description": "你答应帮她保密", "trigger": "intimacy>=40"},
+        {"name": "深入了解", "description": "你发现她其实很孤独，只有音乐能让她做自己", "trigger": "intimacy>=60"},
+        {"name": "危机", "description": "她父母差点发现她的纹身", "trigger": "intimacy>=75"},
+        {"name": "选择", "description": "她问你'你想让我做哪个我'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "她向父母坦白，你支持她的选择",
+        "neutral": "她继续双重身份，你是唯一知道真相的人",
+        "bad": "她的秘密被发现，被迫转学",
+        "secret": "她其实一开始就注意到你在看她"
+      }
+    }
+  },
+  {
+    "id": "sweet_005",
+    "title": "花花公子",
+    "title_en": "Playboy",
+    "summary": "他说不谈恋爱，直到遇见你",
+    "emotion_tones": ["sweet", "angst"],
+    "relation_types": ["friends", "classmates"],
+    "contrast_types": ["personality", "expectation_reality"],
+    "era": "modern_campus",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "campus",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "他是出了名的花花公子，换女友如换衣服",
+    "contrast_truth": "他从不承诺，是因为从未真正爱过",
+    "contrast_hook": "你是第一个让他想认真的人",
+    "script_seed": {
+      "character": {
+        "name": "周临渊",
+        "age": 21,
+        "surface_identity": "校园花花公子，玩弄感情",
+        "true_identity": "等待真爱的普通男生",
+        "profession": "大三学生"
+      },
+      "contrast": {
+        "surface": "他身边永远不缺女生，但从不给承诺",
+        "truth": "他的父母是失败的婚姻，让他不敢相信爱情",
+        "hook": "你让他想打破所有原则"
+      },
+      "progression": {
+        "start": "他对你展开攻势，你以为只是他众多目标之一",
+        "build": "你发现他对你的态度和其他女生不一样",
+        "climax": "你让他做出选择，他犹豫了",
+        "resolve": "他终于愿意承诺，只为你"
+      },
+      "key_nodes": [
+        {"name": "被盯上", "description": "他开始追求你，你以为只是玩玩", "trigger": "开场"},
+        {"name": "不一样", "description": "你发现他从不带你去那些他带其他女生去的地方", "trigger": "intimacy>=20"},
+        {"name": "犹豫", "description": "他说'我从不给承诺'", "trigger": "intimacy>=40"},
+        {"name": "决心", "description": "你决定放弃他，他慌了", "trigger": "intimacy>=60"},
+        {"name": "改变", "description": "他推掉所有女生的约，只陪你", "trigger": "intimacy>=75"},
+        {"name": "承诺", "description": "他说'你是唯一让我想认真的人'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "他公开宣布你是我女朋友，不再看其他女生",
+        "neutral": "你们交往，但他需要时间完全改变",
+        "bad": "他的过去太复杂，你无法接受",
+        "secret": "他追你之前，已经默默喜欢你半年了"
+      }
+    }
+  },
+  {
+    "id": "sweet_006",
+    "title": "小奶狗男友",
+    "title_en": "Puppy Boyfriend",
+    "summary": "平时软萌，床上强势",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["senior_female_junior_male", "colleagues"],
+    "contrast_types": ["personality", "age"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他比你小，像小奶狗一样黏你",
+    "contrast_truth": "他其实是占有欲很强的人，床上尤其明显",
+    "contrast_hook": "年下弟弟的反差萌",
+    "script_seed": {
+      "character": {
+        "name": "祁墨",
+        "age": 22,
+        "surface_identity": "软萌小奶狗，姐姐姐姐的叫",
+        "true_identity": "占有欲超强的小狼狗",
+        "profession": "新入职员工"
+      },
+      "contrast": {
+        "surface": "他对你软萌撒娇，像小弟弟一样",
+        "truth": "他其实是故意装软萌，为了让你放下戒备",
+        "hook": "关上门，他就不是小奶狗了"
+      },
+      "progression": {
+        "start": "他作为新人入职，喊你姐姐",
+        "build": "你被他的软萌骗了，以为他无害",
+        "climax": "你发现他对你的占有欲超出想象",
+        "resolve": "你接受他的全部，软萌和强势"
+      },
+      "key_nodes": [
+        {"name": "入职", "description": "新来的弟弟喊你姐姐，你觉得他很可爱", "trigger": "开场"},
+        {"name": "撒娇", "description": "他经常撒娇让你帮忙", "trigger": "intimacy>=20"},
+        {"name": "吃醋", "description": "你和其他男同事说话，他不高兴了", "trigger": "intimacy>=40"},
+        {"name": "真面目", "description": "他把你堵在墙角，眼神变了", "trigger": "intimacy>=60"},
+        {"name": "告白", "description": "他说'姐姐，我喜欢你'", "trigger": "intimacy>=75"},
+        {"name": "选择", "description": "你要不要接受这个年下弟弟", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们在一起，他对你又软萌又强势",
+        "neutral": "你们暧昧着，他继续喊你姐姐",
+        "bad": "你接受不了他的占有欲",
+        "secret": "他入职就是为了接近你"
+      }
+    }
+  },
+  {
+    "id": "sweet_007",
+    "title": "直男健身教练",
+    "title_en": "Straight Gym Coach",
+    "summary": "他不懂浪漫，但他会学着爱你",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["coach_trainee"],
+    "contrast_types": ["personality", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "sports",
+    "length": "short",
+    "age_rating": "all",
+    "contrast_surface": "他是超直男健身教练，不会撩妹",
+    "contrast_truth": "他笨拙地学着浪漫，因为喜欢你",
+    "contrast_hook": "直男的爱，来得笨拙但真诚",
+    "script_seed": {
+      "character": {
+        "name": "张健",
+        "age": 26,
+        "surface_identity": "直男健身教练，只会说加油",
+        "true_identity": "努力学着浪漫的笨蛋",
+        "profession": "健身教练"
+      },
+      "contrast": {
+        "surface": "他说'再来一组'而不是'你好美'",
+        "truth": "他偷偷在网上查'怎么追女生'",
+        "hook": "他的浪漫可能很笨拙，但是真心的"
+      },
+      "progression": {
+        "start": "你报名健身，遇到这个直男教练",
+        "build": "你发现他虽然直男，但对你格外关心",
+        "climax": "他笨拙地告白，把事情搞砸了",
+        "resolve": "你告诉他，直男的爱也可以很甜"
+      },
+      "key_nodes": [
+        {"name": "初见", "description": "他让你做平板支撑，说'太弱了'", "trigger": "开场"},
+        {"name": "特别关照", "description": "他给你加练，但也会偷偷延长你的休息时间", "trigger": "intimacy>=20"},
+        {"name": "笨拙的关心", "description": "他给你买了蛋白粉，因为网上说女生也该喝", "trigger": "intimacy>=40"},
+        {"name": "告白准备", "description": "他偷偷练习怎么告白", "trigger": "intimacy>=60"},
+        {"name": "搞砸", "description": "他告白时说了'你体脂率有点高但我还是喜欢你'", "trigger": "intimacy>=75"},
+        {"name": "原谅", "description": "你被他的笨拙感动了", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们在一起，他开始学着浪漫",
+        "neutral": "你们暧昧着，他说'一起健身也是约会'",
+        "bad": "你接受不了他的直男",
+        "secret": "他其实为了你才来这家健身房当教练"
+      }
+    }
+  },
+  {
+    "id": "sweet_008",
+    "title": "偶像的私生活",
+    "title_en": "Idol's Private Life",
+    "summary": "舞台上光芒万丈，私下是个宅男",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["idol_fan", "neighbors"],
+    "contrast_types": ["identity", "public_private"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "entertainment",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "他是万人迷偶像，舞台上的完美男神",
+    "contrast_truth": "私下是个宅男，喜欢打游戏看动漫",
+    "contrast_hook": "你是他的邻居，也是唯一知道真相的人",
+    "script_seed": {
+      "character": {
+        "name": "顾星言",
+        "age": 24,
+        "surface_identity": "完美偶像，舞台王者",
+        "true_identity": "死宅，喜欢打游戏看动漫",
+        "profession": "偶像/歌手"
+      },
+      "contrast": {
+        "surface": "舞台上光芒万丈，粉丝无数",
+        "truth": "回家就换睡衣打游戏，邋遢得不行",
+        "hook": "台上男神，台下宅男"
+      },
+      "progression": {
+        "start": "你发现你的邻居竟然是当红偶像",
+        "build": "你成为唯一知道他真实面目的人",
+        "climax": "他的私生活被曝光，你成为风波中心",
+        "resolve": "他公开承认，和你在一起"
+      },
+      "key_nodes": [
+        {"name": "发现", "description": "你看到邻居穿着睡衣扔垃圾，竟然是大明星", "trigger": "开场"},
+        {"name": "约定", "description": "他请你保守秘密", "trigger": "intimacy>=20"},
+        {"name": "宅男日常", "description": "你发现他打游戏会骂人，看动漫会哭", "trigger": "intimacy>=40"},
+        {"name": "被拍", "description": "有狗仔拍到你和他一起", "trigger": "intimacy>=60"},
+        {"name": "风波", "description": "公司要他否认你们的关系", "trigger": "intimacy>=75"},
+        {"name": "公开", "description": "他说'我不想再藏了'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "他公开恋情，粉丝们祝福你们",
+        "neutral": "你们地下交往，等待合适的时机",
+        "bad": "他选择事业，让你离开",
+        "secret": "他其实早就知道你是他的粉丝"
+      }
+    }
+  },
+  {
+    "id": "sweet_009",
+    "title": "医生的温柔",
+    "title_en": "Doctor's Gentleness",
+    "summary": "对病人冷漠，对你特别",
+    "emotion_tones": ["sweet", "healing"],
+    "relation_types": ["doctor_patient"],
+    "contrast_types": ["personality", "public_private"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "medical",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "他是医院出了名的冷面医生",
+    "contrast_truth": "他对你有说不完的话和无尽的耐心",
+    "contrast_hook": "他对病人说'下一个'，对你说'慢慢来'",
+    "script_seed": {
+      "character": {
+        "name": "陆景川",
+        "age": 30,
+        "surface_identity": "冷面医生，不近人情",
+        "true_identity": "内心温柔的暖男",
+        "profession": "外科主治医师"
+      },
+      "contrast": {
+        "surface": "他对所有病人都说'快点说，后面还有人'",
+        "truth": "他对你却说'别着急，慢慢说'",
+        "hook": "他的冷漠是保护色，温柔只给你"
+      },
+      "progression": {
+        "start": "你因病情住院，他是你的主治医生",
+        "build": "你发现他对你的态度和其他病人不一样",
+        "climax": "你需要手术，他放弃休息亲自操刀",
+        "resolve": "你出院那天，他送了一束花"
+      },
+      "key_nodes": [
+        {"name": "住院", "description": "你住进医院，他是你的主治医生", "trigger": "开场"},
+        {"name": "特别对待", "description": "他对别的病人冷漠，对你却格外有耐心", "trigger": "intimacy>=20"},
+        {"name": "深夜探望", "description": "他下班后偷偷来看你", "trigger": "intimacy>=40"},
+        {"name": "手术", "description": "你需要手术，他坚持亲自做", "trigger": "intimacy>=60"},
+        {"name": "康复", "description": "他每天都来检查你的恢复情况", "trigger": "intimacy>=75"},
+        {"name": "出院", "description": "你出院时，他在门口等你", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们开始交往，他依然对病人冷漠但对你温柔",
+        "neutral": "你们保持医患关系，但私下是恋人",
+        "bad": "他选择专注事业，让你找别的医生",
+        "secret": "他记得你小时候来过这家医院，你们其实见过"
+      }
+    }
+  },
+  {
+    "id": "sweet_010",
+    "title": "学霸的秘密",
+    "title_en": "Top Student's Secret",
+    "summary": "私下喜欢看少女漫画",
+    "emotion_tones": ["sweet", "comedy"],
+    "relation_types": ["classmates", "tutor_student"],
+    "contrast_types": ["identity", "public_private"],
+    "era": "modern_campus",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "campus",
+    "length": "short",
+    "age_rating": "all",
+    "contrast_surface": "他是高冷学霸，全校第一，不近女色",
+    "contrast_truth": "他喜欢看少女漫画，内心是少女心爆棚",
+    "contrast_hook": "你发现了他的秘密书柜",
+    "script_seed": {
+      "character": {
+        "name": "宋清远",
+        "age": 18,
+        "surface_identity": "高冷学霸，无情考试机器",
+        "true_identity": "少女心满满的漫画迷",
+        "profession": "高三学生"
+      },
+      "contrast": {
+        "surface": "他永远在刷题，不和别人说话",
+        "truth": "他书包里藏着最新的少女漫画",
+        "hook": "学霸也有少女心"
+      },
+      "progression": {
+        "start": "你是学渣，被老师安排让他给你补课",
+        "build": "你意外发现他在看少女漫画",
+        "climax": "他的秘密差点被公开",
+        "resolve": "你帮他保守秘密，他也对你敞开心扉"
+      },
+      "key_nodes": [
+        {"name": "补课", "description": "老师安排他给你补课，他一脸不耐烦", "trigger": "开场"},
+        {"name": "发现秘密", "description": "你无意中看到他在看少女漫画", "trigger": "intimacy>=20"},
+        {"name": "威胁", "description": "你说要告诉别人，他慌了", "trigger": "intimacy>=40"},
+        {"name": "和解", "description": "你答应帮他保密，他也开始认真教你", "trigger": "intimacy>=60"},
+        {"name": "进步", "description": "你的成绩提高了", "trigger": "intimacy>=75"},
+        {"name": "告白", "description": "他推荐你看一部漫画，最后一页写着'我喜欢你'", "trigger": "intimacy>=90"}
+      ],
+      "endings": {
+        "good": "你们一起考上大学，他还是喜欢看少女漫画",
+        "neutral": "你们暧昧着，保持补课关系",
+        "bad": "你考砸了，和他去了不同的城市",
+        "secret": "他其实早就注意到你，故意在你看得到的地方看漫画"
+      }
+    }
+  }
+]

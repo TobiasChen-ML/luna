@@ -1,0 +1,162 @@
+[
+  {
+    "id": "suspense_001",
+    "title": "失踪的妻子",
+    "title_en": "Missing Wife",
+    "summary": "她失踪了，所有证据指向她背叛了你",
+    "emotion_tones": ["suspense", "angst"],
+    "relation_types": ["ex_lovers"],
+    "contrast_types": ["memory", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "long",
+    "age_rating": "all",
+    "contrast_surface": "她失踪了，留下出轨的证据",
+    "contrast_truth": "她是为了保护你才离开",
+    "contrast_hook": "你信她，还是信证据",
+    "script_seed": {
+      "character": {"name": "林晚晴", "age": 28, "surface_identity": "失踪的妻子", "true_identity": "卧底警察", "profession": "卧底"},
+      "contrast": {"surface": "她留下出轨证据消失了", "truth": "她是为了保护你才假死", "hook": "你选择相信还是放弃"},
+      "progression": {"start": "妻子失踪，留下出轨证据", "build": "你发现证据有破绽", "climax": "你发现她还活着", "resolve": "你们重逢，真相大白"},
+      "key_nodes": [
+        {"name": "失踪", "description": "她失踪了，留下出轨证据", "trigger": "开场"},
+        {"name": "调查", "description": "你开始调查真相", "trigger": "intimacy>=20"},
+        {"name": "破绽", "description": "你发现证据有破绽", "trigger": "intimacy>=40"},
+        {"name": "线索", "description": "你找到她留下的线索", "trigger": "intimacy>=60"},
+        {"name": "重逢", "description": "你发现她还活着", "trigger": "intimacy>=80"},
+        {"name": "真相", "description": "她说我是为了保护你", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们重逢，一起面对危险", "neutral": "你们重逢但她不能公开身份", "bad": "她为了保护你真的死了", "secret": "她其实一直在暗中保护你"}
+    }
+  },
+  {
+    "id": "suspense_002",
+    "title": "卧底的爱人",
+    "title_en": "Undercover Lover",
+    "summary": "你不知道她是警察派来的卧底",
+    "emotion_tones": ["suspense", "angst"],
+    "relation_types": ["enemy_to_lovers", "revenge_target"],
+    "contrast_types": ["loyalty", "relationship"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "crime",
+    "length": "long",
+    "age_rating": "adult",
+    "contrast_surface": "她是你的爱人，你最信任的人",
+    "contrast_truth": "她是卧底，任务是收集你的罪证",
+    "contrast_hook": "当真相揭露，她会选择哪一边",
+    "script_seed": {
+      "character": {"name": "苏念", "age": 26, "surface_identity": "你的爱人", "true_identity": "警方卧底", "profession": "卧底警察"},
+      "contrast": {"surface": "她是你最信任的人", "truth": "她是来收集你罪证的卧底", "hook": "她动了真情，不知该如何选择"},
+      "progression": {"start": "她接近你，成为你的爱人", "build": "她在任务和感情中挣扎", "climax": "收网行动开始", "resolve": "她必须做出选择"},
+      "key_nodes": [
+        {"name": "接近", "description": "她成为你的爱人", "trigger": "开场"},
+        {"name": "动心", "description": "她开始真正爱上你", "trigger": "intimacy>=30"},
+        {"name": "挣扎", "description": "她在任务和感情中挣扎", "trigger": "intimacy>=50"},
+        {"name": "收网", "description": "收网行动即将开始", "trigger": "intimacy>=70"},
+        {"name": "选择", "description": "她选择站在你这边", "trigger": "intimacy>=85"},
+        {"name": "对抗", "description": "你们一起对抗真正的敌人", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "她选择了你，一起洗白", "neutral": "她放你走，从此不相见", "bad": "她执行任务，你被捕", "secret": "她一开始就知道你也不是真正的坏人"}
+    }
+  },
+  {
+    "id": "suspense_003",
+    "title": "双重身份",
+    "title_en": "Double Identity",
+    "summary": "她接近你有目的",
+    "emotion_tones": ["suspense", "angst"],
+    "relation_types": ["strangers_to_lovers", "revenge_target"],
+    "contrast_types": ["identity", "loyalty"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是一个普通的女孩，偶然遇见你",
+    "contrast_truth": "她是仇人派来的，接近你有目的",
+    "contrast_hook": "当她完成任务，她会怎么选",
+    "script_seed": {
+      "character": {"name": "秦若雪", "age": 25, "surface_identity": "普通女孩", "true_identity": "商业间谍", "profession": "商业间谍"},
+      "contrast": {"surface": "她是无辜的普通女孩", "truth": "她是来窃取你商业机密的", "hook": "她爱上了目标"},
+      "progression": {"start": "她伪装成普通女孩接近你", "build": "她在任务和感情中挣扎", "climax": "窃取机密的机会来了", "resolve": "她做出选择"},
+      "key_nodes": [
+        {"name": "相遇", "description": "她制造了你们的偶遇", "trigger": "开场"},
+        {"name": "相恋", "description": "你们开始交往", "trigger": "intimacy>=20"},
+        {"name": "任务", "description": "她接到窃取机密的任务", "trigger": "intimacy>=50"},
+        {"name": "挣扎", "description": "她爱上了你，不愿伤害你", "trigger": "intimacy>=70"},
+        {"name": "选择", "description": "她坦白了一切", "trigger": "intimacy>=85"},
+        {"name": "原谅", "description": "你选择原谅还是离开", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "她坦白并放弃任务，你们在一起", "neutral": "她离开了，不再出现在你生活里", "bad": "她完成了任务，你失去了一切", "secret": "她其实一直在暗中帮你"}
+    }
+  },
+  {
+    "id": "suspense_004",
+    "title": "记忆碎片",
+    "title_en": "Memory Fragments",
+    "summary": "你忘了她，但她从未离开",
+    "emotion_tones": ["suspense", "healing"],
+    "relation_types": ["ex_lovers"],
+    "contrast_types": ["memory", "relationship"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "你完全不记得她，把她当陌生人",
+    "contrast_truth": "她是你的爱人，一直在等你想起",
+    "contrast_hook": "她为什么不告诉你真相",
+    "script_seed": {
+      "character": {"name": "林薇", "age": 26, "surface_identity": "一个陌生的女孩", "true_identity": "你的爱人", "profession": "医生"},
+      "contrast": {"surface": "她说她认识你，但你没印象", "truth": "她是你的爱人，车祸后你失忆了", "hook": "她一直在等你想起"},
+      "progression": {"start": "一个女孩说认识你，但你没印象", "build": "你发现她好像很了解你", "climax": "记忆碎片开始浮现", "resolve": "你想起了她"},
+      "key_nodes": [
+        {"name": "陌生人", "description": "一个女孩说认识你", "trigger": "开场"},
+        {"name": "困惑", "description": "你对她没印象，但她对你很了解", "trigger": "intimacy>=20"},
+        {"name": "照片", "description": "你发现一张你们的合照", "trigger": "intimacy>=40"},
+        {"name": "碎片", "description": "记忆碎片开始浮现", "trigger": "intimacy>=60"},
+        {"name": "想起", "description": "你想起了她", "trigger": "intimacy>=80"},
+        {"name": "重逢", "description": "你们真正重逢", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你想起了她，你们重新在一起", "neutral": "你想不起来，但愿意重新认识她", "bad": "你想起了但选择离开", "secret": "她其实一直在暗中保护你"}
+    }
+  },
+  {
+    "id": "suspense_005",
+    "title": "谁是凶手",
+    "title_en": "Who is the Killer",
+    "summary": "她是唯一证人，也是嫌疑人",
+    "emotion_tones": ["suspense", "thriller"],
+    "relation_types": ["detective_witness"],
+    "contrast_types": ["morality", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "legal",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "她是案件的唯一证人，也是嫌疑人",
+    "contrast_truth": "她不是凶手，但知道凶手是谁",
+    "contrast_hook": "你信她，还是信证据",
+    "script_seed": {
+      "character": {"name": "苏清", "age": 27, "surface_identity": "案件证人/嫌疑人", "true_identity": "受害者，知道真相", "profession": "记者"},
+      "contrast": {"surface": "所有证据都指向她", "truth": "她是被陷害的", "hook": "她不能说出真相因为有人威胁她"},
+      "progression": {"start": "你调查案件，她是唯一证人", "build": "你发现证据有疑点", "climax": "真正的凶手浮出水面", "resolve": "你们一起揭露真相"},
+      "key_nodes": [
+        {"name": "案件", "description": "你接手一个案件，她是证人", "trigger": "开场"},
+        {"name": "疑点", "description": "你发现证据有疑点", "trigger": "intimacy>=20"},
+        {"name": "接近", "description": "你接近她，发现她在害怕", "trigger": "intimacy>=40"},
+        {"name": "真相", "description": "她告诉你真相", "trigger": "intimacy>=70"},
+        {"name": "危险", "description": "凶手发现了你们", "trigger": "intimacy>=85"},
+        {"name": "揭露", "description": "你们揭露了凶手", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们揭露凶手，在一起", "neutral": "案件解决，但你们只是朋友", "bad": "凶手逃脱，她再次陷入危险", "secret": "她其实一开始就信任你"}
+    }
+  }
+]

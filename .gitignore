@@ -1,0 +1,47 @@
+# === User-requested high-priority ignores ===
+# Ignore database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Ignore dotfiles and dot-directories by default
+.*
+**/.*
+**/.*/
+
+# Keep this file trackable
+!.gitignore
+
+# === Secrets / credentials ===
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*secret*
+*token*
+*credential*
+*credentials*
+
+# Known sensitive config file in this repo
+config/firebase-credentials.json
+
+# === Common generated/cache artifacts ===
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+node_modules/
+dist/
+build/
+.npm-cache/
+.playwright-mcp/
+*.log
+
+# Windows reserved filename edge case found in repo
+backend/nul

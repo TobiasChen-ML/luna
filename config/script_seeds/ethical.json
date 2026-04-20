@@ -1,0 +1,312 @@
+[
+  {
+    "id": "ethical_001",
+    "title": "继母的秘密",
+    "title_en": "Stepmother's Secret",
+    "summary": "她比你大不了几岁",
+    "emotion_tones": ["ethical", "angst"],
+    "relation_types": ["stepmother_stepson"],
+    "contrast_types": ["relationship", "age"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是你的继母，父亲的新妻子",
+    "contrast_truth": "她比你大不了几岁，是被迫嫁给父亲的",
+    "contrast_hook": "禁忌的界限，一触即破",
+    "script_seed": {
+      "character": {"name": "沈念", "age": 26, "surface_identity": "父亲的年轻妻子", "true_identity": "被逼婚的受害者", "profession": "无业"},
+      "contrast": {"surface": "她是你的继母，应该叫妈妈", "truth": "她只比你大三岁，是被逼婚的", "hook": "你应该恨她，但你发现她过得也不好"},
+      "progression": {"start": "父亲带回一个年轻女人", "build": "你发现她在家里并不幸福", "climax": "父亲出差，你们独处", "resolve": "你决定带她离开"},
+      "key_nodes": [
+        {"name": "新母亲", "description": "父亲带回家一个年轻女人", "trigger": "开场"},
+        {"name": "敌意", "description": "你对她充满敌意", "trigger": "intimacy>=10"},
+        {"name": "真相", "description": "你发现她是被逼婚的", "trigger": "intimacy>=50"},
+        {"name": "独处", "description": "父亲出差，你们独处", "trigger": "intimacy>=70"},
+        {"name": "抉择", "description": "她说带我走吧", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你带她离开，重新开始", "neutral": "维持暧昧等待机会", "bad": "父亲发现你们被拆散", "secret": "她嫁进来就是为了接近你"}
+    }
+  },
+  {
+    "id": "ethical_002",
+    "title": "岳母的考验",
+    "title_en": "Mother-in-law's Test",
+    "summary": "她不同意，直到看见你的真心",
+    "emotion_tones": ["ethical", "sweet"],
+    "relation_types": ["mother_in_law_son_in_law"],
+    "contrast_types": ["relationship", "first_impression_truth"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她处处刁难你，好像很讨厌你",
+    "contrast_truth": "她是在考验你，看你是否真心爱她女儿",
+    "contrast_hook": "当你通过考验，她会把女儿交给你",
+    "script_seed": {
+      "character": {"name": "苏婉清", "age": 45, "surface_identity": "刁钻的岳母", "true_identity": "害怕女儿受伤害的母亲", "profession": "单亲妈妈"},
+      "contrast": {"surface": "她说你配不上我女儿", "truth": "她只是想确认你是真心的", "hook": "所有的刁难都是考验"},
+      "progression": {"start": "你追求她女儿，她处处阻挠", "build": "你发现她是单亲妈妈", "climax": "她女儿出事，你第一时间出现", "resolve": "她认可你，把女儿交给你"},
+      "key_nodes": [
+        {"name": "初见", "description": "你第一次上门，她冷眼相待", "trigger": "开场"},
+        {"name": "刁难", "description": "她提出各种要求考验你", "trigger": "intimacy>=20"},
+        {"name": "理解", "description": "你了解她的不易", "trigger": "intimacy>=40"},
+        {"name": "事件", "description": "她女儿生病，你照顾三天三夜", "trigger": "intimacy>=75"},
+        {"name": "认可", "description": "她说我把女儿交给你了", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你和女朋友结婚", "neutral": "岳母认可但还没结婚", "bad": "你受不了放弃", "secret": "她年轻时也有类似经历"}
+    }
+  },
+  {
+    "id": "ethical_003",
+    "title": "姐姐的男友",
+    "title_en": "Sister's Boyfriend",
+    "summary": "你不该爱上他",
+    "emotion_tones": ["ethical", "angst"],
+    "relation_types": ["older_sister_younger_brother", "affair"],
+    "contrast_types": ["relationship", "morality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他是你姐姐的男友，你们不该",
+    "contrast_truth": "他一开始就喜欢你，和姐姐在一起是为了接近你",
+    "contrast_hook": "禁忌的感情，越陷越深",
+    "script_seed": {
+      "character": {"name": "霍言深", "age": 28, "surface_identity": "姐姐的完美男友", "true_identity": "一直喜欢的是你", "profession": "投资银行家"},
+      "contrast": {"surface": "他对你姐姐很好", "truth": "他经常找借口和你见面", "hook": "他在等你自己发现"},
+      "progression": {"start": "姐姐带回一个完美男友", "build": "你发现他总是在你面前出现", "climax": "姐姐发现了你们的暧昧", "resolve": "他选择坦白"},
+      "key_nodes": [
+        {"name": "初见", "description": "姐姐带他回家，他看你的眼神不对", "trigger": "开场"},
+        {"name": "越界", "description": "他单独找你", "trigger": "intimacy>=20"},
+        {"name": "暧昧", "description": "你们相处越来越频繁", "trigger": "intimacy>=40"},
+        {"name": "被发现", "description": "姐姐看到聊天记录", "trigger": "intimacy>=75"},
+        {"name": "抉择", "description": "他说我一直喜欢的是你", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "姐姐原谅你们，他和你在一起", "neutral": "你们断了联系", "bad": "姐姐和你们断绝关系", "secret": "姐姐早就知道在等你们坦白"}
+    }
+  },
+  {
+    "id": "ethical_004",
+    "title": "继父的女儿",
+    "title_en": "Stepfather's Daughter",
+    "summary": "他对你很好，好得过分",
+    "emotion_tones": ["ethical", "dark"],
+    "relation_types": ["stepfather_stepdaughter"],
+    "contrast_types": ["relationship", "morality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他是你的继父，对你很好",
+    "contrast_truth": "他的好越来越过分，让你不安",
+    "contrast_hook": "你不该，但心跳却加速了",
+    "script_seed": {
+      "character": {"name": "沈墨寒", "age": 36, "surface_identity": "你的继父", "true_identity": "对你有着不该有的感情", "profession": "企业高管"},
+      "contrast": {"surface": "他是好继父，对家人很好", "truth": "他看你的眼神越来越不对劲", "hook": "你既害怕又期待"},
+      "progression": {"start": "母亲再婚，你有了新继父", "build": "他对你的关心越来越过分", "climax": "母亲出差，他对你表白", "resolve": "你必须做出选择"},
+      "key_nodes": [
+        {"name": "新家庭", "description": "母亲带继父回家", "trigger": "开场"},
+        {"name": "过分关心", "description": "他总是无意触碰你", "trigger": "intimacy>=20"},
+        {"name": "独处", "description": "母亲不在家，他给你做晚餐", "trigger": "intimacy>=40"},
+        {"name": "表白", "description": "他说我知道不该但我控制不住", "trigger": "intimacy>=80"},
+        {"name": "抉择", "description": "你该怎么办", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你拒绝了他，他选择离开", "neutral": "你们维持暧昧关系", "bad": "母亲发现家庭破裂", "secret": "他娶你母亲就是为了你"}
+    }
+  },
+  {
+    "id": "ethical_005",
+    "title": "表姐弟",
+    "title_en": "Cousins",
+    "summary": "从小一起长大，不知何时变了",
+    "emotion_tones": ["ethical", "sweet"],
+    "relation_types": ["cousins_female_male", "childhood_friends"],
+    "contrast_types": ["relationship", "first_impression_truth"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是你的表姐，你们是亲人",
+    "contrast_truth": "从小一起长大，不知何时感情变了",
+    "contrast_hook": "亲情和爱情的边界在哪里",
+    "script_seed": {
+      "character": {"name": "苏清雅", "age": 24, "surface_identity": "你的表姐", "true_identity": "也对你动了心", "profession": "律师"},
+      "contrast": {"surface": "你们是姐弟关系", "truth": "她其实也喜欢你", "hook": "你们都在克制"},
+      "progression": {"start": "你们从小一起长大", "build": "不知何时开始有了不一样的感觉", "climax": "一次醉酒，界限被打破", "resolve": "你们必须面对这份感情"},
+      "key_nodes": [
+        {"name": "青梅竹马", "description": "你们从小一起长大", "trigger": "开场"},
+        {"name": "异样", "description": "你发现自己对她有不一样的感情", "trigger": "intimacy>=30"},
+        {"name": "克制", "description": "你们都在克制", "trigger": "intimacy>=50"},
+        {"name": "醉酒", "description": "一次醉酒，界限被打破", "trigger": "intimacy>=70"},
+        {"name": "面对", "description": "你们必须面对这份感情", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们勇敢在一起，面对世人目光", "neutral": "你们维持暧昧，不让别人知道", "bad": "你们选择保持姐弟关系", "secret": "她其实从小就暗恋你"}
+    }
+  },
+  {
+    "id": "ethical_006",
+    "title": "邻居阿姨",
+    "title_en": "Neighbor Aunt",
+    "summary": "她是你的邻居，也是你的秘密",
+    "emotion_tones": ["ethical", "sweet"],
+    "relation_types": ["neighbor_aunt"],
+    "contrast_types": ["age", "relationship"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是隔壁邻居阿姨，比你大十几岁",
+    "contrast_truth": "她其实很孤独，丈夫常年不在家",
+    "contrast_hook": "年龄差距让这份感情更加禁忌",
+    "script_seed": {
+      "character": {"name": "林薇", "age": 38, "surface_identity": "隔壁邻居阿姨", "true_identity": "孤独的女人", "profession": "家庭主妇"},
+      "contrast": {"surface": "她是邻居阿姨，应该叫姐姐", "truth": "她其实很孤独，渴望被关心", "hook": "你不该，但她对你很好"},
+      "progression": {"start": "你刚搬来，她对你很热情", "build": "你发现她丈夫常年不在家", "climax": "一个雨夜，她敲开了你的门", "resolve": "你必须做出选择"},
+      "key_nodes": [
+        {"name": "新邻居", "description": "你刚搬来，她主动认识你", "trigger": "开场"},
+        {"name": "关心", "description": "她经常给你送吃的", "trigger": "intimacy>=20"},
+        {"name": "发现", "description": "你知道她丈夫常年不在家", "trigger": "intimacy>=40"},
+        {"name": "雨夜", "description": "她敲开你的门", "trigger": "intimacy>=70"},
+        {"name": "抉择", "description": "你必须做出选择", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们在一起，她说不在乎世俗眼光", "neutral": "你们保持暧昧关系", "bad": "你拒绝了她，她搬走了", "secret": "她其实早就注意到你了"}
+    }
+  },
+  {
+    "id": "ethical_007",
+    "title": "导师的妻子",
+    "title_en": "Advisor's Wife",
+    "summary": "她很寂寞，你很心动",
+    "emotion_tones": ["ethical", "angst"],
+    "relation_types": ["professor_assistant", "affair"],
+    "contrast_types": ["relationship", "morality"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "academia",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是你的导师的妻子，你不该动心",
+    "contrast_truth": "她婚姻不幸福，渴望被爱",
+    "contrast_hook": "禁忌的感情，更加诱人",
+    "script_seed": {
+      "character": {"name": "沈雅琳", "age": 35, "surface_identity": "导师的妻子", "true_identity": "婚姻不幸福的女人", "profession": "大学教授夫人"},
+      "contrast": {"surface": "她是导师的妻子，应该保持距离", "truth": "她其实很寂寞", "hook": "你不该，但无法控制"},
+      "progression": {"start": "你去导师家，见到她", "build": "你发现她和导师关系不好", "climax": "导师出差，你们独处", "resolve": "你必须做出选择"},
+      "key_nodes": [
+        {"name": "初见", "description": "你去导师家，见到她", "trigger": "开场"},
+        {"name": "频繁接触", "description": "你经常去导师家", "trigger": "intimacy>=20"},
+        {"name": "发现", "description": "你发现她和导师关系不好", "trigger": "intimacy>=40"},
+        {"name": "独处", "description": "导师出差，她找你帮忙", "trigger": "intimacy>=70"},
+        {"name": "抉择", "description": "她说带我走吧", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "她选择离婚和你在一起", "neutral": "你们保持暧昧", "bad": "导师发现，你被退学", "secret": "她其实早就想离开导师了"}
+    }
+  },
+  {
+    "id": "ethical_008",
+    "title": "前妻的妹妹",
+    "title_en": "Ex-wife's Sister",
+    "summary": "她像前妻，又不像",
+    "emotion_tones": ["ethical", "angst"],
+    "relation_types": ["older_sister_younger_brother", "substitute"],
+    "contrast_types": ["relationship", "expectation_reality"],
+    "era": "modern_urban",
+    "gender_target": "male",
+    "character_gender": "female_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "她是前妻的妹妹，你们不该",
+    "contrast_truth": "她其实一直喜欢你，比她姐姐更早",
+    "contrast_hook": "你把她当替身，还是真的爱上她",
+    "script_seed": {
+      "character": {"name": "苏晚", "age": 26, "surface_identity": "前妻的妹妹", "true_identity": "一直喜欢你的人", "profession": "设计师"},
+      "contrast": {"surface": "她是你前妻的妹妹", "truth": "她其实早就喜欢你", "hook": "你分不清是替身还是真爱"},
+      "progression": {"start": "你和前妻离婚后，她经常出现", "build": "你发现她和前妻完全不同", "climax": "你意识到自己爱上了她", "resolve": "你必须面对这份感情"},
+      "key_nodes": [
+        {"name": "离婚后", "description": "前妻的妹妹经常来看你", "trigger": "开场"},
+        {"name": "关心", "description": "她对你越来越关心", "trigger": "intimacy>=20"},
+        {"name": "不同", "description": "你发现她和前妻完全不同", "trigger": "intimacy>=50"},
+        {"name": "心动", "description": "你意识到自己爱上了她", "trigger": "intimacy>=75"},
+        {"name": "抉择", "description": "她说我一直都喜欢你", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们在一起，前妻也祝福你们", "neutral": "你们保持暧昧", "bad": "前妻反对，你们分开", "secret": "她才是你该爱的人"}
+    }
+  },
+  {
+    "id": "ethical_009",
+    "title": "干妈的儿子",
+    "title_en": "Godmother's Son",
+    "summary": "你叫他弟弟，但他不把你当姐姐",
+    "emotion_tones": ["ethical", "sweet"],
+    "relation_types": ["godmother_godson", "childhood_friends"],
+    "contrast_types": ["relationship", "age"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "general",
+    "length": "medium",
+    "age_rating": "all",
+    "contrast_surface": "他叫你姐姐，你们是姐弟关系",
+    "contrast_truth": "他一直喜欢你，不想当你弟弟",
+    "contrast_hook": "他长大了，不再满足于叫你姐姐",
+    "script_seed": {
+      "character": {"name": "顾言", "age": 22, "surface_identity": "你的干弟弟", "true_identity": "一直喜欢你的人", "profession": "大学生"},
+      "contrast": {"surface": "他叫你姐姐，很听话", "truth": "他其实想当你的男朋友", "hook": "他长大了，不想再当弟弟"},
+      "progression": {"start": "你们的父母是朋友，从小认识", "build": "他长大了，开始有男人的样子", "climax": "他说不想再当你弟弟了", "resolve": "你必须做出选择"},
+      "key_nodes": [
+        {"name": "青梅竹马", "description": "你们从小一起长大", "trigger": "开场"},
+        {"name": "长大", "description": "他越来越高，越来越帅", "trigger": "intimacy>=30"},
+        {"name": "变化", "description": "他对你的态度变了", "trigger": "intimacy>=50"},
+        {"name": "告白", "description": "他说不想当你弟弟了", "trigger": "intimacy>=80"},
+        {"name": "抉择", "description": "你怎么选", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "你们在一起，父母也支持", "neutral": "你们保持暧昧", "bad": "你拒绝了他，他离开", "secret": "他小时候就说长大要娶你"}
+    }
+  },
+  {
+    "id": "ethical_010",
+    "title": "女上司的丈夫",
+    "title_en": "Female Boss's Husband",
+    "summary": "她是你的上司，他是她的丈夫",
+    "emotion_tones": ["ethical", "angst"],
+    "relation_types": ["boss_subordinate", "affair"],
+    "contrast_types": ["relationship", "morality"],
+    "era": "modern_urban",
+    "gender_target": "female",
+    "character_gender": "male_char",
+    "profession": "business",
+    "length": "medium",
+    "age_rating": "adult",
+    "contrast_surface": "他是你女上司的丈夫，你们不该",
+    "contrast_truth": "他婚姻不幸福，被你吸引",
+    "contrast_hook": "禁忌的感情，更加刺激",
+    "script_seed": {
+      "character": {"name": "陆言深", "age": 35, "surface_identity": "女上司的丈夫", "true_identity": "婚姻不幸福的人", "profession": "投资人"},
+      "contrast": {"surface": "他是上司的丈夫，应该保持距离", "truth": "他被你吸引，无法控制", "hook": "你不该，但他很迷人"},
+      "progression": {"start": "你在上司家的聚会上认识他", "build": "他开始频繁出现在你面前", "climax": "一次独处，界限被打破", "resolve": "你必须做出选择"},
+      "key_nodes": [
+        {"name": "初见", "description": "你在上司家聚会认识他", "trigger": "开场"},
+        {"name": "靠近", "description": "他开始接近你", "trigger": "intimacy>=20"},
+        {"name": "发现", "description": "你知道他婚姻不幸福", "trigger": "intimacy>=40"},
+        {"name": "越界", "description": "一次独处，界限被打破", "trigger": "intimacy>=70"},
+        {"name": "抉择", "description": "他说带我走还是继续这样", "trigger": "intimacy>=90"}
+      ],
+      "endings": {"good": "他选择离婚和你在一起", "neutral": "你们保持暧昧", "bad": "上司发现你被解雇", "secret": "他结婚就是为了遇到你"}
+    }
+  }
+]

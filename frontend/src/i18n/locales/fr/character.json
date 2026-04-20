@@ -1,0 +1,56 @@
+{
+  "create": {
+    "title": "Créer un personnage",
+    "subtitle": "Concevez votre compagnon IA parfait",
+    "name": "Nom",
+    "namePlaceholder": "Entrez le nom du personnage",
+    "description": "Description",
+    "descriptionPlaceholder": "Décrivez la personnalité et l'histoire de votre personnage...",
+    "personality": "Personnalité",
+    "personalityPlaceholder": "Décrivez les traits de personnalité...",
+    "greeting": "Message d'accueil",
+    "greetingPlaceholder": "Premier message que votre personnage enverra...",
+    "avatar": "Avatar",
+    "uploadAvatar": "Téléverser un avatar",
+    "generateAvatar": "Générer avec l'IA",
+    "visibility": {
+      "title": "Visibilité",
+      "private": "Privé",
+      "public": "Public"
+    },
+    "category": "Catégorie",
+    "tags": "Tags",
+    "save": "Créer le personnage",
+    "saving": "Création...",
+    "success": "Personnage créé avec succès !"
+  },
+  "edit": {
+    "title": "Modifier le personnage",
+    "save": "Enregistrer les modifications",
+    "saving": "Enregistrement...",
+    "success": "Personnage mis à jour avec succès !"
+  },
+  "delete": {
+    "title": "Supprimer le personnage",
+    "confirm": "Êtes-vous sûr de vouloir supprimer ce personnage ?",
+    "warning": "Cette action est irréversible.",
+    "button": "Supprimer"
+  },
+  "myCharacters": {
+    "title": "Mes personnages",
+    "empty": "Vous n'avez pas encore créé de personnages.",
+    "createFirst": "Créer votre premier personnage"
+  },
+  "categories": {
+    "all": "Tous",
+    "girls": "Filles",
+    "guys": "Garçons",
+    "anime": "Anime",
+    "fantasy": "Fantaisie",
+    "romance": "Romance",
+    "adventure": "Aventure"
+  },
+  "chat": "Discuter",
+  "edit": "Modifier",
+  "delete": "Supprimer"
+}

@@ -1,0 +1,56 @@
+{
+  "hero": {
+    "title": "Your AI Companion Awaits",
+    "subtitle": "Connect with AI characters that understand you. Engage in meaningful conversations, explore stories, and build genuine connections.",
+    "cta": "Start Chatting",
+    "ctaFree": "Start for Free",
+    "learnMore": "Learn More"
+  },
+  "discover": {
+    "title": "Discover AI Characters",
+    "subtitle": "Find your perfect AI companion",
+    "viewAll": "View All",
+    "categories": {
+      "all": "All",
+      "girls": "Girls",
+      "anime": "Anime",
+      "guys": "Guys",
+      "fantasy": "Fantasy",
+      "romance": "Romance"
+    }
+  },
+  "features": {
+    "title": "Why Choose Us",
+    "subtitle": "Experience the future of AI companionship",
+    "chat": {
+      "title": "Natural Conversations",
+      "description": "Engage in fluid, natural conversations with AI characters that remember your preferences and adapt to your style."
+    },
+    "voice": {
+      "title": "Voice Chat",
+      "description": "Talk to your AI companion using natural voice interactions for a more immersive experience."
+    },
+    "image": {
+      "title": "Image Generation",
+      "description": "Generate stunning images with your AI companion and bring your conversations to life."
+    },
+    "memory": {
+      "title": "Smart Memory",
+      "description": "Your AI companion remembers your conversations and preferences for a personalized experience."
+    }
+  },
+  "testimonials": {
+    "title": "What Our Users Say"
+  },
+  "cta": {
+    "title": "Ready to Start?",
+    "subtitle": "Join thousands of users enjoying AI companionship",
+    "button": "Get Started for Free"
+  },
+  "stats": {
+    "characters": "AI Characters",
+    "users": "Active Users",
+    "messages": "Messages Sent",
+    "countries": "Countries"
+  }
+}
