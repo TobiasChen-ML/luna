@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Loader2, Save, Eye, EyeOff, RefreshCw, Check, X, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Loader2, Save, Eye, EyeOff, RefreshCw, Check, X, Plus, Trash2, Edit2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
 
 interface ModelInfo {
@@ -49,6 +49,16 @@ interface Preset {
 }
 
 type LoRAAppliesTo = 'txt2img' | 'img2img' | 'video' | 'all';
+type LoRAFormatType = 'civitai' | 'sdxl';
+
+function detectLoraFormat(modelName: string): LoRAFormatType {
+  return modelName.startsWith('civitai:') ? 'civitai' : 'sdxl';
+}
+
+const LORA_FORMAT_LABELS: Record<LoRAFormatType, { label: string; color: string }> = {
+  civitai: { label: 'Z-Turbo', color: 'bg-orange-900/60 text-orange-300' },
+  sdxl:    { label: 'SDXL',    color: 'bg-blue-900/60 text-blue-300' },
+};
 
 interface LoRAPreset {
   id: string;
@@ -139,6 +149,7 @@ export default function AdminSettingsPage() {
   const [loraFormSection, setLoraFormSection] = useState<LoRAAppliesTo | null>(null);
   const [showLoraForm, setShowLoraForm] = useState(false);
   const [loraSaving, setLoraSaving] = useState(false);
+  const [loraFormatType, setLoraFormatType] = useState<LoRAFormatType>('sdxl');
 
   const currentProvider = useMemo(() => {
     if (editValues.LLM_PROVIDER !== undefined) return editValues.LLM_PROVIDER;
@@ -244,6 +255,7 @@ export default function AdminSettingsPage() {
     setEditingLoraId(null);
     setLoraFormSection(null);
     setLoraForm(EMPTY_LORA);
+    setLoraFormatType('sdxl');
   };
 
   const handleLoraSubmit = async () => {
@@ -287,6 +299,7 @@ export default function AdminSettingsPage() {
       provider: lora.provider,
       is_active: Boolean(lora.is_active),
     });
+    setLoraFormatType(detectLoraFormat(lora.model_name));
     setEditingLoraId(lora.id);
     setLoraFormSection(section);
     setShowLoraForm(true);
@@ -464,25 +477,13 @@ export default function AdminSettingsPage() {
             ))}
           </select>
         ) : field.type === 'model_select' ? (
-          <select
+          <input
+            type="text"
             value={currentValue}
             onChange={(e) => handleInputChange(field.key, e.target.value)}
-            disabled={modelsLoading === modelProvider}
-            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:border-pink-500 focus:outline-none disabled:opacity-50"
-          >
-            <option value="">{currentValue || '-- Select a model --'}</option>
-            {modelsLoading === modelProvider ? (
-              <option disabled>Loading models...</option>
-            ) : (
-              (availableModels[modelProvider] || []).map(model => (
-                <option key={model.id} value={model.id}>
-                  {model.display_name}
-                  {model.base_model ? ` (${model.base_model})` : ''}
-                  {model.context_size ? ` [${Math.round(model.context_size / 1000)}K]` : ''}
-                </option>
-              ))
-            )}
-          </select>
+            placeholder={field.placeholder || '-- Enter model id --'}
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:border-pink-500 focus:outline-none"
+          />
         ) : field.type === 'number' ? (
           <input
             type="number"
@@ -607,9 +608,26 @@ export default function AdminSettingsPage() {
     const visible = loraPresets.filter(
       (l) => l.applies_to === appliesTo || l.applies_to === 'all'
     );
-    // Form is anchored to the section where Add/Edit was clicked, not derived from
-    // the LoRA's applies_to value (which can be 'all', causing duplicate forms).
     const formBelongsHere = showLoraForm && loraFormSection === appliesTo;
+
+    // Which LoRA format is compatible with the current provider for this section
+    const compatibleFormat: LoRAFormatType | null =
+      appliesTo === 'img2img' ? 'sdxl' :
+      appliesTo === 'txt2img' ? (imageProvider === 'z_image_turbo_lora' ? 'civitai' : 'sdxl') :
+      null; // video: no format restriction yet
+
+    const isIncompatible = (lora: LoRAPreset) => {
+      if (compatibleFormat === null) return false;
+      return detectLoraFormat(lora.model_name) !== compatibleFormat;
+    };
+
+    // Placeholder and hint text driven by the selected format type in the form
+    const modelNamePlaceholder =
+      loraFormatType === 'civitai'
+        ? 'e.g. civitai:2268008@2617751'
+        : 'e.g. asian_style_44319.safetensors';
+
+    const showFormatSelector = loraForm.applies_to === 'txt2img' || loraForm.applies_to === 'img2img' || appliesTo !== 'video';
 
     return (
       <div className="mt-4 border border-zinc-700 rounded-lg p-4 bg-zinc-800/50">
@@ -619,6 +637,9 @@ export default function AdminSettingsPage() {
           </span>
           <button
             onClick={() => {
+              const defaultFormat: LoRAFormatType =
+                appliesTo === 'txt2img' && imageProvider === 'z_image_turbo_lora' ? 'civitai' : 'sdxl';
+              setLoraFormatType(defaultFormat);
               setLoraForm({ ...EMPTY_LORA, applies_to: appliesTo });
               setEditingLoraId(null);
               setLoraFormSection(appliesTo);
@@ -641,49 +662,70 @@ export default function AdminSettingsPage() {
             <thead>
               <tr className="text-zinc-500 border-b border-zinc-700">
                 <th className="text-left pb-2 font-medium">名称</th>
-                <th className="text-left pb-2 font-medium">模型文件</th>
-                <th className="text-left pb-2 font-medium w-16">强度</th>
-                <th className="text-left pb-2 font-medium w-16">适用</th>
+                <th className="text-left pb-2 font-medium">格式</th>
+                <th className="text-left pb-2 font-medium">模型 ID</th>
+                <th className="text-left pb-2 font-medium w-12">强度</th>
                 <th className="text-left pb-2 font-medium w-14">状态</th>
                 <th className="w-14" />
               </tr>
             </thead>
             <tbody>
-              {visible.map((lora) => (
-                <tr key={lora.id} className="border-b border-zinc-700/50 hover:bg-zinc-700/20">
-                  <td className="py-2 pr-2 font-medium text-zinc-200">{lora.name}</td>
-                  <td className="py-2 pr-2 text-zinc-400 max-w-[180px] truncate" title={lora.model_name}>
-                    {lora.model_name}
-                  </td>
-                  <td className="py-2 pr-2 text-zinc-400">{lora.strength}</td>
-                  <td className="py-2 pr-2 text-zinc-400">{lora.applies_to}</td>
-                  <td className="py-2 pr-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      lora.is_active ? 'bg-green-900/50 text-green-400' : 'bg-zinc-700 text-zinc-500'
-                    }`}>
-                      {lora.is_active ? '启用' : '禁用'}
-                    </span>
-                  </td>
-                  <td className="py-2">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleLoraEdit(lora, appliesTo)}
-                        className="p-1 hover:text-pink-400 text-zinc-500 transition-colors"
-                        title="编辑"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleLoraDelete(lora.id)}
-                        className="p-1 hover:text-red-400 text-zinc-500 transition-colors"
-                        title="删除"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {visible.map((lora) => {
+                const fmt = appliesTo === 'video' ? null : detectLoraFormat(lora.model_name);
+                const incompatible = isIncompatible(lora);
+                return (
+                  <tr key={lora.id} className={`border-b border-zinc-700/50 hover:bg-zinc-700/20 ${incompatible ? 'opacity-60' : ''}`}>
+                    <td className="py-2 pr-2 font-medium text-zinc-200">
+                      <div className="flex items-center gap-1">
+                        {incompatible && (
+                          <span title={`当前 Provider (${imageProvider}) 不支持此格式，生成时会被跳过`}>
+                            <AlertTriangle className="w-3 h-3 text-yellow-500 shrink-0" />
+                          </span>
+                        )}
+                        {lora.name}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-2">
+                      {fmt ? (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${LORA_FORMAT_LABELS[fmt].color}`}>
+                          {LORA_FORMAT_LABELS[fmt].label}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300">WAN</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 text-zinc-400 max-w-[160px] truncate" title={lora.model_name}>
+                      {lora.model_name}
+                    </td>
+                    <td className="py-2 pr-2 text-zinc-400">{lora.strength}</td>
+                    <td className="py-2 pr-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        lora.is_active ? 'bg-green-900/50 text-green-400' : 'bg-zinc-700 text-zinc-500'
+                      }`}>
+                        {lora.is_active ? '启用' : '禁用'}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleLoraEdit(lora, appliesTo)}
+                          className="p-1 hover:text-pink-400 text-zinc-500 transition-colors"
+                          title="编辑"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleLoraDelete(lora.id)}
+                          className="p-1 hover:text-red-400 text-zinc-500 transition-colors"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -703,15 +745,43 @@ export default function AdminSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">模型文件名 *</label>
+
+              {/* 格式类型选择器：仅 txt2img / img2img 显示 */}
+              {showFormatSelector && appliesTo !== 'video' && (
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">模型格式</label>
+                  <select
+                    value={loraFormatType}
+                    onChange={(e) => {
+                      const fmt = e.target.value as LoRAFormatType;
+                      setLoraFormatType(fmt);
+                      // 切换格式时清空 model_name 避免残留
+                      setLoraForm((f) => ({ ...f, model_name: '' }));
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white focus:border-pink-500 outline-none"
+                  >
+                    <option value="sdxl">Novita SDXL (.safetensors)</option>
+                    <option value="civitai">Z-Image-Turbo (civitai:XXXXX@XXXXX)</option>
+                  </select>
+                  {appliesTo === 'img2img' && loraFormatType === 'civitai' && (
+                    <p className="mt-1 text-[10px] text-yellow-500 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      图生图固定使用 SDXL，civitai 格式会被跳过
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className={showFormatSelector && appliesTo !== 'video' ? '' : 'col-span-1'}>
+                <label className="block text-xs text-zinc-400 mb-1">模型 ID *</label>
                 <input
                   value={loraForm.model_name}
                   onChange={(e) => setLoraForm((f) => ({ ...f, model_name: e.target.value }))}
-                  placeholder="e.g. asian_style_44319.safetensors"
+                  placeholder={modelNamePlaceholder}
                   className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-xs text-zinc-400 mb-1">强度 (0.0 – 2.0)</label>
                 <input
@@ -727,6 +797,7 @@ export default function AdminSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white focus:border-pink-500 outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-xs text-zinc-400 mb-1">适用范围</label>
                 <select
@@ -740,6 +811,7 @@ export default function AdminSettingsPage() {
                   <option value="video">图生视频</option>
                 </select>
               </div>
+
               <div className="col-span-2">
                 <label className="block text-xs text-zinc-400 mb-1">触发词（可选，自动追加到提示词前）</label>
                 <input
@@ -749,6 +821,7 @@ export default function AdminSettingsPage() {
                   className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
                 />
               </div>
+
               <div className="flex items-center gap-2">
                 <label className="text-xs text-zinc-400">启用</label>
                 <input
@@ -759,6 +832,7 @@ export default function AdminSettingsPage() {
                 />
               </div>
             </div>
+
             <div className="flex gap-2 justify-end">
               <button
                 onClick={closeLoraForm}
@@ -814,6 +888,24 @@ export default function AdminSettingsPage() {
           </h3>
           <div className="space-y-4">
             {providerSelectField && renderField(providerSelectField)}
+            {/* Provider → LoRA 格式提示横幅 */}
+            {imageProvider === 'z_image_turbo_lora' ? (
+              <div className="flex items-start gap-2 px-3 py-2 bg-orange-900/20 border border-orange-700/40 rounded-lg text-xs text-orange-300">
+                <span className="mt-0.5">⚡</span>
+                <span>
+                  当前使用 <strong>Z-Image-Turbo</strong> 端点，LoRA 需填写{' '}
+                  <code className="bg-orange-900/40 px-1 rounded">civitai:XXXXXX@YYYYYYY</code> 格式（CivitAI 模型 ID）
+                </span>
+              </div>
+            ) : imageProvider === 'novita' ? (
+              <div className="flex items-start gap-2 px-3 py-2 bg-blue-900/20 border border-blue-700/40 rounded-lg text-xs text-blue-300">
+                <span className="mt-0.5">🖼</span>
+                <span>
+                  当前使用 <strong>Novita SDXL</strong> 端点，LoRA 需填写{' '}
+                  <code className="bg-blue-900/40 px-1 rounded">model_name.safetensors</code> 格式（Novita 模型名）
+                </span>
+              </div>
+            ) : null}
             {txt2imgCredentialFields.map(f => renderField(f))}
             {txt2imgFields
               .filter(f => !isZTurbo || !Z_TURBO_HIDDEN_KEYS.has(f.key))
@@ -828,9 +920,13 @@ export default function AdminSettingsPage() {
           <h3 className="text-sm font-semibold text-zinc-400 mb-4 pb-2 border-b border-zinc-700">
             图生图 (Image to Image)
           </h3>
-          <p className="text-xs text-zinc-500 mb-4">
-            使用文生图的 Provider 和 API Key
-          </p>
+          <div className="flex items-start gap-2 px-3 py-2 mb-4 bg-blue-900/20 border border-blue-700/40 rounded-lg text-xs text-blue-300">
+            <span className="mt-0.5">🖼</span>
+            <span>
+              图生图固定使用 <strong>Novita SDXL</strong> 端点（<code className="bg-blue-900/40 px-1 rounded">/async/img2img</code>），
+              LoRA 需填写 <code className="bg-blue-900/40 px-1 rounded">model_name.safetensors</code> 格式
+            </span>
+          </div>
           <div className="space-y-4">
             {img2imgFields.map(f => renderField(f, imageProvider === 'fal' ? 'fal' : 'novita_image'))}
           </div>
@@ -944,7 +1040,7 @@ export default function AdminSettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {activeGroupData.fields.map(renderField)}
+                  {activeGroupData.fields.map(f => renderField(f))}
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-zinc-800 flex justify-end gap-3">

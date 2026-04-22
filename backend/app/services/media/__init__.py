@@ -181,7 +181,20 @@ class NovitaImageProvider(BaseMediaProvider):
         except Exception:
             pass
         return guidance_scale
-    
+
+    def _filter_sdxl_loras(self, loras: Optional[list["LoRAConfig"]]) -> Optional[list["LoRAConfig"]]:
+        """Drop LoRAs whose model_name uses civitai: format — incompatible with SDXL endpoints."""
+        if not loras:
+            return loras
+        compatible = [l for l in loras if not l.model_name.startswith("civitai:")]
+        if len(compatible) < len(loras):
+            skipped = [l.model_name for l in loras if l.model_name.startswith("civitai:")]
+            logger.warning(
+                "Skipping %d civitai-format LoRA(s) incompatible with SDXL txt2img: %s",
+                len(skipped), skipped,
+            )
+        return compatible or None
+
     async def txt2img_async(
         self,
         prompt: str,
@@ -223,12 +236,13 @@ class NovitaImageProvider(BaseMediaProvider):
             }
         }
         
-        if loras:
+        compatible_loras = self._filter_sdxl_loras(loras)
+        if compatible_loras:
             payload["request"]["loras"] = [
                 {"model_name": l.model_name, "strength": l.strength}
-                for l in loras
+                for l in compatible_loras
             ]
-        
+
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 f"{self.base_url}/async/txt2img",
@@ -292,12 +306,13 @@ class NovitaImageProvider(BaseMediaProvider):
             }
         }
         
-        if loras:
+        compatible_loras = self._filter_sdxl_loras(loras)
+        if compatible_loras:
             payload["request"]["loras"] = [
                 {"model_name": l.model_name, "strength": l.strength}
-                for l in loras
+                for l in compatible_loras
             ]
-        
+
         if ip_adapters:
             payload["request"]["ip_adapters"] = [
                 {
