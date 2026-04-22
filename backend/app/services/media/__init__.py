@@ -511,7 +511,7 @@ class NovitaImageProvider(BaseMediaProvider):
 class ZImageTurboLoraProvider(NovitaImageProvider):
     """Novita Z Image Turbo LoRA — faster generation, simpler payload, no model selection."""
 
-    ENDPOINT = "/v3/async/z-image-turbo-lora"
+    ENDPOINT = "/async/z-image-turbo-lora"
 
     async def txt2img_async(
         self,
@@ -579,7 +579,7 @@ class NovitaVideoProvider(BaseMediaProvider):
     ) -> str:
         import httpx
 
-        endpoint = "/v3/async/wan-i2v" if init_image else "/v3/async/wan-t2v"
+        endpoint = "/async/wan-i2v" if init_image else "/async/wan-t2v"
 
         payload: dict[str, Any] = {
             "prompt": prompt,
