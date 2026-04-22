@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 _SELECTION_SCHEMA = {
     "type": "object",
     "properties": {
-        "lora_id": {
+        "lora_name": {
             "type": "string",
-            "description": "The id of the selected LoRA preset",
+            "description": "The exact name of the selected LoRA preset, copied verbatim from the list",
         },
         "reasoning": {
             "type": "string",
             "description": "One sentence explaining why this LoRA fits the context",
         },
     },
-    "required": ["lora_id"],
+    "required": ["lora_name"],
 }
 
 
@@ -49,14 +49,15 @@ async def _fetch_loras(applies_to: str) -> list[dict]:
 
 def _build_system_prompt(loras: list[dict]) -> str:
     options = "\n".join(
-        f"  id={l['id']}  name={l['name']}  description={l['description'] or '(no description)'}"
+        f"  - \"{l['name']}\": {l['description'] or '(no description)'}"
         for l in loras
     )
     return (
         "You are an image-generation assistant. Given a scene context, pick the "
         "single LoRA preset that best matches it from the list below.\n\n"
         f"Available LoRAs:\n{options}\n\n"
-        "Respond with valid JSON only."
+        'Return JSON with key "lora_name" set to the EXACT name string from the list above. '
+        "Do not invent names."
     )
 
 
@@ -75,7 +76,7 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
     if len(loras) == 1:
         return loras[0]
 
-    lora_map = {l["id"]: l for l in loras}
+    lora_map = {l["name"]: l for l in loras}
 
     try:
         from app.services.llm.providers import NovitaLLMProvider
@@ -85,12 +86,12 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         api_key = await get_config_value("LLM_API_KEY")
         if not api_key:
             logger.warning("[LoraSelector] LLM_API_KEY not configured, falling back to random")
-            chosen = random.choice(loras)
-            return chosen
-        provider = NovitaLLMProvider(api_key=api_key)
+            return random.choice(loras)
 
+        provider = NovitaLLMProvider(api_key=api_key)
         request = LLMRequest(
             messages=[
+                Message(role="system", content=_build_system_prompt(loras)),
                 Message(role="user", content=f"Scene context: {context}"),
             ],
             model="meta-llama/llama-3.1-8b-instruct",
@@ -99,22 +100,22 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         )
 
         structured = await provider.generate_structured(request, _SELECTION_SCHEMA)
-        chosen_id = structured.data.get("lora_id", "")
+        chosen_name = structured.data.get("lora_name", "").strip()
         reasoning = structured.data.get("reasoning", "")
 
-        if chosen_id in lora_map:
+        if chosen_name in lora_map:
             logger.info(
-                f"[LoraSelector] LLM chose '{chosen_id}' for applies_to={applies_to}. "
+                f"[LoraSelector] LLM chose '{chosen_name}' for applies_to={applies_to}. "
                 f"Reason: {reasoning}"
             )
-            return lora_map[chosen_id]
+            return lora_map[chosen_name]
 
         logger.warning(
-            f"[LoraSelector] LLM returned unknown id '{chosen_id}', falling back to random."
+            f"[LoraSelector] LLM returned unknown name '{chosen_name}', falling back to random."
         )
     except Exception as e:
         logger.warning(f"[LoraSelector] LLM selection failed: {e}, falling back to random.")
 
     chosen = random.choice(loras)
-    logger.info(f"[LoraSelector] Random fallback selected '{chosen['id']}'.")
+    logger.info(f"[LoraSelector] Random fallback selected '{chosen['name']}'.")
     return chosen
