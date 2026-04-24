@@ -56,7 +56,7 @@ async def get_official_character(
 
     await character_service.increment_view_count(character_id)
 
-    return character if user else _strip_mature(character)
+    return character
 
 
 @router.get("/categories")
@@ -111,7 +111,7 @@ async def discover_characters(
         limit=limit,
         offset=offset,
     )
-    return _filter_characters(characters, authenticated=user is not None)
+    return characters
 
 
 @router.post("/ugc", response_model=dict[str, Any])

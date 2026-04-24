@@ -272,7 +272,7 @@ export function LandingPage() {
 
   const sidebarItems = [
     { label: 'Home', icon: Home, to: '/' },
-    { label: 'Discover', icon: Compass, to: '#', comingSoon: true },
+    { label: 'Discover', icon: Compass, to: '/discover' },
     { label: 'Chat', icon: MessageCircle, to: '/chat' },
     { label: 'Collection', icon: BookHeart, to: '/collection' },
     { label: 'Generate Image', icon: ImagePlus, to: '/generate-image' },
@@ -444,24 +444,6 @@ export function LandingPage() {
                     ? 'bg-zinc-700/40 border-zinc-500/70 text-white'
                     : 'border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white'
                 }`;
-                if (item.comingSoon) {
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => {
-                        closeMobileMenu();
-                        setIsCommingSoonModalOpen(true);
-                      }}
-                      className={sharedClass}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon size={16} />
-                        {item.label}
-                      </span>
-                    </button>
-                  );
-                }
                 return (
                   <Link
                     key={item.label}
@@ -545,23 +527,6 @@ export function LandingPage() {
           {sidebarItems.map((item) => {
             const Icon = item.icon;
             const active = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to);
-            if (item.comingSoon) {
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => setIsCommingSoonModalOpen(true)}
-                  className={`w-full flex items-center rounded-xl border px-3 py-2 text-sm transition-colors ${
-                    isSidebarTextVisible ? 'justify-between' : 'justify-center'
-                  } border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white`}
-                  title={!isSidebarTextVisible ? item.label : undefined}
-                >
-                  <span className="flex items-center gap-2">
-                    <Icon size={15} />
-                    {isSidebarTextVisible && item.label}
-                  </span>
-                </button>
-              );
-            }
             return (
               <Link
                 key={item.label}

@@ -45,9 +45,10 @@ import { api } from '@/services/api';
 import { notificationService } from '@/services/notificationService';
 import type { Character } from '@/types';
 import type { VoiceMode } from '@/types/chat';
+import type { VideoLoraAction } from '@/services/videoLoraService';
 import { getSafeAvatarUrl } from '@/utils/avatarUrlGuard';
 import { getErrorMessage, getInsufficientCreditsInfo } from '@/utils/apiError';
-import { HUNYUAN_VIDEO_LORAS } from '@/config/hunyuanVideoLoras';
+import { normalizeTaskStatus } from '@/utils/taskStatus';
 import { AudioFocusProvider } from '@/contexts/AudioFocusContext';
 
 interface CharacterMediaItem {
@@ -486,14 +487,15 @@ function ChatContent() {
             `/images/tasks/${task_id}`
           );
           const { status, result } = res.data;
-          if (status === 'succeeded' && result?.data) {
+          const normalizedStatus = normalizeTaskStatus(status);
+          if (normalizedStatus === 'succeeded' && result?.data) {
             cleanup();
             updateLocalMessage(tempId, {
               content: '',
               image_url: result.data,
               metadata: { fal_local: true },
             });
-          } else if (status === 'failed') {
+          } else if (normalizedStatus === 'failed') {
             cleanup();
             updateLocalMessage(tempId, { content: 'Image generation failed.' });
           }
@@ -519,16 +521,17 @@ function ChatContent() {
     }
   };
 
-  const handleGenerateVideo = async (prompt: string, loraId?: string, baseImageUrl?: string) => {
+  const handleGenerateVideo = async (
+    prompt: string,
+    action?: VideoLoraAction,
+    baseImageUrl?: string
+  ) => {
     const normalized = prompt.trim();
     if (!normalized || !currentCharacter) return;
     if (!baseImageUrl) {
       alert('Please select a generated image as the base image.');
       return;
     }
-
-    const lora = HUNYUAN_VIDEO_LORAS.find((l) => l.id === loraId);
-    const loras = lora ? [{ path: lora.civitaiId, scale: lora.defaultStrength }] : [];
 
     const tempId = `hunyuan-gen-${Date.now()}`;
 
@@ -557,17 +560,27 @@ function ChatContent() {
           character_id: currentCharacter.id,
           session_id: sessionId,
           image_url: baseImageUrl,
-          loras,
+          lora_preset_id: action?.lora_preset_id,
+          selected_trigger_word: action?.trigger_word,
         }
       );
       await refreshUser();
 
       const { task_id } = response.data;
+      const TIMEOUT_MS = 360_000;
+      let resolved = false;
 
-      const unsubDone = notificationService.on('video_completed', (data) => {
-        if (data.task_id !== task_id) return;
+      const cleanup = () => {
+        resolved = true;
         unsubDone();
         unsubFailed();
+        clearInterval(pollInterval);
+        clearTimeout(timeoutId);
+      };
+
+      const unsubDone = notificationService.on('video_completed', (data) => {
+        if (data.task_id !== task_id || resolved) return;
+        cleanup();
         updateLocalMessage(tempId, {
           content: '',
           video_url: data.video_url,
@@ -576,11 +589,46 @@ function ChatContent() {
       });
 
       const unsubFailed = notificationService.on('video_failed', (data) => {
-        if (data.task_id !== task_id) return;
-        unsubDone();
-        unsubFailed();
+        if (data.task_id !== task_id || resolved) return;
+        cleanup();
         updateLocalMessage(tempId, { content: data.error || 'Video generation failed.' });
       });
+
+      const pollInterval = setInterval(async () => {
+        if (resolved) return;
+        try {
+          const res = await api.get<{ status: string; result?: { data?: string; video_url?: string } }>(
+            `/images/tasks/${task_id}`
+          );
+          const status = normalizeTaskStatus(res.data?.status);
+          if (status === 'succeeded') {
+            const videoUrl = res.data?.result?.video_url || res.data?.result?.data;
+            if (videoUrl) {
+              cleanup();
+              updateLocalMessage(tempId, {
+                content: '',
+                video_url: videoUrl,
+                metadata: { video_local: true },
+              });
+            }
+            return;
+          }
+          if (status === 'failed') {
+            cleanup();
+            updateLocalMessage(tempId, { content: 'Video generation failed.' });
+          }
+        } catch {
+          // keep polling
+        }
+      }, 5000);
+
+      const timeoutId = setTimeout(() => {
+        if (resolved) return;
+        cleanup();
+        updateLocalMessage(tempId, {
+          content: 'Video generation timed out. Please try again.',
+        });
+      }, TIMEOUT_MS);
     } catch (err: any) {
       const insufficientCredits = getInsufficientCreditsInfo(err);
       if (insufficientCredits) {
@@ -697,7 +745,7 @@ function ChatContent() {
 
   const navItems = [
     { label: 'Home', icon: Home, onClick: () => navigate('/') },
-    { label: 'Discover', icon: Compass, onClick: () => setIsCommingSoonModalOpen(true) },
+    { label: 'Discover', icon: Compass, onClick: () => navigate('/discover') },
     { label: 'Chat', icon: MessageCircle, onClick: () => navigate('/chat'), active: true },
     { label: 'Collection', icon: BookHeart, onClick: () => navigate('/collection') },
     { label: 'Generate Image', icon: ImagePlus, onClick: () => navigate('/generate-image') },

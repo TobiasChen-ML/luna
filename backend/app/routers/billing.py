@@ -12,15 +12,31 @@ from app.models import (
 from app.services.auth_service import webhook_service
 from app.services.pricing_service import pricing_service
 from app.services.credit_service import credit_service
+from app.services.billing_service import BillingService
 from app.core.dependencies import get_current_user_required
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
+billing_svc = BillingService()
 
 WEBHOOK_TIMESTAMP_TOLERANCE = 300
 
 
 MAX_CREDITS_PER_TRANSACTION = 10000
+
+
+def _extract_order_id_from_telegram_payload(payload: dict[str, Any]) -> Optional[str]:
+    direct_order_id = payload.get("order_id")
+    if direct_order_id:
+        return str(direct_order_id)
+
+    payload_value = payload.get("payload")
+    if isinstance(payload_value, str):
+        if payload_value.startswith("stars:"):
+            return payload_value.split(":", 1)[1]
+        return payload_value
+
+    return None
 
 
 @router.get("/pricing")
@@ -174,28 +190,91 @@ async def refresh_usdt_order(request: Request, order_id: str) -> dict[str, Any]:
 @router.post("/telegram-stars/orders")
 async def create_telegram_stars_order(
     request: Request, 
-    data: TelegramStarsOrderCreate
+    data: TelegramStarsOrderCreate,
+    user = Depends(get_current_user_required),
 ) -> dict[str, Any]:
-    return {
-        "order_id": "stars_order_001",
-        "amount": data.amount,
-        "status": OrderStatus.PENDING,
-        "created_at": datetime.now().isoformat(),
-    }
+    amount_stars = data.amount_stars if data.amount_stars is not None else data.amount
+    if amount_stars is None:
+        raise HTTPException(status_code=400, detail="amount_stars (or amount) is required")
+
+    credits = data.credits
+    if credits is None:
+        pack_key = data.pack_id or data.product_id
+        if pack_key:
+            packs = await pricing_service.get_credit_packs(active_only=True)
+            pack_map = {p.pack_id: p for p in packs}
+            matched = pack_map.get(pack_key)
+            if matched:
+                credits = int((matched.credits or 0) + (matched.bonus_credits or 0))
+            elif pack_key.startswith("credits_"):
+                # Backward-compatible fallback for legacy product ids like credits_50.
+                try:
+                    credits = int(pack_key.split("_", 1)[1])
+                except (TypeError, ValueError):
+                    credits = None
+    if credits is None or credits <= 0:
+        raise HTTPException(status_code=400, detail="credits is required and must be > 0")
+
+    try:
+        result = await billing_svc.create_telegram_stars_order(
+            user_id=user.id,
+            amount_stars=int(amount_stars),
+            credits=int(credits),
+            pack_id=data.pack_id or data.product_id,
+            title=data.title,
+            description=data.description,
+            metadata=data.metadata or {},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return result
 
 
 @router.get("/telegram-stars/orders/{order_id}")
-async def get_telegram_stars_order(request: Request, order_id: str) -> dict[str, Any]:
+async def get_telegram_stars_order(
+    request: Request,
+    order_id: str,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    order = await billing_svc.get_telegram_stars_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+
     return {
         "order_id": order_id,
-        "amount": 100,
-        "status": OrderStatus.PENDING,
-        "created_at": datetime.now().isoformat(),
+        "status": order.get("status", OrderStatus.PENDING),
+        "amount": int(order.get("amount_stars", 0)),
+        "credits": int(order.get("credits", 0)),
+        "invoice_link": order.get("invoice_link"),
+        "created_at": order.get("created_at"),
+        "updated_at": order.get("updated_at"),
+        "raw": order,
     }
 
 
 @router.post("/telegram-stars/orders/{order_id}/submit", response_model=BaseResponse)
-async def submit_telegram_stars_order(request: Request, order_id: str) -> BaseResponse:
+async def submit_telegram_stars_order(
+    request: Request,
+    order_id: str,
+    data: dict[str, Any] | None = None,
+    user = Depends(get_current_user_required),
+) -> BaseResponse:
+    order = await billing_svc.get_telegram_stars_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    payment_id = (data or {}).get("payment_id") or (data or {}).get("charge_id") or f"manual_{order_id}"
+    try:
+        await billing_svc.submit_telegram_stars_order(order_id=order_id, payment_id=str(payment_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"submit_telegram_stars_order failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to submit Telegram Stars payment")
+
     return BaseResponse(success=True, message="Telegram Stars payment submitted")
 
 
@@ -203,14 +282,25 @@ async def submit_telegram_stars_order(request: Request, order_id: str) -> BaseRe
 async def create_telegram_stars_invoice_link(
     request: Request, 
     order_id: str,
-    data: dict[str, Any] = None
+    data: dict[str, Any] | None = None,
+    user = Depends(get_current_user_required),
 ) -> dict[str, Any]:
-    return {
-        "order_id": order_id,
-        "status": OrderStatus.PENDING,
-        "invoice_link": "https://t.me/$x12345678",
-        "raw": {},
-    }
+    order = await billing_svc.get_telegram_stars_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    try:
+        result = await billing_svc.create_telegram_stars_invoice_link(
+            order_id=order_id,
+            title=(data or {}).get("title"),
+            description=(data or {}).get("description"),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"create_telegram_stars_invoice_link failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to create Telegram invoice link")
 
 
 @router.post("/webhooks/stripe", response_model=BaseResponse)
@@ -313,8 +403,13 @@ async def usdt_webhook(
             logger.warning("USDT webhook missing signature header")
             raise HTTPException(status_code=401, detail="Missing signature")
         
-        from app.core.config import get_config_value
-        secret = await get_config_value("CCBILL_CLIENT_SECRET") or await get_config_value("USDT_WEBHOOK_SECRET")
+        from app.core.config import get_config_value, get_settings
+        settings = get_settings()
+        secret = (
+            await get_config_value("CCBILL_CLIENT_SECRET")
+            or await get_config_value("USDT_WEBHOOK_SECRET")
+            or settings.ccbill_client_secret
+        )
         if not secret:
             logger.error("USDT webhook secret not configured")
             raise HTTPException(status_code=503, detail="Webhook processing unavailable")
@@ -376,8 +471,9 @@ async def telegram_stars_webhook(
     try:
         payload = await request.json()
         
-        from app.core.config import get_config_value
-        bot_token = await get_config_value("TELEGRAM_BOT_TOKEN")
+        from app.core.config import get_config_value, get_settings
+        settings = get_settings()
+        bot_token = await get_config_value("TELEGRAM_BOT_TOKEN") or settings.telegram_bot_token
         
         if not bot_token:
             logger.error("Telegram bot token not configured")
@@ -392,40 +488,65 @@ async def telegram_stars_webhook(
             logger.warning("Telegram Stars webhook timestamp outside tolerance window")
             raise HTTPException(status_code=400, detail="Webhook expired")
 
-        status = payload.get("status", "")
-        user_id = payload.get("user_id")
-        try:
-            credits = int(payload.get("credits", 0))
-        except (TypeError, ValueError):
-            logger.warning(f"Telegram Stars webhook invalid credits value: {payload.get('credits')}")
-            raise HTTPException(status_code=400, detail="Invalid credits value")
-        
-        if credits <= 0 or credits > MAX_CREDITS_PER_TRANSACTION:
-            logger.warning(f"Telegram Stars webhook credits out of bounds: {credits}")
-            raise HTTPException(status_code=400, detail="Credits amount out of allowed range")
-        
-        order_id = payload.get("order_id") or payload.get("charge_id")
-        
+        status = str(payload.get("status", "")).lower()
+        order_id = _extract_order_id_from_telegram_payload(payload)
+        charge_id = payload.get("charge_id") or payload.get("payment_id")
+        if not order_id:
+            logger.warning(f"Telegram Stars webhook missing order_id/payload: {payload}")
+            raise HTTPException(status_code=400, detail="order_id required")
+
         if status in ["paid", "successful"]:
-            if user_id and credits > 0:
+            try:
+                result = await billing_svc.mark_telegram_stars_order_paid(
+                    order_id=order_id,
+                    charge_id=str(charge_id) if charge_id else None,
+                    webhook_payload=payload,
+                )
+                logger.info(f"Telegram Stars payment success: order_id={order_id}, result={result}")
+            except ValueError as e:
+                # Backward-compatible fallback: if order cache is missing, use webhook payload directly.
+                user_id = payload.get("user_id")
                 try:
-                    await credit_service.add_credits(
-                        user_id=user_id,
-                        amount=credits,
-                        transaction_type="purchase",
-                        credit_source="purchased",
-                        order_id=order_id,
-                        description=f"Purchased {credits} credits via Telegram Stars"
+                    credits = int(payload.get("credits", 0))
+                except (TypeError, ValueError):
+                    credits = 0
+                if user_id and credits > 0 and "not found" in str(e).lower():
+                    from app.models.credit_transaction import CreditTransaction
+                    with billing_svc.db.transaction() as session:
+                        existing_tx = (
+                            session.query(CreditTransaction)
+                            .filter(
+                                CreditTransaction.user_id == user_id,
+                                CreditTransaction.order_id == order_id,
+                                CreditTransaction.transaction_type == "purchase",
+                            )
+                            .first()
+                        )
+                    if not existing_tx:
+                        await credit_service.add_credits(
+                            user_id=user_id,
+                            amount=credits,
+                            transaction_type="purchase",
+                            credit_source="purchased",
+                            order_id=order_id,
+                            description=f"Purchased {credits} credits via Telegram Stars (legacy fallback)",
+                        )
+                    logger.warning(
+                        f"Telegram Stars order {order_id} missing in cache; applied legacy fallback credit grant"
                     )
-                    logger.info(f"Telegram Stars payment success: {credits} credits added to user {user_id}")
-                except Exception as e:
-                    logger.error(f"Telegram Stars credit add failed: {e}")
-                    raise HTTPException(status_code=500, detail="Failed to add credits")
-            else:
-                logger.warning(f"Telegram Stars webhook missing user_id or credits: {payload}")
-        
+                else:
+                    logger.warning(f"Telegram Stars paid webhook rejected for order {order_id}: {e}")
+                    raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                logger.error(f"Telegram Stars paid webhook processing failed: {e}")
+                raise HTTPException(status_code=500, detail="Failed to process Telegram Stars payment")
+        elif status in ["failed", "error"]:
+            await billing_svc.mark_telegram_stars_order_failed(order_id=order_id, webhook_payload=payload)
+        elif status in ["cancelled", "canceled"]:
+            await billing_svc.mark_telegram_stars_order_cancelled(order_id=order_id, webhook_payload=payload)
+
         logger.info(f"Telegram Stars webhook processed: order_id={order_id}, status={status}")
-        return BaseResponse(success=True, message=f"Telegram Stars webhook processed: {status}")
+        return BaseResponse(success=True, message=f"Telegram Stars webhook processed: {status or 'unknown'}")
     except HTTPException:
         raise
     except Exception as e:

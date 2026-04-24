@@ -17,7 +17,6 @@ from app.models import (
     ChatSessionUpdate, ChatSessionCreate as ChatSessionCreateModel,
 )
 from app.core.events import EventType, SSEEvent
-from app.core.dependencies import get_current_user_required
 from app.services.llm_service import LLMService
 from app.services.prompt_builder import PromptBuilder, PromptContext, PromptSection
 from app.services.prompt_template_service import prompt_template_service
@@ -31,21 +30,49 @@ from app.services.video_intent_handler import video_intent_handler
 from app.services.voice_service import VoiceService
 from app.services.database_service import DatabaseService
 from app.services.credit_service import credit_service
-from app.services.pricing_service import pricing_service
+from app.services.auth_service import jwt_service
+from app.core.dependencies import get_firebase_service
 from app.services.script_library_service import script_library_service
 from app.core.database import db
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 
-VOICE_CREDIT_COST = 2
-IMAGE_CREDIT_COST = 2
 STORY_COMPLETION_MARKER = re.compile(r"\[\[STORY_COMPLETED:(good|neutral|bad|secret)\]\]", re.IGNORECASE)
 
-GUEST_MAX_CREDITS = 20
-GUEST_MESSAGE_COST = 1
+GUEST_MAX_CREDITS = 20.0
 GUEST_STATE_TTL_SECONDS = 24 * 60 * 60
 _guest_states: dict[str, dict[str, Any]] = {}
+
+
+def _extract_access_token(request: Request) -> Optional[str]:
+    auth_header = (request.headers.get("authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+    cookie_token = (request.cookies.get("access_token") or "").strip()
+    return cookie_token or None
+
+
+def _resolve_authenticated_user_id(request: Request) -> Optional[str]:
+    token = _extract_access_token(request)
+    if not token:
+        return None
+
+    payload = jwt_service.verify_token(token)
+    if payload and payload.get("sub"):
+        return str(payload["sub"])
+
+    try:
+        firebase_service = get_firebase_service()
+        if getattr(firebase_service, "_initialized", False):
+            decoded = firebase_service.verify_token(token)
+            if decoded and decoded.get("uid"):
+                return str(decoded["uid"])
+    except Exception:
+        pass
+    return None
 
 
 def _replace_script_placeholders(data: Any, character_name: str) -> Any:
@@ -59,11 +86,19 @@ def _replace_script_placeholders(data: Any, character_name: str) -> Any:
 
 
 def _get_user_id(request: Request) -> str:
-    return getattr(request.state, "user_id", "guest")
+    state_user_id = getattr(request.state, "user_id", None)
+    if state_user_id:
+        return str(state_user_id)
+    resolved_user_id = _resolve_authenticated_user_id(request)
+    return resolved_user_id or "guest"
 
 
 def _get_user_db_id(request: Request) -> Optional[str]:
-    return getattr(request.state, "user_db_id", None)
+    state_user_db_id = getattr(request.state, "user_db_id", None)
+    if state_user_db_id:
+        return str(state_user_db_id)
+    resolved_user_id = _resolve_authenticated_user_id(request)
+    return str(resolved_user_id) if resolved_user_id else None
 
 
 def _resolve_guest_id(request: Request, response: Optional[Response] = None) -> str:
@@ -111,6 +146,17 @@ def _get_guest_state(guest_id: str) -> dict[str, Any]:
     else:
         state["updated_at"] = now
     return state
+
+
+async def _get_usage_cost(usage_type: str) -> float:
+    config = await credit_service.get_config()
+    amount_map = {
+        "message": float(config.get("message_cost", 0)),
+        "voice": float(config.get("voice_cost", 0)),
+        "image": float(config.get("image_cost", 0)),
+        "video": float(config.get("video_cost", 0)),
+    }
+    return float(amount_map.get(usage_type, 0))
 
 
 def _render_guest_fallback(character_name: str, user_message: str) -> str:
@@ -452,36 +498,52 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
             ).to_sse()
             return
         
+        message_cost = await _get_usage_cost("message")
         if user_db_id and user_id != "guest":
             try:
                 db = DatabaseService()
                 user = await db.get_user_by_id(user_db_id)
                 if user:
-                    config = await credit_service.get_config()
                     balance = await credit_service.get_balance(user.id)
                     
                     if user.tier == "free" or not user.tier:
-                        if balance["total"] < config["message_cost"]:
+                        if balance["total"] < message_cost:
                             yield SSEEvent(
                                 event=EventType.ERROR,
                                 data={
                                     "code": "INSUFFICIENT_CREDITS",
-                                    "message": f"Insufficient credits. You have {balance['total']} credits, need {config['message_cost']} for a message.",
+                                    "message": f"Insufficient credits. You have {balance['total']} credits, need {message_cost} for a message.",
                                     "available": balance["total"],
-                                    "required": config["message_cost"],
+                                    "required": message_cost,
                                 }
                             ).to_sse()
                             return
                         
                         await credit_service.deduct_credits(
                             user_id=user.id,
-                            amount=config["message_cost"],
+                            amount=message_cost,
                             usage_type="message",
                             character_id=data.character_id,
                             session_id=session_id,
                         )
             except Exception as e:
                 logger.error(f"Credit deduction failed: {e}")
+        elif user_id == "guest":
+            guest_state = _get_guest_state(_resolve_guest_id(request))
+            guest_remaining = float(guest_state.get("credits_remaining", GUEST_MAX_CREDITS))
+            if guest_remaining < message_cost:
+                yield SSEEvent(
+                    event=EventType.ERROR,
+                    data={
+                        "error_code": "guest_credits_exhausted",
+                        "message": "Guest credits exhausted. Please register to continue chatting.",
+                        "available": guest_remaining,
+                        "required": message_cost,
+                    },
+                ).to_sse()
+                return
+            guest_state["credits_remaining"] = max(0.0, guest_remaining - message_cost)
+            guest_state["updated_at"] = int(time.time())
         
         yield SSEEvent(
             event=EventType.USER_MESSAGE,
@@ -495,6 +557,7 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
             is_audio_intent = False
             credit_deducted = False
             remaining_credits = 0
+            voice_cost = await _get_usage_cost("voice")
             
             if voice_id:
                 try:
@@ -508,12 +571,12 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                 if user_db_id and user_id != "guest":
                     try:
                         balance = await credit_service.get_balance(user_db_id)
-                        if balance["total"] < VOICE_CREDIT_COST:
+                        if balance["total"] < voice_cost:
                             yield SSEEvent(
                                 event=EventType.ERROR,
                                 data={
                                     "error_code": "insufficient_credits",
-                                    "required": VOICE_CREDIT_COST,
+                                    "required": voice_cost,
                                     "available": balance["total"],
                                     "message": "Not enough credits for voice generation"
                                 }
@@ -522,16 +585,24 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                         else:
                             await credit_service.deduct_credits(
                                 user_id=user_db_id,
-                                amount=VOICE_CREDIT_COST,
+                                amount=voice_cost,
                                 usage_type="voice",
                                 character_id=data.character_id,
                                 session_id=session_id,
                             )
                             credit_deducted = True
-                            remaining_credits = balance["total"] - VOICE_CREDIT_COST
+                            remaining_credits = balance["total"] - voice_cost
                     except Exception as e:
                         logger.error(f"Voice credit deduction failed: {e}")
                         is_audio_intent = False
+                elif user_id == "guest":
+                    guest_state = _get_guest_state(_resolve_guest_id(request))
+                    guest_remaining = float(guest_state.get("credits_remaining", GUEST_MAX_CREDITS))
+                    if guest_remaining < voice_cost:
+                        is_audio_intent = False
+                    else:
+                        guest_state["credits_remaining"] = max(0.0, guest_remaining - voice_cost)
+                        guest_state["updated_at"] = int(time.time())
             
             decline_message = await video_intent_handler.handle_video_intent(
                 user_message=data.message,
@@ -687,12 +758,12 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                         try:
                             await credit_service.refund_credits_simple(
                                 user_id=user_db_id,
-                                amount=VOICE_CREDIT_COST,
+                                amount=voice_cost,
                                 usage_type="voice_failed",
                                 character_id=data.character_id,
                                 session_id=session_id,
                             )
-                            logger.info(f"Refunded {VOICE_CREDIT_COST} credits for failed TTS to user {user_db_id}")
+                            logger.info(f"Refunded {voice_cost} credits for failed TTS to user {user_db_id}")
                         except Exception as refund_error:
                             logger.error(f"Failed to refund credits for failed TTS: {refund_error}")
                     yield SSEEvent(
@@ -945,11 +1016,14 @@ async def get_session_messages(
     for m in messages:
         image_urls = m.get("image_urls") or []
         first_image_url = image_urls[0] if isinstance(image_urls, list) and image_urls else None
+        metadata = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
+        video_url = metadata.get("video_url") if isinstance(metadata.get("video_url"), str) else None
         normalized_messages.append(
             {
                 **m,
                 "timestamp": m.get("created_at"),
                 "image_url": first_image_url,
+                "video_url": video_url,
             }
         )
 
@@ -1058,7 +1132,7 @@ async def chat_now_official(
 async def get_guest_credits(request: Request, response: Response) -> dict[str, Any]:
     guest_id = _resolve_guest_id(request, response)
     state = _get_guest_state(guest_id)
-    credits_remaining = max(0, int(state.get("credits_remaining", GUEST_MAX_CREDITS)))
+    credits_remaining = max(0.0, float(state.get("credits_remaining", GUEST_MAX_CREDITS)))
     return {
         "credits": credits_remaining,
         "max_credits": GUEST_MAX_CREDITS,
@@ -1084,8 +1158,9 @@ async def guest_send(request: Request, response: Response, data: dict[str, Any])
 
     guest_id = _resolve_guest_id(request, response)
     state = _get_guest_state(guest_id)
-    credits_remaining = max(0, int(state.get("credits_remaining", GUEST_MAX_CREDITS)))
-    if credits_remaining < GUEST_MESSAGE_COST:
+    message_cost = await _get_usage_cost("message")
+    credits_remaining = max(0.0, float(state.get("credits_remaining", GUEST_MAX_CREDITS)))
+    if credits_remaining < message_cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
@@ -1125,7 +1200,7 @@ async def guest_send(request: Request, response: Response, data: dict[str, Any])
         logger.warning(f"Guest chat LLM failed, using fallback response: {e}")
         assistant_content = _render_guest_fallback(character_name, message)
 
-    next_credits = max(0, credits_remaining - GUEST_MESSAGE_COST)
+    next_credits = max(0.0, credits_remaining - message_cost)
     state["credits_remaining"] = next_credits
     state["updated_at"] = int(time.time())
 
@@ -1137,9 +1212,53 @@ async def guest_send(request: Request, response: Response, data: dict[str, Any])
     }
 
 
-@router.post("/guest/audio/generate", response_model=BaseResponse)
-async def guest_audio_generate(request: Request, data: dict[str, Any]) -> BaseResponse:
-    return BaseResponse(success=True, message="Audio generated")
+@router.post("/guest/audio/generate")
+async def guest_audio_generate(request: Request, response: Response, data: dict[str, Any]) -> dict[str, Any]:
+    text = str(data.get("text") or "").strip()
+    character_id = str(data.get("character_id") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id is required")
+
+    guest_id = _resolve_guest_id(request, response)
+    state = _get_guest_state(guest_id)
+    voice_cost = await _get_usage_cost("voice")
+    credits_remaining = max(0.0, float(state.get("credits_remaining", GUEST_MAX_CREDITS)))
+    if credits_remaining < voice_cost:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error_code": "guest_credits_exhausted",
+                "message": "Guest credits exhausted. Please register to continue.",
+                "credits_remaining": credits_remaining,
+                "required": voice_cost,
+                "is_exhausted": True,
+            },
+        )
+
+    character = await character_service.get_character_by_id(character_id)
+    voice_id = (character or {}).get("voice_id")
+    if not voice_id:
+        raise HTTPException(status_code=400, detail="Character voice is not configured")
+
+    state["credits_remaining"] = max(0.0, credits_remaining - voice_cost)
+    state["updated_at"] = int(time.time())
+
+    try:
+        voice_service = VoiceService()
+        audio_result = await voice_service.generate_tts(text=text, voice_id=voice_id)
+        return {
+            "success": True,
+            "audio_url": audio_result.get("audio_url"),
+            "duration": audio_result.get("duration"),
+            "credits_remaining": state["credits_remaining"],
+            "is_exhausted": state["credits_remaining"] <= 0,
+        }
+    except Exception:
+        state["credits_remaining"] = credits_remaining
+        state["updated_at"] = int(time.time())
+        raise
 
 
 @router.post("/request-voice-note", response_model=BaseResponse)
@@ -1159,14 +1278,173 @@ async def add_message_audio(
 @router.get("/gallery/{character_id}")
 async def get_character_gallery(
     request: Request, 
-    character_id: str
+    character_id: str,
+    media_type: str = "all",
+    limit: int = 200,
 ) -> list[dict[str, Any]]:
-    return [{"image_url": "https://example.com/image1.jpg", "caption": "Gallery image"}]
+    user_id = _get_user_id(request)
+    safe_limit = max(1, min(limit, 500))
+    normalized_media_type = str(media_type or "all").lower()
+
+    query = """
+        SELECT
+            m.id,
+            m.session_id,
+            m.character_id,
+            m.content,
+            m.message_type,
+            m.image_urls,
+            m.metadata,
+            m.created_at,
+            COALESCE(c.first_name, c.name) AS character_name,
+            c.profile_image_url AS character_image_url
+        FROM chat_messages m
+        LEFT JOIN characters c ON c.id = m.character_id
+        WHERE m.user_id = ?
+          AND m.character_id = ?
+          AND m.message_type IN ('image', 'video')
+    """
+    params: list[Any] = [user_id, character_id]
+    if normalized_media_type in {"image", "video"}:
+        query += " AND m.message_type = ?"
+        params.append(normalized_media_type)
+    query += " ORDER BY m.created_at DESC LIMIT ?"
+    params.append(safe_limit)
+
+    rows = await db.execute(query, tuple(params), fetch_all=True)
+    items: list[dict[str, Any]] = []
+    for row in rows or []:
+        image_urls_raw = row.get("image_urls")
+        image_urls: list[str] = []
+        if isinstance(image_urls_raw, str) and image_urls_raw:
+            try:
+                parsed = json.loads(image_urls_raw)
+                if isinstance(parsed, list):
+                    image_urls = [str(url).strip() for url in parsed if str(url).strip()]
+            except json.JSONDecodeError:
+                image_urls = []
+        elif isinstance(image_urls_raw, list):
+            image_urls = [str(url).strip() for url in image_urls_raw if str(url).strip()]
+
+        metadata_raw = row.get("metadata")
+        metadata: dict[str, Any] = {}
+        if isinstance(metadata_raw, str) and metadata_raw:
+            try:
+                parsed = json.loads(metadata_raw)
+                if isinstance(parsed, dict):
+                    metadata = parsed
+            except json.JSONDecodeError:
+                metadata = {}
+        elif isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+
+        video_url = str(metadata.get("video_url") or "").strip() if isinstance(metadata, dict) else ""
+        image_url = image_urls[0] if image_urls else None
+
+        if str(row.get("message_type") or "").lower() == "video" and not video_url:
+            continue
+        if str(row.get("message_type") or "").lower() == "image" and not image_url:
+            continue
+
+        items.append(
+            {
+                "id": row.get("id"),
+                "session_id": row.get("session_id"),
+                "character_id": row.get("character_id"),
+                "character_name": row.get("character_name"),
+                "character_image_url": row.get("character_image_url"),
+                "content": row.get("content"),
+                "image_url": image_url,
+                "video_url": video_url or None,
+                "created_at": row.get("created_at"),
+            }
+        )
+    return items
 
 
 @router.get("/gallery")
-async def get_gallery(request: Request) -> list[dict[str, Any]]:
-    return [{"image_url": "https://example.com/image1.jpg", "caption": "Gallery image"}]
+async def get_gallery(
+    request: Request,
+    media_type: str = "all",
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    user_id = _get_user_id(request)
+    safe_limit = max(1, min(limit, 500))
+    normalized_media_type = str(media_type or "all").lower()
+
+    query = """
+        SELECT
+            m.id,
+            m.session_id,
+            m.character_id,
+            m.content,
+            m.message_type,
+            m.image_urls,
+            m.metadata,
+            m.created_at,
+            COALESCE(c.first_name, c.name) AS character_name,
+            c.profile_image_url AS character_image_url
+        FROM chat_messages m
+        LEFT JOIN characters c ON c.id = m.character_id
+        WHERE m.user_id = ?
+          AND m.message_type IN ('image', 'video')
+    """
+    params: list[Any] = [user_id]
+    if normalized_media_type in {"image", "video"}:
+        query += " AND m.message_type = ?"
+        params.append(normalized_media_type)
+    query += " ORDER BY m.created_at DESC LIMIT ?"
+    params.append(safe_limit)
+
+    rows = await db.execute(query, tuple(params), fetch_all=True)
+    items: list[dict[str, Any]] = []
+    for row in rows or []:
+        image_urls_raw = row.get("image_urls")
+        image_urls: list[str] = []
+        if isinstance(image_urls_raw, str) and image_urls_raw:
+            try:
+                parsed = json.loads(image_urls_raw)
+                if isinstance(parsed, list):
+                    image_urls = [str(url).strip() for url in parsed if str(url).strip()]
+            except json.JSONDecodeError:
+                image_urls = []
+        elif isinstance(image_urls_raw, list):
+            image_urls = [str(url).strip() for url in image_urls_raw if str(url).strip()]
+
+        metadata_raw = row.get("metadata")
+        metadata: dict[str, Any] = {}
+        if isinstance(metadata_raw, str) and metadata_raw:
+            try:
+                parsed = json.loads(metadata_raw)
+                if isinstance(parsed, dict):
+                    metadata = parsed
+            except json.JSONDecodeError:
+                metadata = {}
+        elif isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+
+        video_url = str(metadata.get("video_url") or "").strip() if isinstance(metadata, dict) else ""
+        image_url = image_urls[0] if image_urls else None
+
+        if str(row.get("message_type") or "").lower() == "video" and not video_url:
+            continue
+        if str(row.get("message_type") or "").lower() == "image" and not image_url:
+            continue
+
+        items.append(
+            {
+                "id": row.get("id"),
+                "session_id": row.get("session_id"),
+                "character_id": row.get("character_id"),
+                "character_name": row.get("character_name"),
+                "character_image_url": row.get("character_image_url"),
+                "content": row.get("content"),
+                "image_url": image_url,
+                "video_url": video_url or None,
+                "created_at": row.get("created_at"),
+            }
+        )
+    return items
 
 
 @router.post("/animate-image", response_model=BaseResponse)

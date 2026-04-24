@@ -4,6 +4,7 @@ import { WizardStep } from '../WizardStep';
 import { Input, Button } from '@/components/common';
 import { Sparkles, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
+import { normalizeTaskStatus } from '@/utils/taskStatus';
 
 const raceOptions: { value: string; label: string }[] = [
   { value: 'white race', label: 'White' },
@@ -14,6 +15,94 @@ const raceOptions: { value: string; label: string }[] = [
 interface Step9ConfirmProps {
   avatarGenerationCount: number;
   onAvatarGenerated: () => void;
+}
+
+const AVATAR_POLL_INTERVAL_MS = 2500;
+const AVATAR_POLL_MAX_ATTEMPTS = 120;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function uniqueUrls(urls: string[]): string[] {
+  return Array.from(new Set(urls.filter(Boolean)));
+}
+
+function extractImageUrls(payload: unknown): string[] {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const result = (data.result ?? {}) as Record<string, unknown>;
+
+  const imageUrls = Array.isArray(data.image_urls)
+    ? data.image_urls
+    : Array.isArray(result.image_urls)
+      ? result.image_urls
+      : [];
+  if (imageUrls.length > 0) {
+    return uniqueUrls(imageUrls.map((url) => String(url)));
+  }
+
+  const resultData = result.data;
+  if (Array.isArray(resultData)) {
+    return uniqueUrls(resultData.map((url) => String(url)));
+  }
+  if (typeof resultData === 'string' && resultData.trim()) {
+    return [resultData.trim()];
+  }
+
+  const imageUrl = data.image_url || result.image_url;
+  if (typeof imageUrl === 'string' && imageUrl.trim()) {
+    return [imageUrl.trim()];
+  }
+
+  return [];
+}
+
+function extractTaskIds(payload: unknown): string[] {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const result = (data.result ?? {}) as Record<string, unknown>;
+  const taskIds: string[] = [];
+
+  const primaryId = data.task_id || data.id;
+  if (typeof primaryId === 'string' && primaryId.trim()) {
+    taskIds.push(primaryId.trim());
+  }
+  const resultPrimaryId = result.task_id || result.id;
+  if (typeof resultPrimaryId === 'string' && resultPrimaryId.trim()) {
+    taskIds.push(resultPrimaryId.trim());
+  }
+
+  if (Array.isArray(data.task_ids)) {
+    taskIds.push(
+      ...data.task_ids
+        .filter((taskId): taskId is string => typeof taskId === 'string' && taskId.trim().length > 0)
+        .map((taskId) => taskId.trim())
+    );
+  }
+  if (Array.isArray(result.task_ids)) {
+    taskIds.push(
+      ...result.task_ids
+        .filter((taskId): taskId is string => typeof taskId === 'string' && taskId.trim().length > 0)
+        .map((taskId) => taskId.trim())
+    );
+  }
+
+  if (Array.isArray(data.tasks)) {
+    for (const task of data.tasks) {
+      if (typeof task === 'string' && task.trim()) {
+        taskIds.push(task.trim());
+      } else if (task && typeof task === 'object') {
+        const taskRecord = task as Record<string, unknown>;
+        const taskId = taskRecord.task_id || taskRecord.id;
+        if (typeof taskId === 'string' && taskId.trim()) {
+          taskIds.push(taskId.trim());
+        }
+      }
+    }
+  }
+
+  return uniqueUrls(taskIds);
 }
 
 export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9ConfirmProps) {
@@ -35,6 +124,31 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
     characterData.identity.age !== undefined &&
     characterData.identity.age >= 18 &&
     characterData.identity.age <= 99;
+
+  const pollTaskForImages = useCallback(async (taskId: string): Promise<string[]> => {
+    for (let attempt = 0; attempt < AVATAR_POLL_MAX_ATTEMPTS; attempt += 1) {
+      const response = await api.get(`/images/tasks/${taskId}`);
+      const statusData = response.data as Record<string, unknown>;
+      const status = normalizeTaskStatus(
+        typeof statusData.status === 'string'
+          ? statusData.status
+          : typeof statusData.raw_status === 'string'
+            ? statusData.raw_status
+            : undefined
+      );
+
+      if (status === 'succeeded') {
+        return extractImageUrls(statusData);
+      }
+      if (status === 'failed') {
+        throw new Error(`Avatar task failed: ${taskId}`);
+      }
+
+      await delay(AVATAR_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`Avatar task polling timeout: ${taskId}`);
+  }, []);
 
   const handleGenerateAvatar = useCallback(async () => {
     if (hasGeneratedBefore && regenerateLimitReached) {
@@ -63,11 +177,28 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
       const prompt = promptParts.filter(Boolean).join(', ');
 
       const response = await api.post('/images/generate-batch', { prompt, count: 2 });
-      if (response.data.success && response.data.image_urls && response.data.image_urls.length > 0) {
-        setGeneratedOptions((prev) => [...prev, ...response.data.image_urls]);
+      const initialImageUrls = extractImageUrls(response.data);
+      const taskIds = extractTaskIds(response.data);
+
+      const polledImageUrls: string[] = [];
+      if (taskIds.length > 0) {
+        const taskResults = await Promise.allSettled(taskIds.map((taskId) => pollTaskForImages(taskId)));
+        for (const result of taskResults) {
+          if (result.status === 'fulfilled') {
+            polledImageUrls.push(...result.value);
+          } else {
+            console.error('Avatar task polling failed', result.reason);
+          }
+        }
+      }
+
+      const finalImageUrls = uniqueUrls([...initialImageUrls, ...polledImageUrls]);
+
+      if (finalImageUrls.length > 0) {
+        setGeneratedOptions((prev) => uniqueUrls([...prev, ...finalImageUrls]));
         onAvatarGenerated();
         if (!characterData.avatarUrl) {
-          updateField('avatarUrl', response.data.image_urls[0]);
+          updateField('avatarUrl', finalImageUrls[0]);
         }
       }
     } catch (error) {
@@ -93,6 +224,7 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
     hasGeneratedBefore,
     regenerateLimitReached,
     onAvatarGenerated,
+    pollTaskForImages,
     updateField,
   ]);
 

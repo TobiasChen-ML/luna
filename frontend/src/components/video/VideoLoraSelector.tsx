@@ -1,15 +1,65 @@
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/utils/cn';
-import { HUNYUAN_VIDEO_LORAS, type HunyuanVideoLoRA } from '@/config/hunyuanVideoLoras';
+import { fetchVideoLoraActions, type VideoLoraAction } from '@/services/videoLoraService';
 
 interface VideoLoraSelectorProps {
   selectedId: string | null;
-  onSelect: (lora: HunyuanVideoLoRA | null) => void;
+  onSelect: (lora: VideoLoraAction | null) => void;
   /** compact = small cards for the chat modal; full = larger cards for the generate page */
   variant?: 'compact' | 'full';
 }
 
+function toTwoKeywords(name: string): string {
+  const parts = name
+    .split(/[\s_\-./|()[\]{}:;,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 2) return parts.join(' ');
+  return `${parts[0]} ${parts[1]}`;
+}
+
 export function VideoLoraSelector({ selectedId, onSelect, variant = 'compact' }: VideoLoraSelectorProps) {
+  const [actions, setActions] = useState<VideoLoraAction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isCompact = variant === 'compact';
+  const visibleActions = useMemo(
+    () => (isCompact ? actions.slice(0, 24) : actions),
+    [actions, isCompact]
+  );
+
+  useEffect(() => {
+    let active = true;
+    fetchVideoLoraActions()
+      .then((list) => {
+        if (!active) return;
+        setActions(list);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error('Failed to load video lora actions:', err);
+        setError('Failed to load actions');
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) {
+    return <p className="text-[11px] text-zinc-500">Loading actions...</p>;
+  }
+
+  if (error) {
+    return <p className="text-[11px] text-rose-300/80">{error}</p>;
+  }
+
+  if (visibleActions.length === 0) {
+    return <p className="text-[11px] text-zinc-500">No actions configured in Admin LoRA settings.</p>;
+  }
 
   return (
     <div
@@ -18,14 +68,14 @@ export function VideoLoraSelector({ selectedId, onSelect, variant = 'compact' }:
         !isCompact && 'flex-wrap overflow-x-visible'
       )}
     >
-      {HUNYUAN_VIDEO_LORAS.map((lora) => {
+      {visibleActions.map((lora) => {
         const isSelected = selectedId === lora.id;
         return (
           <button
             key={lora.id}
             type="button"
             onClick={() => onSelect(isSelected ? null : lora)}
-            title={lora.description}
+            title={lora.description || lora.lora_name}
             className={cn(
               'flex-shrink-0 rounded-lg border px-2.5 transition-colors text-left',
               isCompact ? 'py-1.5' : 'py-2 flex-shrink',
@@ -35,10 +85,10 @@ export function VideoLoraSelector({ selectedId, onSelect, variant = 'compact' }:
             )}
           >
             <p className={cn('font-semibold whitespace-nowrap', isCompact ? 'text-[11px]' : 'text-xs')}>
-              {lora.name}
+              {lora.action_label}
             </p>
             {!isCompact && (
-              <p className="text-[10px] text-zinc-500 mt-0.5">{lora.description}</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">{toTwoKeywords(lora.lora_name)}</p>
             )}
           </button>
         );

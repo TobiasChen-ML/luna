@@ -6,8 +6,8 @@ import { cn } from '@/utils/cn';
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
 import { VideoLoraSelector } from '@/components/video/VideoLoraSelector';
 import { ImageLoraSelector } from '@/components/image/ImageLoraSelector';
-import type { HunyuanVideoLoRA } from '@/config/hunyuanVideoLoras';
 import type { ImageGenerationLoRA } from '@/config/imageGenerationLoras';
+import type { VideoLoraAction } from '@/services/videoLoraService';
 
 interface PoseOption {
   id: string;
@@ -31,8 +31,11 @@ interface ChatInputProps {
   onSend: (message: string, options?: { immediate?: boolean }) => void;
   onCompleteText?: (draft: string) => Promise<string>;
   onGenerateImage?: (prompt: string, poseImageUrl?: string, loraId?: string) => void | Promise<void>;
-  /** loraId matches HunyuanVideoLoRA.id; undefined means no LoRA selected */
-  onGenerateVideo?: (prompt: string, loraId?: string, baseImageUrl?: string) => void | Promise<void>;
+  onGenerateVideo?: (
+    prompt: string,
+    action?: VideoLoraAction,
+    baseImageUrl?: string
+  ) => void | Promise<void>;
   generatedVideoBaseImages?: string[];
   imagePromptTemplates?: string[];
   disabled?: boolean;
@@ -56,7 +59,7 @@ export function ChatInput({
   const [showVideoPrompt, setShowVideoPrompt] = useState(false);
   const [selectedPoseId, setSelectedPoseId] = useState<string | null>(null);
   const [selectedImageLora, setSelectedImageLora] = useState<ImageGenerationLoRA | null>(null);
-  const [selectedLora, setSelectedLora] = useState<HunyuanVideoLoRA | null>(null);
+  const [selectedLora, setSelectedLora] = useState<VideoLoraAction | null>(null);
   const [selectedVideoBaseImage, setSelectedVideoBaseImage] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [actionLabelMode, setActionLabelMode] = useState<'full' | 'compact' | 'icon'>('full');
@@ -158,11 +161,11 @@ export function ChatInput({
     setShowVideoPrompt(true);
   };
 
-  const handleLoraSelect = (lora: HunyuanVideoLoRA | null) => {
+  const handleLoraSelect = (lora: VideoLoraAction | null) => {
     setSelectedLora(lora);
     if (!lora) return;
     // Replace prompt with the scene's default prompt
-    setVideoPrompt(lora.defaultPrompt);
+    setVideoPrompt(lora.default_prompt);
     setTimeout(() => videoTextareaRef.current?.focus(), 50);
   };
 
@@ -189,7 +192,7 @@ export function ChatInput({
 
   const handleSendVideoPrompt = async () => {
     if (!videoPrompt.trim() || disabled || !onGenerateVideo || !selectedVideoBaseImage) return;
-    await onGenerateVideo(videoPrompt.trim(), selectedLora?.id, selectedVideoBaseImage);
+    await onGenerateVideo(videoPrompt.trim(), selectedLora ?? undefined, selectedVideoBaseImage);
     setVideoPrompt('');
     setSelectedLora(null);
     setSelectedVideoBaseImage(null);
@@ -428,7 +431,7 @@ export function ChatInput({
                     />
                     {selectedLora && (
                       <p className="mt-1.5 text-[10px] text-violet-300/80">
-                        Scene: <span className="font-mono">{selectedLora.name}</span>
+                        Scene: <span className="font-mono">{selectedLora.action_label}</span>
                       </p>
                     )}
                   </div>

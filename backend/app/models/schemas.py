@@ -283,8 +283,28 @@ class USDTOrderCreate(BaseModel):
 
 
 class TelegramStarsOrderCreate(BaseModel):
-    amount: int
-    product_id: str
+    amount_stars: int | None = None
+    amount: int | None = None
+    credits: int | None = None
+    product_id: str | None = None
+    pack_id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("amount", "amount_stars")
+    @classmethod
+    def validate_amount(cls, v: int | None):
+        if v is not None and v <= 0:
+            raise ValueError("amount must be > 0")
+        return v
+
+    @field_validator("credits")
+    @classmethod
+    def validate_credits(cls, v: int | None):
+        if v is not None and v <= 0:
+            raise ValueError("credits must be > 0")
+        return v
 
 
 class SupportTicketCreate(BaseModel):

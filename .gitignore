@@ -43,6 +43,16 @@ build/
 .playwright-mcp/
 *.log
 
+# === Local startup / run scripts (do not commit) ===
+start*.sh
+start*.bat
+run*.sh
+run*.bat
+dev.sh
+dev.bat
+deploy.sh
+deploy.bat
+
 # Windows reserved filename edge case found in repo
 backend/nul
 .gitnexus

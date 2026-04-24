@@ -15,9 +15,10 @@ import { notificationService } from '@/services/notificationService';
 import { InsufficientCreditsModal } from '@/components/chat/InsufficientCreditsModal';
 import { VideoLoraSelector } from '@/components/video/VideoLoraSelector';
 import { ImageLoraSelector } from '@/components/image/ImageLoraSelector';
-import { HUNYUAN_VIDEO_LORAS, type HunyuanVideoLoRA } from '@/config/hunyuanVideoLoras';
 import { type ImageGenerationLoRA } from '@/config/imageGenerationLoras';
+import { fetchVideoLoraActions, type VideoLoraAction } from '@/services/videoLoraService';
 import { getErrorMessage, getInsufficientCreditsInfo } from '@/utils/apiError';
+import { normalizeTaskStatus } from '@/utils/taskStatus';
 import { RoxyShellLayout } from '@/components/layout';
 import type { Character } from '@/types';
 
@@ -263,7 +264,7 @@ export function GenerateImageComposerPage() {
   const [selectedImageLora, setSelectedImageLora] = useState<ImageGenerationLoRA | null>(null);
 
   // Hunyuan video state
-  const [selectedLora, setSelectedLora] = useState<HunyuanVideoLoRA | null>(null);
+  const [selectedLora, setSelectedLora] = useState<VideoLoraAction | null>(null);
   const [hunyuanPrompt, setHunyuanPrompt] = useState('');
   const [hunyuanState, setHunyuanState] = useState<HunyuanVideoState>({
     isGenerating: false,
@@ -366,7 +367,22 @@ export function GenerateImageComposerPage() {
     }));
   }, []);
 
-  const startPolling = useCallback((imageUrl: string, taskId: string) => {
+  const saveMediaToCollection = useCallback(async (payload: {
+    image_urls?: string[];
+    video_url?: string;
+    character_id?: string | null;
+    character_name?: string;
+    prompt?: string;
+    task_id?: string;
+  }) => {
+    try {
+      await api.post('/images/save-media', payload);
+    } catch (err) {
+      console.warn('save-media failed (non-blocking):', err);
+    }
+  }, []);
+
+  const startPolling = useCallback((imageUrl: string, taskId: string, animPrompt?: string) => {
     let attempts = 0;
     pollTimers.current[imageUrl] = setInterval(async () => {
       attempts += 1;
@@ -379,11 +395,20 @@ export function GenerateImageComposerPage() {
       try {
         const res = await api.get(`/images/tasks/${taskId}`);
         const data = res.data as { status?: string; result?: { data?: string; video_url?: string } };
-        const status = data.status;
+        const status = normalizeTaskStatus(data.status);
         if (status === 'succeeded') {
           stopPolling(imageUrl);
           const videoUrl = data.result?.data || data.result?.video_url || null;
           setAnimateState(imageUrl, { isAnimating: false, videoUrl });
+          if (videoUrl) {
+            void saveMediaToCollection({
+              video_url: videoUrl,
+              character_id: characterId || null,
+              character_name: characterName,
+              prompt: animPrompt || '',
+              task_id: taskId,
+            });
+          }
           removePersistedTask(taskId);
         } else if (status === 'failed') {
           stopPolling(imageUrl);
@@ -394,7 +419,7 @@ export function GenerateImageComposerPage() {
         console.error('Polling error:', pollErr);
       }
     }, POLL_INTERVAL_MS);
-  }, [setAnimateState, stopPolling]);
+  }, [characterId, characterName, saveMediaToCollection, setAnimateState, stopPolling]);
 
   // Resume polling for any tasks that were pending before a page refresh
   useEffect(() => {
@@ -409,12 +434,12 @@ export function GenerateImageComposerPage() {
         error: null,
         videoUrl: null,
       });
-      startPolling(task.imageUrl, task.taskId);
+      startPolling(task.imageUrl, task.taskId, task.animPrompt);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startHunyuanPolling = useCallback((taskId: string) => {
+  const startHunyuanPolling = useCallback((taskId: string, taskPrompt?: string) => {
     let attempts = 0;
     hunyuanPollTimer.current = setInterval(async () => {
       attempts += 1;
@@ -427,23 +452,33 @@ export function GenerateImageComposerPage() {
       try {
         const res = await api.get(`/images/tasks/${taskId}`);
         const data = res.data as { status?: string; result?: { data?: string; video_url?: string } };
-        if (data.status === 'succeeded') {
+        const status = normalizeTaskStatus(data.status);
+        if (status === 'succeeded') {
           if (hunyuanPollTimer.current) clearInterval(hunyuanPollTimer.current);
           const url = data.result?.video_url || data.result?.data || null;
           setHunyuanState({ isGenerating: false, taskId, videoUrl: url, error: null });
+          if (url) {
+            void saveMediaToCollection({
+              video_url: url,
+              character_id: characterId || null,
+              character_name: characterName,
+              prompt: taskPrompt || hunyuanPrompt,
+              task_id: taskId,
+            });
+          }
           removePersistedHunyuanTask(taskId);
-        } else if (data.status === 'failed') {
+        } else if (status === 'failed') {
           if (hunyuanPollTimer.current) clearInterval(hunyuanPollTimer.current);
           setHunyuanState((prev) => ({ ...prev, isGenerating: false, error: 'Video generation failed.' }));
           removePersistedHunyuanTask(taskId);
         }
       } catch {
-        // Network hiccup — keep polling
+        // Network hiccup 鈥?keep polling
       }
     }, POLL_INTERVAL_MS);
-  }, []);
+  }, [characterId, characterName, hunyuanPrompt, saveMediaToCollection]);
 
-  // Resume Hunyuan task after page refresh (断点轮询)
+  // Resume Hunyuan task after page refresh (鏂偣杞)
   useEffect(() => {
     const persisted = loadPersistedHunyuanTasks();
     if (persisted.length === 0) return;
@@ -453,11 +488,13 @@ export function GenerateImageComposerPage() {
       : persisted;
     if (mine.length === 0) return;
     const task = mine[mine.length - 1];
-    const lora = HUNYUAN_VIDEO_LORAS.find((l) => l.id === task.loraId) ?? null;
-    setSelectedLora(lora);
+    void fetchVideoLoraActions().then((actions) => {
+      const action = actions.find((item) => item.id === task.loraId) ?? null;
+      setSelectedLora(action);
+    });
     setHunyuanPrompt(task.prompt);
     setHunyuanState({ isGenerating: true, taskId: task.taskId, videoUrl: null, error: null });
-    startHunyuanPolling(task.taskId);
+    startHunyuanPolling(task.taskId, task.prompt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -498,7 +535,7 @@ export function GenerateImageComposerPage() {
       }
 
       // Submit all tasks and collect task_ids immediately (no blocking wait).
-      // Priority: pose preset → OpenPose+InstantID; otherwise → Novita img2img+LoRA.
+      // Priority: pose preset 鈫?OpenPose+InstantID; otherwise 鈫?Novita img2img+LoRA.
       const selectedPose = POSE_PRESETS.find((p) => p.id === selectedPoseId);
       const taskResponses = await Promise.all(
         Array.from({ length: numImages }, () => {
@@ -558,10 +595,11 @@ export function GenerateImageComposerPage() {
                 `/images/tasks/${taskId}`
               );
               const { status, result } = res.data;
-              if (status === 'succeeded' && result?.data) {
+              const normalizedStatus = normalizeTaskStatus(status);
+              if (normalizedStatus === 'succeeded' && result?.data) {
                 cleanup();
                 resolve(result.data);
-              } else if (status === 'failed') {
+              } else if (normalizedStatus === 'failed') {
                 cleanup();
                 reject(new Error('Image generation failed'));
               }
@@ -584,12 +622,12 @@ export function GenerateImageComposerPage() {
       setGeneratedImages(urls);
 
       // Save generated images to collection (fire-and-forget)
-      api.post('/images/save-media', {
+      void saveMediaToCollection({
         image_urls: urls,
         character_id: characterId || null,
         character_name: characterName,
         prompt,
-      }).catch((err) => console.warn('save-media failed (non-blocking):', err));
+      });
 
     } catch (generateError) {
       console.error('Failed to generate images:', generateError);
@@ -617,10 +655,10 @@ export function GenerateImageComposerPage() {
     });
   };
 
-  const handleLoraSelect = (lora: HunyuanVideoLoRA | null) => {
+  const handleLoraSelect = (lora: VideoLoraAction | null) => {
     setSelectedLora(lora);
     if (!lora) return;
-    setHunyuanPrompt(lora.defaultPrompt);
+    setHunyuanPrompt(lora.default_prompt);
   };
 
   const handleGenerateHunyuanVideo = async () => {
@@ -629,15 +667,12 @@ export function GenerateImageComposerPage() {
     setHunyuanState({ isGenerating: true, taskId: null, videoUrl: null, error: null });
 
     try {
-      const loras = selectedLora
-        ? [{ path: selectedLora.civitaiId, scale: selectedLora.defaultStrength }]
-        : [];
-
       const res = await api.post<{ task_id: string }>('/images/generate-video-wan-character', {
         prompt: hunyuanPrompt.trim(),
         character_id: characterId || null,
         image_url: characterImage || null,
-        loras,
+        lora_preset_id: selectedLora?.lora_preset_id,
+        selected_trigger_word: selectedLora?.trigger_word,
       });
 
       const { task_id } = res.data;
@@ -648,7 +683,93 @@ export function GenerateImageComposerPage() {
         prompt: hunyuanPrompt.trim(),
         loraId: selectedLora?.id,
       });
-      startHunyuanPolling(task_id);
+
+      if (!notificationService.isConnected()) {
+        await notificationService.connect();
+      }
+
+      if (hunyuanPollTimer.current) {
+        clearInterval(hunyuanPollTimer.current);
+        hunyuanPollTimer.current = null;
+      }
+
+      const TIMEOUT_MS = 360_000;
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+
+        const cleanup = () => {
+          settled = true;
+          unsubDone();
+          unsubFailed();
+          if (hunyuanPollTimer.current) {
+            clearInterval(hunyuanPollTimer.current);
+            hunyuanPollTimer.current = null;
+          }
+          clearTimeout(timeoutId);
+        };
+
+        const succeed = (url: string) => {
+          cleanup();
+          setHunyuanState({ isGenerating: false, taskId: task_id, videoUrl: url, error: null });
+          void saveMediaToCollection({
+            video_url: url,
+            character_id: characterId || null,
+            character_name: characterName,
+            prompt: hunyuanPrompt.trim(),
+            task_id,
+          });
+          removePersistedHunyuanTask(task_id);
+          resolve();
+        };
+
+        const fail = (message: string) => {
+          cleanup();
+          setHunyuanState((prev) => ({ ...prev, isGenerating: false, error: message }));
+          removePersistedHunyuanTask(task_id);
+          reject(new Error(message));
+        };
+
+        const unsubDone = notificationService.on('video_completed', (data) => {
+          if (settled || data.task_id !== task_id) return;
+          if (!data.video_url) {
+            fail('Video generation failed.');
+            return;
+          }
+          succeed(data.video_url);
+        });
+
+        const unsubFailed = notificationService.on('video_failed', (data) => {
+          if (settled || data.task_id !== task_id) return;
+          fail(data.error || 'Video generation failed.');
+        });
+
+        hunyuanPollTimer.current = setInterval(async () => {
+          if (settled) return;
+          try {
+            const res = await api.get<{ status?: string; result?: { data?: string; video_url?: string } }>(
+              `/images/tasks/${task_id}`
+            );
+            const status = normalizeTaskStatus(res.data?.status);
+            if (status === 'succeeded') {
+              const url = res.data?.result?.video_url || res.data?.result?.data;
+              if (url) {
+                succeed(url);
+              }
+              return;
+            }
+            if (status === 'failed') {
+              fail('Video generation failed.');
+            }
+          } catch {
+            // Keep polling when network is unstable.
+          }
+        }, 5000);
+
+        const timeoutId = setTimeout(() => {
+          if (settled) return;
+          fail('Video generation timed out.');
+        }, TIMEOUT_MS);
+      });
     } catch (err: unknown) {
       const insufficientCredits = getInsufficientCreditsInfo(err);
       if (insufficientCredits) {
@@ -678,7 +799,7 @@ export function GenerateImageComposerPage() {
       const { task_id } = res.data as { task_id: string };
       setAnimateState(imageUrl, { taskId: task_id });
       savePersistedTask({ taskId: task_id, imageUrl, animPrompt, characterId });
-      startPolling(imageUrl, task_id);
+      startPolling(imageUrl, task_id, animPrompt);
     } catch (err: unknown) {
       const insufficientCredits = getInsufficientCreditsInfo(err);
       if (insufficientCredits) {
@@ -893,113 +1014,6 @@ export function GenerateImageComposerPage() {
 
           {error && <div className="mt-3 text-sm text-red-300">{error}</div>}
 
-          {/* ==================== Shoot Video (Hunyuan) ==================== */}
-          <div className="mt-10 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <Video className="h-5 w-5 text-violet-300" />
-              <h2 className="text-lg font-bold text-violet-100">Shoot Video</h2>
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-300 font-medium">
-                Hunyuan v1.0 · IP-Adapter
-              </span>
-            </div>
-
-            {/* LoRA selector */}
-            <div className="mb-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-zinc-300">Scene / Action</p>
-                {selectedLora && (
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedLora(null); setHunyuanPrompt(''); }}
-                    className="flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition-colors"
-                  >
-                    <X size={12} />
-                    Clear
-                  </button>
-                )}
-              </div>
-              <VideoLoraSelector
-                selectedId={selectedLora?.id ?? null}
-                onSelect={handleLoraSelect}
-                variant="full"
-              />
-              {selectedLora && (
-                <p className="mt-2 text-xs text-violet-300/80">
-                  Scene prompt auto-filled: <span className="font-mono bg-violet-500/10 px-1.5 py-0.5 rounded">{selectedLora.name}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Prompt */}
-            <div className="mb-4">
-              <p className="mb-2 text-sm font-semibold text-zinc-300">Prompt</p>
-              <textarea
-                value={hunyuanPrompt}
-                onChange={(e) => setHunyuanPrompt(e.target.value)}
-                placeholder="Select a scene above — trigger word will be added automatically. Then describe the character, setting, and mood..."
-                rows={4}
-                className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-violet-400/50"
-              />
-            </div>
-
-            <button
-              onClick={() => void handleGenerateHunyuanVideo()}
-              disabled={hunyuanState.isGenerating || !hunyuanPrompt.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 font-bold text-white hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-            >
-              {hunyuanState.isGenerating ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Generating... (may take 3–5 min)
-                </>
-              ) : (
-                <>
-                  <Video size={18} />
-                  Generate Video
-                </>
-              )}
-            </button>
-
-            {hunyuanState.error && (
-              <p className="mt-3 text-sm text-red-400">{hunyuanState.error}</p>
-            )}
-
-            {hunyuanState.isGenerating && hunyuanState.taskId && (
-              <p className="mt-2 text-xs text-zinc-500 text-center">
-                Task ID: <span className="font-mono">{hunyuanState.taskId}</span> · polling every 4s
-              </p>
-            )}
-
-            {hunyuanState.videoUrl && (
-              <div className="mt-4">
-                <p className="mb-2 text-sm font-semibold text-violet-200">Generated Video</p>
-                <video
-                  src={hunyuanState.videoUrl}
-                  controls
-                  loop
-                  autoPlay
-                  muted
-                  className="w-full rounded-xl border border-violet-400/20"
-                />
-                <div className="mt-2 flex gap-2">
-                  <a
-                    href={hunyuanState.videoUrl}
-                    download
-                    className="flex-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-center text-sm text-violet-200 hover:bg-violet-500/20 transition-colors"
-                  >
-                    Download
-                  </a>
-                  <button
-                    onClick={() => setHunyuanState({ isGenerating: false, taskId: null, videoUrl: null, error: null })}
-                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 hover:bg-white/10 transition-colors"
-                  >
-                    New Video
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {generatedImages.length > 0 && (
             <section className="mt-8">
               <div className="mb-3 flex items-center justify-between">
@@ -1008,7 +1022,7 @@ export function GenerateImageComposerPage() {
                   href="/collection"
                   className="text-sm text-indigo-300 hover:text-indigo-200 underline"
                 >
-                  View Collection →
+                  View Collection 鈫?
                 </a>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1107,3 +1121,4 @@ export function GenerateImageComposerPage() {
     </RoxyShellLayout>
   );
 }
+

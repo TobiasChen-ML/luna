@@ -36,6 +36,8 @@ import SettingsPage from '@/pages/SettingsPage';
 import { FeaturesPage } from '@/pages/FeaturesPage';
 import { SubscriptionsPage } from '@/pages/SubscriptionsPage';
 import { CharactersPage } from '@/pages/CharactersPage';
+import { DiscoverVideoFeedPage } from '@/pages/DiscoverVideoFeedPage';
+import { DiscoverCharacterProfilePage } from '@/pages/DiscoverCharacterProfilePage';
 import { CreatorPage } from '@/pages/CreatorPage';
 import { FAQPage } from '@/pages/FAQPage';
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage';
@@ -271,9 +273,17 @@ function AppRoutes() {
         <Route
           path="/discover"
           element={
-            <RoxyShellLayout>
-              <CharactersPage />
-            </RoxyShellLayout>
+            <MainLayout showHeader={false} showFooter={false} showBottomNav={false}>
+              <DiscoverVideoFeedPage />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/discover/profile/:characterId"
+          element={
+            <MainLayout showHeader={false} showFooter={false} showBottomNav={false}>
+              <DiscoverCharacterProfilePage />
+            </MainLayout>
           }
         />
         <Route

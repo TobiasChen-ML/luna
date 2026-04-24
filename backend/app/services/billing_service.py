@@ -1,15 +1,21 @@
 import logging
 import stripe
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Any
 import uuid
 import json
+import urllib.request
+import urllib.error
+import asyncio
 
 from ..core.config import get_settings, get_config_value
 from .redis_service import RedisService
 from .database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
+
+
+TELEGRAM_STARS_ORDER_TTL_SECONDS = 86400 * 7
 
 
 class BillingService:
@@ -525,55 +531,261 @@ class BillingService:
     async def create_telegram_stars_order(
         self,
         user_id: str,
-        amount: int,
+        amount_stars: int,
         credits: int,
+        pack_id: Optional[str] = None,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> dict:
         order_id = str(uuid.uuid4())
-        
-        await self.redis.set(
-            f"telegram_stars_order:{order_id}",
-            {
-                "user_id": user_id,
-                "amount": amount,
-                "credits": credits,
-                "status": "pending",
-                "created_at": datetime.utcnow().isoformat(),
-            },
-            ex=86400,
+        now = datetime.utcnow().isoformat()
+        order = {
+            "order_id": order_id,
+            "user_id": user_id,
+            "amount_stars": int(amount_stars),
+            "credits": int(credits),
+            "pack_id": pack_id,
+            "title": title or f"{credits} Credits",
+            "description": description or f"Top up {credits} credits",
+            "metadata": metadata or {},
+            "status": "pending",
+            "created_at": now,
+            "updated_at": now,
+            "invoice_link": None,
+            "charge_id": None,
+            "paid_at": None,
+            "failed_at": None,
+            "cancelled_at": None,
+            "webhook_payload": None,
+            "credits_applied": False,
+        }
+
+        await self.redis.set_json(
+            self._telegram_stars_order_key(order_id),
+            order,
+            ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
         )
-        
+
         return {
             "order_id": order_id,
-            "amount": amount,
+            "amount": int(amount_stars),
             "credits": credits,
+            "status": "pending",
+            "raw": order,
         }
 
     async def get_telegram_stars_order(self, order_id: str) -> Optional[dict]:
-        return await self.redis.get(f"telegram_stars_order:{order_id}")
+        return await self.redis.get_json(self._telegram_stars_order_key(order_id))
 
-    async def submit_telegram_stars_order(self, order_id: str, payment_id: str) -> dict:
-        order = await self.redis.get(f"telegram_stars_order:{order_id}")
-        
+    async def create_telegram_stars_invoice_link(
+        self,
+        order_id: str,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> dict:
+        order = await self.get_telegram_stars_order(order_id)
         if not order:
             raise ValueError("Order not found")
-        
-        order["status"] = "completed"
-        order["payment_id"] = payment_id
-        
+
+        if order.get("status") != "pending":
+            raise ValueError("Invoice can only be created for pending orders")
+
+        bot_token = await get_config_value("TELEGRAM_BOT_TOKEN", self.settings.telegram_bot_token)
+        if not bot_token:
+            raise ValueError("Telegram bot token not configured")
+
+        invoice_title = title or order.get("title") or f"{order.get('credits', 0)} Credits"
+        invoice_description = description or order.get("description") or "Telegram Stars purchase"
+        amount_stars = int(order.get("amount_stars", 0))
+        if amount_stars <= 0:
+            raise ValueError("Invalid Stars amount")
+
+        payload = {
+            "title": invoice_title,
+            "description": invoice_description,
+            "payload": f"stars:{order_id}",
+            "currency": "XTR",
+            "prices": [{"label": invoice_title, "amount": amount_stars}],
+        }
+        api_result = await self._telegram_api_post(bot_token, "createInvoiceLink", payload)
+        invoice_link = api_result.get("result")
+        if not invoice_link:
+            raise ValueError("Telegram createInvoiceLink returned empty result")
+
+        order["invoice_link"] = invoice_link
+        order["updated_at"] = datetime.utcnow().isoformat()
+        await self.redis.set_json(
+            self._telegram_stars_order_key(order_id),
+            order,
+            ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+        )
+
+        return {
+            "order_id": order_id,
+            "status": order["status"],
+            "invoice_link": invoice_link,
+            "raw": api_result,
+        }
+
+    async def submit_telegram_stars_order(self, order_id: str, payment_id: str) -> dict:
+        # Manual admin fallback. Uses the same paid flow as webhook to keep idempotency rules identical.
+        return await self.mark_telegram_stars_order_paid(
+            order_id=order_id,
+            charge_id=payment_id,
+            webhook_payload={"status": "paid", "order_id": order_id, "manual_submit": True},
+        )
+
+    async def mark_telegram_stars_order_paid(
+        self,
+        order_id: str,
+        charge_id: Optional[str] = None,
+        webhook_payload: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        from ..models.credit_transaction import CreditTransaction
+        from .credit_service import credit_service
+
+        order = await self.get_telegram_stars_order(order_id)
+        if not order:
+            raise ValueError("Order not found")
+
+        current_status = order.get("status")
+        if current_status == "paid":
+            return {
+                "order_id": order_id,
+                "status": "paid",
+                "already_processed": True,
+                "credits_applied": bool(order.get("credits_applied")),
+            }
+        if current_status in {"failed", "cancelled"}:
+            raise ValueError(f"Cannot mark {current_status} order as paid")
+
         user_id = order.get("user_id")
-        credits = order.get("credits", 0)
-        
-        with self.db.get_session() as session:
-            from ..models.user import User
-            user = session.query(User).filter(User.firebase_uid == user_id).first()
-            
-            if user:
-                user.credits += credits
-                session.commit()
-        
-        await self.redis.delete(f"telegram_stars_order:{order_id}")
-        
-        return {"order_id": order_id, "status": "completed"}
+        credits = int(order.get("credits", 0))
+        if not user_id or credits <= 0:
+            raise ValueError("Invalid order payload")
+
+        with self.db.transaction() as session:
+            existing_tx = (
+                session.query(CreditTransaction)
+                .filter(
+                    CreditTransaction.user_id == user_id,
+                    CreditTransaction.order_id == order_id,
+                    CreditTransaction.transaction_type == "purchase",
+                )
+                .first()
+            )
+
+        credits_applied = existing_tx is not None
+        if not credits_applied:
+            await credit_service.add_credits(
+                user_id=user_id,
+                amount=credits,
+                transaction_type="purchase",
+                credit_source="purchased",
+                order_id=order_id,
+                description=f"Purchased {credits} credits via Telegram Stars",
+            )
+            credits_applied = True
+
+        now = datetime.utcnow().isoformat()
+        order["status"] = "paid"
+        order["charge_id"] = charge_id or order.get("charge_id")
+        order["paid_at"] = now
+        order["updated_at"] = now
+        order["credits_applied"] = credits_applied
+        order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
+
+        await self.redis.set_json(
+            self._telegram_stars_order_key(order_id),
+            order,
+            ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+        )
+
+        return {
+            "order_id": order_id,
+            "status": "paid",
+            "already_processed": False,
+            "credits_applied": credits_applied,
+        }
+
+    async def mark_telegram_stars_order_failed(
+        self,
+        order_id: str,
+        webhook_payload: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        return await self._set_telegram_stars_order_terminal_state(order_id, "failed", webhook_payload)
+
+    async def mark_telegram_stars_order_cancelled(
+        self,
+        order_id: str,
+        webhook_payload: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        return await self._set_telegram_stars_order_terminal_state(order_id, "cancelled", webhook_payload)
+
+    async def _set_telegram_stars_order_terminal_state(
+        self,
+        order_id: str,
+        terminal_status: str,
+        webhook_payload: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        order = await self.get_telegram_stars_order(order_id)
+        if not order:
+            raise ValueError("Order not found")
+
+        if order.get("status") == "paid":
+            return {"order_id": order_id, "status": "paid", "already_processed": True}
+
+        now = datetime.utcnow().isoformat()
+        order["status"] = terminal_status
+        order["updated_at"] = now
+        if terminal_status == "failed":
+            order["failed_at"] = now
+        if terminal_status == "cancelled":
+            order["cancelled_at"] = now
+        order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
+
+        await self.redis.set_json(
+            self._telegram_stars_order_key(order_id),
+            order,
+            ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+        )
+        return {"order_id": order_id, "status": terminal_status}
+
+    @staticmethod
+    def _telegram_stars_order_key(order_id: str) -> str:
+        return f"telegram_stars_order:{order_id}"
+
+    async def _telegram_api_post(self, bot_token: str, method: str, payload: dict[str, Any]) -> dict[str, Any]:
+        api_url = f"https://api.telegram.org/bot{bot_token}/{method}"
+        body = json.dumps(payload).encode("utf-8")
+
+        def _request() -> dict[str, Any]:
+            req = urllib.request.Request(
+                api_url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read().decode("utf-8")
+                return json.loads(data)
+
+        try:
+            result = await asyncio.to_thread(_request)
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            logger.error(f"Telegram API error [{method}]: HTTP {exc.code} - {error_body}")
+            raise ValueError(f"Telegram API HTTP {exc.code}") from exc
+        except Exception as exc:
+            logger.error(f"Telegram API request failed [{method}]: {exc}")
+            raise ValueError("Telegram API request failed") from exc
+
+        if not result.get("ok", False):
+            logger.error(f"Telegram API returned failure [{method}]: {result}")
+            raise ValueError(result.get("description") or "Telegram API returned failure")
+
+        return result
 
     async def get_billing_history(
         self,

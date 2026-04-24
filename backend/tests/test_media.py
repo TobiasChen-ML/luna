@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.services.media import ImageGenerationResult
+import httpx
+from app.services.media import ImageGenerationResult, TaskResult
 
 
 class TestMediaRouter:
@@ -26,14 +27,24 @@ class TestMediaRouter:
         assert "image_url" in data
     
     def test_generate_batch(self, client: TestClient):
-        response = client.post("/api/images/generate-batch", json={
-            "prompts": ["Sunset", "Sunrise"],
-            "width": 512,
-            "height": 512
-        })
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider.txt2img_async = AsyncMock(side_effect=["task_batch_1", "task_batch_2"])
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            response = client.post("/api/images/generate-batch", json={
+                "prompts": ["Sunset", "Sunrise"],
+                "width": 512,
+                "height": 512
+            })
+
         assert response.status_code == 200
         data = response.json()
         assert "id" in data
+        assert data["id"] == "task_batch_1"
+        assert "result" in data
+        assert data["result"]["task_ids"] == ["task_batch_1", "task_batch_2"]
     
     def test_suggestion_previews(self, client: TestClient):
         response = client.post("/api/images/suggestion-previews", json={
@@ -123,6 +134,90 @@ class TestMediaRouter:
         assert response.status_code == 200
         data = response.json()
         assert "id" in data
+
+    def test_get_task_status_maps_to_frontend_shape(self, client: TestClient):
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider.get_task_result = AsyncMock(
+            return_value=TaskResult(
+                task_id="task_ok_001",
+                status="TASK_STATUS_SUCCEED",
+                progress=100.0,
+                image_url="https://example.com/result.png",
+            )
+        )
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            response = client.get("/api/images/tasks/task_ok_001")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "succeeded"
+        assert data["raw_status"] == "TASK_STATUS_SUCCEED"
+        assert data["result"]["data"] == "https://example.com/result.png"
+
+    def test_get_task_status_transient_provider_disconnect_returns_processing(self, client: TestClient):
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider.get_task_result = AsyncMock(
+            side_effect=httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        )
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            response = client.get("/api/images/tasks/task_retry_001")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "processing"
+        assert data["raw_status"] == "TRANSIENT_NETWORK_ERROR"
+
+    def test_generate_mature_lora_prefers_img2img_when_character_image_exists(self, client: TestClient):
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider.img2img_async = AsyncMock(return_value="task_img2img_001")
+        mock_provider.txt2img_async = AsyncMock(return_value="task_txt2img_001")
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            with patch(
+                "app.routers.media.character_service.get_character_by_id",
+                AsyncMock(return_value={"id": "char_1", "avatar_url": "https://example.com/base.png"}),
+            ):
+                response = client.post(
+                    "/api/images/generate-mature-lora",
+                    json={"prompt": "test prompt", "character_id": "char_1"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "task_img2img_001"
+        mock_provider.img2img_async.assert_awaited_once()
+        mock_provider.txt2img_async.assert_not_awaited()
+
+    def test_generate_mature_lora_fallbacks_to_txt2img_when_img2img_submit_fails(self, client: TestClient):
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider.img2img_async = AsyncMock(side_effect=Exception("img2img submit failed"))
+        mock_provider.txt2img_async = AsyncMock(return_value="task_txt2img_002")
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            with patch(
+                "app.routers.media.character_service.get_character_by_id",
+                AsyncMock(return_value={"id": "char_2", "avatar_url": "https://example.com/base2.png"}),
+            ):
+                response = client.post(
+                    "/api/images/generate-mature-lora",
+                    json={"prompt": "test prompt", "character_id": "char_2"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "task_txt2img_002"
+        mock_provider.img2img_async.assert_awaited_once()
+        mock_provider.txt2img_async.assert_awaited_once()
     
     def test_generate_video_wan(self, client: TestClient):
         response = client.post("/api/images/generate-video-wan-character", json={

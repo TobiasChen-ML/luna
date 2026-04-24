@@ -14,7 +14,7 @@ import { getSafeAvatarUrl } from '@/utils/avatarUrlGuard';
 import { getInsufficientCreditsInfo } from '@/utils/apiError';
 import { VoiceNotePlayer } from './VoiceNotePlayer';
 import { VideoLoraSelector } from '@/components/video/VideoLoraSelector';
-import { HUNYUAN_VIDEO_LORAS, type HunyuanVideoLoRA } from '@/config/hunyuanVideoLoras';
+import type { VideoLoraAction } from '@/services/videoLoraService';
 
 interface InnerMonologueBubbleProps {
   content: string;
@@ -170,7 +170,7 @@ export function MessageBubble({ message, characterName, characterAvatar, session
   const [isAnimatingImage, setIsAnimatingImage] = useState(false);
   const [showAnimatePrompt, setShowAnimatePrompt] = useState(false);
   const [animatePrompt, setAnimatePrompt] = useState('');
-  const [selectedLora, setSelectedLora] = useState<HunyuanVideoLoRA | null>(null);
+  const [selectedLora, setSelectedLora] = useState<VideoLoraAction | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { refreshUser } = useAuth();
   const { registerAnimateTask, pendingVideoTasks, showInsufficientCreditsModal } = useChatContext();
@@ -268,18 +268,16 @@ export function MessageBubble({ message, characterName, characterAvatar, session
     }
   };
 
-  const handleAnimateLoraSelect = (lora: HunyuanVideoLoRA | null) => {
+  const handleAnimateLoraSelect = (lora: VideoLoraAction | null) => {
     setSelectedLora(lora);
     if (!lora) return;
-    setAnimatePrompt(lora.defaultPrompt);
+    setAnimatePrompt(lora.default_prompt);
   };
 
-  const handleAnimateImage = async (prompt: string, loraId?: string) => {
+  const handleAnimateImage = async (prompt: string, action?: VideoLoraAction) => {
     if (!message.image_url || !sessionId) return;
 
     const characterId = message.character_id || undefined;
-    const lora = HUNYUAN_VIDEO_LORAS.find((item) => item.id === loraId);
-    const loras = lora ? [{ path: lora.civitaiId, scale: lora.defaultStrength }] : [];
 
     setShowAnimatePrompt(false);
 
@@ -292,7 +290,8 @@ export function MessageBubble({ message, characterName, characterAvatar, session
           character_id: characterId,
           session_id: sessionId,
           image_url: message.image_url,
-          loras,
+          lora_preset_id: action?.lora_preset_id,
+          selected_trigger_word: action?.trigger_word,
         }
       );
       const taskId = response.data.task_id;
@@ -585,7 +584,7 @@ export function MessageBubble({ message, characterName, characterAvatar, session
                     />
                     {selectedLora && (
                       <p className="mt-1.5 text-[10px] text-violet-300/80">
-                        Scene: <span className="font-mono">{selectedLora.name}</span>
+                        Scene: <span className="font-mono">{selectedLora.action_label}</span>
                       </p>
                     )}
                   </div>
@@ -595,7 +594,7 @@ export function MessageBubble({ message, characterName, characterAvatar, session
                     onChange={(e) => setAnimatePrompt(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && animatePrompt.trim()) {
-                        handleAnimateImage(animatePrompt.trim(), selectedLora?.id);
+                        handleAnimateImage(animatePrompt.trim(), selectedLora ?? undefined);
                       }
                       if (e.key === 'Escape') setShowAnimatePrompt(false);
                     }}
@@ -605,7 +604,7 @@ export function MessageBubble({ message, characterName, characterAvatar, session
                   />
                   <div className="flex gap-2 mt-2">
                     <button
-                      onClick={() => animatePrompt.trim() && handleAnimateImage(animatePrompt.trim(), selectedLora?.id)}
+                      onClick={() => animatePrompt.trim() && handleAnimateImage(animatePrompt.trim(), selectedLora ?? undefined)}
                       disabled={!animatePrompt.trim()}
                       className="flex-1 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 px-3 py-1.5 text-sm font-medium text-white transition-colors flex items-center justify-center gap-1.5"
                     >

@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
 
 class TestChatRouter:
@@ -86,9 +87,18 @@ class TestChatRouter:
         assert isinstance(data.get("content"), str)
     
     def test_guest_audio_generate(self, client: TestClient):
-        response = client.post("/api/chat/guest/audio/generate", json={
-            "text": "Hello, how are you?"
-        })
+        with patch(
+            "app.routers.chat.character_service.get_character_by_id",
+            AsyncMock(return_value={"id": "char_001", "voice_id": "voice_001"}),
+        ):
+            with patch(
+                "app.routers.chat.VoiceService.generate_tts",
+                AsyncMock(return_value={"audio_url": "https://example.com/audio.mp3", "duration": 1.2}),
+            ):
+                response = client.post("/api/chat/guest/audio/generate", json={
+                    "text": "Hello, how are you?",
+                    "character_id": "char_001",
+                })
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True

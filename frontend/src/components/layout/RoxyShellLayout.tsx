@@ -37,7 +37,7 @@ export function RoxyShellLayout({ children, contentClassName }: RoxyShellLayoutP
   const sidebarItems = useMemo(
     () => [
       { label: 'Home', icon: Home, to: '/' },
-      { label: 'Discover', icon: Compass, to: '#', comingSoon: true },
+      { label: 'Discover', icon: Compass, to: '/discover' },
       { label: 'Chat', icon: MessageCircle, to: '/chat' },
       { label: 'Collection', icon: BookHeart, to: '/collection' },
       { label: 'Generate Image', icon: ImagePlus, to: '/generate-image' },
@@ -215,23 +215,6 @@ export function RoxyShellLayout({ children, contentClassName }: RoxyShellLayoutP
                     ? 'bg-zinc-700/40 border-zinc-500/70 text-white'
                     : 'border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white'
                 );
-                if (item.comingSoon) {
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => {
-                        closeMobileMenu();
-                        setIsCommingSoonModalOpen(true);
-                      }}
-                      className={sharedClass}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon size={16} />
-                        {item.label}
-                      </span>
-                    </button>
-                  );
-                }
                 return (
                   <Link
                     key={item.label}
@@ -336,18 +319,6 @@ export function RoxyShellLayout({ children, contentClassName }: RoxyShellLayoutP
                 )}
               </>
             );
-            if (item.comingSoon) {
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => setIsCommingSoonModalOpen(true)}
-                  className={`w-full ${sharedClass}`}
-                  title={isSidebarCollapsed ? item.label : undefined}
-                >
-                  {inner}
-                </button>
-              );
-            }
             return (
               <Link
                 key={item.label}

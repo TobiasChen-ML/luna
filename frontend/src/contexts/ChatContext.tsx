@@ -19,6 +19,7 @@ import { sseService, type SSEEventData } from '@/services/sseService';
 import { notificationService } from '@/services/notificationService';
 import { InsufficientCreditsModal } from '@/components/chat/InsufficientCreditsModal';
 import { getInsufficientCreditsInfo } from '@/utils/apiError';
+import { normalizeTaskStatus } from '@/utils/taskStatus';
 import { useAuth } from './AuthContext';
 import {
   createNDJSONParserState,
@@ -105,7 +106,7 @@ export function useChatContext() {
 const BATCH_DELAY_MS = 300;
 const DELTA_RENDER_THROTTLE_MS = 75;
 const VIDEO_TASK_POLL_INTERVAL_MS = 5000;
-const VIDEO_TASK_POLL_MAX_ATTEMPTS = 72; // ~6 minutes
+const VIDEO_TASK_POLL_MAX_ATTEMPTS = 120; // ~10 minutes
 const CHAT_PENDING_VIDEO_TASKS_KEY = 'roxy_chat_pending_video_tasks';
 const SESSION_INIT_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -510,7 +511,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         let shouldContinuePolling = true;
         try {
           const response = await api.get(`/images/tasks/${task.taskId}`);
-          const status = (response.data as { status?: string }).status;
+          const status = normalizeTaskStatus((response.data as { status?: string }).status);
 
           if (status === 'succeeded') {
             stopVideoTaskPolling(task.taskId);

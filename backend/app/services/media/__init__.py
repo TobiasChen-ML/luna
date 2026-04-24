@@ -417,33 +417,160 @@ class NovitaImageProvider(BaseMediaProvider):
             data = response.json()
         
         return data.get("task_id", "")
+
+    async def merge_face(
+        self,
+        image_url: str,
+        face_image_url: str,
+        response_image_type: str = "jpeg",
+    ) -> str:
+        """Call Novita merge-face and return merged image URL."""
+        import httpx
+
+        async def _request(payload: dict[str, Any]) -> dict[str, Any]:
+            async with httpx.AsyncClient(timeout=120) as client:
+                response = await client.post(
+                    f"{self.base_url}/merge-face",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
+                return response.json()
+
+        payload: dict[str, Any] = {
+            "extra": {"response_image_type": response_image_type},
+            "face_image_file": face_image_url,
+            "image_file": image_url,
+        }
+
+        try:
+            data = await _request(payload)
+        except httpx.HTTPStatusError:
+            # Some tenants/models require base64 image content for *_file fields.
+            image_base64 = await self._download_image_base64(image_url)
+            face_base64 = await self._download_image_base64(face_image_url)
+            fallback_payload: dict[str, Any] = {
+                "extra": {"response_image_type": response_image_type},
+                "face_image_file": face_base64,
+                "image_file": image_base64,
+            }
+            data = await _request(fallback_payload)
+
+        direct_url = data.get("image_url") or data.get("url")
+        if isinstance(direct_url, str) and direct_url.strip():
+            return direct_url.strip()
+
+        images = data.get("images")
+        if isinstance(images, list) and images:
+            first = images[0] if isinstance(images[0], dict) else {}
+            image_url_out = (
+                first.get("image_url")
+                or first.get("url")
+                or first.get("data")
+            )
+            if isinstance(image_url_out, str) and image_url_out.strip():
+                return image_url_out.strip()
+
+        result_obj = data.get("result")
+        if isinstance(result_obj, dict):
+            image_url_out = (
+                result_obj.get("image_url")
+                or result_obj.get("url")
+                or result_obj.get("data")
+            )
+            if isinstance(image_url_out, str) and image_url_out.strip():
+                return image_url_out.strip()
+
+        task_id = data.get("task_id")
+        if isinstance(task_id, str) and task_id.strip():
+            task_result = await self.wait_for_task(task_id.strip(), timeout_seconds=180)
+            if task_result.image_url:
+                return task_result.image_url
+            raise ValueError(f"merge-face task finished without image (task_id={task_id})")
+
+        raise ValueError("merge-face response did not contain an image URL")
     
     async def get_task_result(self, task_id: str) -> TaskResult:
         import httpx
-        
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.get(
-                f"{self.base_url}/async/task-result",
-                params={"task_id": task_id},
-                headers={"Authorization": f"Bearer {self.api_key}"}
-            )
-            response.raise_for_status()
-            data = response.json()
-        
+
+        data: dict[str, Any] | None = None
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    response = await client.get(
+                        f"{self.base_url}/async/task-result",
+                        params={"task_id": task_id},
+                        headers={"Authorization": f"Bearer {self.api_key}"}
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                break
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                last_exc = e
+                if status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+                    raise
+                await asyncio.sleep(0.5 * (attempt + 1))
+            except httpx.RequestError as e:
+                last_exc = e
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.5 * (attempt + 1))
+
+        if data is None:
+            raise RuntimeError(f"Empty task-result response for {task_id}: {last_exc}")
+
         task = data.get("task", {})
-        status = task.get("status", "TASK_STATUS_QUEUED")
-        
+        status = (
+            task.get("status")
+            or data.get("status")
+            or data.get("task_status")
+            or "TASK_STATUS_QUEUED"
+        )
+
+        progress = task.get("progress_percent")
+        if progress is None:
+            progress = data.get("progress_percent")
+        if progress is None:
+            progress = data.get("progress")
+        if progress is None:
+            progress = 0.0
+
+        reason = task.get("reason") or data.get("reason") or data.get("error")
+
         result = TaskResult(
             task_id=task_id,
             status=status,
-            progress=task.get("progress_percent", 0.0),
-            error=task.get("reason"),
+            progress=progress,
+            error=reason,
         )
-        
+
         if status == "TASK_STATUS_SUCCEED":
             images = data.get("images", [])
             if images:
-                result.image_url = images[0].get("image_url")
+                first_image = images[0] or {}
+                result.image_url = (
+                    first_image.get("image_url")
+                    or first_image.get("url")
+                    or first_image.get("data")
+                )
+
+            if not result.image_url:
+                result_obj = data.get("result", {})
+                if isinstance(result_obj, dict):
+                    result.image_url = (
+                        result_obj.get("image_url")
+                        or result_obj.get("url")
+                        or result_obj.get("data")
+                    )
+
+            if not result.image_url:
+                result.image_url = data.get("image_url") or data.get("url")
+
             videos = data.get("videos", [])
             if videos:
                 result.video_url = videos[0].get("video_url")
