@@ -42,6 +42,9 @@ build/
 .npm-cache/
 .playwright-mcp/
 *.log
+frontend/playwright-report/
+frontend/test-results/
+frontend/playwright/.cache/
 
 # === Local startup / run scripts (do not commit) ===
 start*.sh

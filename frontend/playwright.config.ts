@@ -1,26 +1,33 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = Boolean(process.env.CI);
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined,
   reporter: 'html',
   timeout: 60000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     actionTimeout: 15000,
     navigationTimeout: 30000,
   },
+  webServer: {
+    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+    url: 'http://127.0.0.1:5173',
+    reuseExistingServer: !isCI,
+    timeout: 120000,
+  },
   projects: [
     {
-      name: 'chrome',
+      name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        channel: 'chrome',
       },
     },
   ],
