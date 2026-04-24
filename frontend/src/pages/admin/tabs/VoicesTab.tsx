@@ -30,6 +30,8 @@ interface SyncResult {
   error?: string;
 }
 
+const PREVIEW_TEXT = 'hey, handsome boy.';
+
 const PROVIDER_LABELS: Record<string, string> = {
   elevenlabs: 'ElevenLabs',
   dashscope: '通义千问',
@@ -239,8 +241,13 @@ export default function VoicesTab() {
       let audioUrl = voice.preview_url;
       
       if (!audioUrl) {
-        const response = await api.post(`/admin/api/voices/${voice.id}/preview`, {});
+        const response = await api.post(`/admin/api/voices/${voice.id}/preview`, { text: PREVIEW_TEXT });
         audioUrl = response.data?.audio_url;
+        if (audioUrl) {
+          setVoices((prev) =>
+            prev.map((item) => (item.id === voice.id ? { ...item, preview_url: audioUrl } : item))
+          );
+        }
       }
       
       if (audioUrl) {

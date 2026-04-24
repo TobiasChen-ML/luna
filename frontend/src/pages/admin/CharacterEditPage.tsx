@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Save, Wand2, Image as ImageIcon, RefreshCw,
-  Check, AlertTriangle, Trash2
+  Check, AlertTriangle, Trash2, Play, Pause
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -11,11 +11,14 @@ interface VoiceOption {
   id: string;
   name: string;
   display_name?: string;
+  preview_url?: string;
   provider: string;
   provider_voice_id: string;
   language: string;
   gender: string;
 }
+
+const PREVIEW_TEXT = 'hey, handsome boy.';
 
 interface Character {
   id: string;
@@ -96,6 +99,9 @@ export default function CharacterEditPage() {
   const [bindingsSaving, setBindingsSaving] = useState(false);
   const [bindingsAutoMatching, setBindingsAutoMatching] = useState(false);
   const [newBindingScriptId, setNewBindingScriptId] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [playingVoiceDbId, setPlayingVoiceDbId] = useState<string | null>(null);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [formData, setFormData] = useState<Character>({
@@ -119,12 +125,69 @@ export default function CharacterEditPage() {
     fetchStoryOptions();
   }, [characterId]);
 
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+      }
+    };
+  }, [audioElement]);
+
   const fetchVoices = async () => {
     try {
       const response = await api.get('/admin/api/voices?page_size=200');
       setVoices(response.data?.voices || []);
     } catch {
       // non-critical, fall back to manual input
+    }
+  };
+
+  const getSelectedVoice = () =>
+    voices.find((voice) => voice.provider_voice_id === (formData.voice_id || '')) || null;
+
+  const handlePreviewVoice = async () => {
+    const selectedVoice = getSelectedVoice();
+    if (!selectedVoice) return;
+
+    if (playingVoiceDbId === selectedVoice.id) {
+      if (audioElement) {
+        audioElement.pause();
+      }
+      setPlayingVoiceDbId(null);
+      return;
+    }
+
+    if (audioElement) {
+      audioElement.pause();
+    }
+
+    setPreviewLoading(true);
+    try {
+      let audioUrl = selectedVoice.preview_url;
+      if (!audioUrl) {
+        const response = await api.post(`/admin/api/voices/${selectedVoice.id}/preview`, {
+          text: PREVIEW_TEXT,
+        });
+        audioUrl = response.data?.audio_url;
+        if (audioUrl) {
+          setVoices((prev) =>
+            prev.map((voice) =>
+              voice.id === selectedVoice.id ? { ...voice, preview_url: audioUrl } : voice
+            )
+          );
+        }
+      }
+      if (!audioUrl) return;
+
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setPlayingVoiceDbId(null);
+      audio.onerror = () => setPlayingVoiceDbId(null);
+      setAudioElement(audio);
+      await audio.play();
+      setPlayingVoiceDbId(selectedVoice.id);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -849,19 +912,36 @@ export default function CharacterEditPage() {
                 <div>
                   <label className="block text-sm text-zinc-400 mb-2">选择语音</label>
                   {voices.length > 0 ? (
-                    <select
-                      value={formData.voice_id || ''}
-                      onChange={(e) => setFormData({ ...formData, voice_id: e.target.value })}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200"
-                    >
-                      <option value="">-- 不使用语音 --</option>
-                      {voices.map((v) => (
-                        <option key={v.id} value={v.provider_voice_id}>
-                          {v.display_name || v.name}
-                          {' '}({v.provider === 'elevenlabs' ? 'EL' : v.provider} / {v.gender === 'female' ? 'Female' : v.gender === 'male' ? 'Male' : 'Neutral'} / {v.provider_voice_id})
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        value={formData.voice_id || ''}
+                        onChange={(e) => setFormData({ ...formData, voice_id: e.target.value })}
+                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200"
+                      >
+                        <option value="">-- 不使用语音 --</option>
+                        {voices.map((v) => (
+                          <option key={v.id} value={v.provider_voice_id}>
+                            {v.display_name || v.name}
+                            {' '}({v.provider === 'elevenlabs' ? 'EL' : v.provider} / {v.gender === 'female' ? 'Female' : v.gender === 'male' ? 'Male' : 'Neutral'} / {v.provider_voice_id})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handlePreviewVoice}
+                        disabled={!formData.voice_id || previewLoading}
+                        className="mt-2 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm disabled:opacity-50"
+                        title="试听"
+                      >
+                        {previewLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : playingVoiceDbId && getSelectedVoice()?.id === playingVoiceDbId ? (
+                          <Pause className="w-4 h-4" />
+                        ) : (
+                          <Play className="w-4 h-4" />
+                        )}
+                      </button>
+                    </>
                   ) : (
                     <input
                       type="text"

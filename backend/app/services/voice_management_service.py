@@ -12,6 +12,57 @@ from app.services.voice_service import VoiceService
 
 logger = logging.getLogger(__name__)
 
+CURATED_ELEVENLABS_VOICES = [
+    {
+        "provider_voice_id": "j05EIz3iI3JmBTWC3CsA",
+        "display_name": "ASMR whisperer",
+        "description": "ASMR whisperer",
+        "tone": "asmr",
+    },
+    {
+        "provider_voice_id": "PB6BdkFkZLbI39GHdnbQ",
+        "display_name": "sensual, hypnotic and playful",
+        "description": "sensual, hypnotic and playful",
+        "tone": "seductive",
+    },
+    {
+        "provider_voice_id": "6z4qitu552uH4K9c5vrj",
+        "display_name": "soft, husky and whispery",
+        "description": "soft, husky and whispery",
+        "tone": "husky",
+    },
+    {
+        "provider_voice_id": "rsCVCASkcJ6wDNekWF5H",
+        "display_name": "enticing, mysterious and warm",
+        "description": "enticing, mysterious and warm",
+        "tone": "warm",
+    },
+    {
+        "provider_voice_id": "MftN0gvsFPPOYnV3DU0Y",
+        "display_name": "vintage Hollywood actress",
+        "description": "vintage Hollywood actress",
+        "tone": "mature",
+    },
+    {
+        "provider_voice_id": "JnLbZVB3BDIX9KH4Bc1H",
+        "display_name": "lively",
+        "description": "lively",
+        "tone": "lively",
+    },
+    {
+        "provider_voice_id": "ZP7ctTmcovXNUmOj695o",
+        "display_name": "calm, seductive and enigmatic",
+        "description": "calm, seductive and enigmatic",
+        "tone": "seductive",
+    },
+    {
+        "provider_voice_id": "du9lwz8ZPYY8gsZt7QO5",
+        "display_name": "meditative ASMR whisperer",
+        "description": "meditative ASMR whisperer",
+        "tone": "asmr",
+    },
+]
+
 
 class VoiceManagementService:
     def __init__(self):
@@ -54,6 +105,31 @@ class VoiceManagementService:
         count_query = f"SELECT COUNT(*) as total FROM voices {where_clause}"
         count_result = await db.execute(count_query, tuple(params), fetch=True)
         total = count_result["total"] if count_result else 0
+        should_check_curated = (
+            (provider is None or provider == "elevenlabs")
+            and language is None
+            and gender is None
+            and tone is None
+            and is_active is None
+            and page == 1
+        )
+        if should_check_curated:
+            curated_voice_ids = [voice["provider_voice_id"] for voice in CURATED_ELEVENLABS_VOICES]
+            placeholders = ", ".join(["?"] * len(curated_voice_ids))
+            curated_count_result = await db.execute(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM voices
+                WHERE provider = 'elevenlabs' AND provider_voice_id IN ({placeholders})
+                """,
+                tuple(curated_voice_ids),
+                fetch=True,
+            )
+            curated_total = (curated_count_result or {}).get("total", 0)
+            if curated_total < len(curated_voice_ids):
+                await self.seed_curated_elevenlabs_voices()
+                count_result = await db.execute(count_query, tuple(params), fetch=True)
+                total = count_result["total"] if count_result else 0
         
         list_query = f"""
             SELECT * FROM voices 
@@ -81,6 +157,71 @@ class VoiceManagementService:
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        }
+
+    async def seed_curated_elevenlabs_voices(self) -> Dict[str, Any]:
+        now = datetime.utcnow().isoformat()
+        created = 0
+        updated = 0
+
+        for idx, item in enumerate(CURATED_ELEVENLABS_VOICES, start=1):
+            provider_voice_id = item["provider_voice_id"]
+            display_name = item["display_name"]
+            description = item["description"]
+            tone = item["tone"]
+            existing = await db.execute(
+                "SELECT id FROM voices WHERE provider = ? AND provider_voice_id = ?",
+                ("elevenlabs", provider_voice_id),
+                fetch=True,
+            )
+
+            if existing:
+                await db.execute(
+                    """
+                    UPDATE voices
+                    SET name = ?, display_name = ?, description = ?, model_id = ?, language = ?, gender = ?,
+                        tone = ?, settings = ?, is_active = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        f"ElevenLabs {idx}",
+                        display_name,
+                        description,
+                        "eleven_multilingual_v2",
+                        "en",
+                        "female",
+                        tone,
+                        json.dumps({"stability": 0.5, "similarity_boost": 0.75}),
+                        now,
+                        existing["id"],
+                    ),
+                )
+                updated += 1
+                continue
+
+            await self.create_voice(
+                {
+                    "id": f"voice_el_curated_{provider_voice_id[:12]}",
+                    "name": f"ElevenLabs {idx}",
+                    "display_name": display_name,
+                    "description": description,
+                    "provider": "elevenlabs",
+                    "provider_voice_id": provider_voice_id,
+                    "model_id": "eleven_multilingual_v2",
+                    "language": "en",
+                    "gender": "female",
+                    "tone": tone,
+                    "settings": {"stability": 0.5, "similarity_boost": 0.75},
+                    "is_active": True,
+                }
+            )
+            created += 1
+
+        return {
+            "success": True,
+            "created": created,
+            "updated": updated,
+            "total": len(CURATED_ELEVENLABS_VOICES),
         }
     
     async def get_voice(self, voice_id: str) -> Optional[Dict[str, Any]]:
@@ -217,8 +358,17 @@ class VoiceManagementService:
         voice = await self.get_voice(voice_id)
         if not voice:
             raise ValueError(f"Voice not found: {voice_id}")
-        
-        preview_text = text or self._get_preview_text(voice.get("language", "en"))
+
+        existing_preview = (voice.get("preview_url") or "").strip()
+        if existing_preview:
+            return {
+                "audio_url": existing_preview,
+                "voice_id": voice.get("provider_voice_id"),
+                "provider": voice.get("provider"),
+                "cached": True,
+            }
+
+        preview_text = (text or "hey, handsome boy.").strip() or "hey, handsome boy."
         
         settings = voice.get("settings", {})
         speed = settings.get("speed", 1.0) if isinstance(settings, dict) else 1.0
@@ -252,7 +402,15 @@ class VoiceManagementService:
         el_api_key = await get_config_value("ELEVENLABS_API_KEY", self.settings.elevenlabs_api_key)
         el_base_url = await get_config_value("ELEVENLABS_BASE_URL", self.settings.elevenlabs_base_url)
         if not el_api_key:
-            return {"success": False, "error": "ElevenLabs API key not configured"}
+            curated_result = await self.seed_curated_elevenlabs_voices()
+            return {
+                "success": True,
+                "synced": curated_result.get("created", 0),
+                "skipped": curated_result.get("updated", 0),
+                "total": curated_result.get("total", 0),
+                "curated": curated_result,
+                "source": "curated",
+            }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -312,11 +470,14 @@ class VoiceManagementService:
                     
                     synced_count += 1
                 
+                curated_result = await self.seed_curated_elevenlabs_voices()
+
                 return {
                     "success": True,
                     "synced": synced_count,
                     "skipped": skipped_count,
                     "total": len(voices_data),
+                    "curated": curated_result,
                 }
             
         except Exception as e:

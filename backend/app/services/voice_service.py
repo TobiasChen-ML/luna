@@ -173,7 +173,18 @@ class VoiceService:
     async def _store_audio(self, audio_data: bytes, format: str) -> str:
         import uuid
         filename = f"{uuid.uuid4().hex}.{format}"
-        return f"https://storage.example.com/audio/{filename}"
+        content_type = "audio/mpeg" if format.lower() == "mp3" else "application/octet-stream"
+        try:
+            from .storage_service import storage_service
+            return await storage_service.upload_bytes(
+                content=audio_data,
+                folder="voice/tts",
+                filename=filename,
+                content_type=content_type,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to upload TTS audio to R2, falling back to placeholder URL: {e}")
+            return f"https://storage.example.com/audio/{filename}"
 
     async def generate_voice_token(
         self,

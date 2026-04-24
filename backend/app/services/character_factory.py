@@ -138,6 +138,18 @@ class CharacterFactory:
     def _get_novita_video_provider(self):
         return self._get_media_service().get_video_provider("novita")
 
+    async def _get_active_elevenlabs_voice_ids(self) -> list[str]:
+        rows = await db.execute(
+            """
+            SELECT provider_voice_id
+            FROM voices
+            WHERE provider = 'elevenlabs' AND is_active = 1
+            """,
+            fetch_all=True,
+        )
+        voice_ids = [str(row.get("provider_voice_id") or "").strip() for row in (rows or [])]
+        return [voice_id for voice_id in voice_ids if voice_id]
+
     def _get_random_background(self, profile: dict) -> str:
         occupation = profile.get("occupation", "").lower()
         if any(k in occupation for k in _SPORT_KEYWORDS):
@@ -412,6 +424,15 @@ class CharacterFactory:
             trend_context=trend_context,
         )
 
+        voice_ids = await self._get_active_elevenlabs_voice_ids()
+        if not voice_ids:
+            try:
+                from app.services.voice_management_service import voice_management_service
+                await voice_management_service.seed_curated_elevenlabs_voices()
+                voice_ids = await self._get_active_elevenlabs_voice_ids()
+            except Exception as e:
+                logger.warning(f"Failed to seed curated voices for batch generation: {e}")
+
         created_characters = []
 
         for i, profile in enumerate(profiles):
@@ -425,6 +446,9 @@ class CharacterFactory:
                 if optimize_seo:
                     seo_data = await self._generate_seo_content(profile)
                     profile.update(seo_data)
+
+                if voice_ids and not profile.get("voice_id"):
+                    profile["voice_id"] = random.choice(voice_ids)
 
                 character_create = CharacterCreate(**profile)
                 character = await character_service.create_character(character_create)

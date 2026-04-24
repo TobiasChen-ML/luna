@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Wand2, Sparkles, Check, AlertTriangle,
-  Image as ImageIcon, RefreshCw
+  Image as ImageIcon, RefreshCw, Play, Pause
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -19,9 +19,24 @@ interface CharacterForm {
   personality_tags: string[];
   backstory: string;
   greeting: string;
+  voice_id?: string;
   generate_images: boolean;
   generate_video: boolean;
 }
+
+interface VoiceOption {
+  id: string;
+  name: string;
+  display_name?: string;
+  description?: string;
+  preview_url?: string;
+  provider: string;
+  provider_voice_id: string;
+  language: string;
+  gender: string;
+}
+
+const PREVIEW_TEXT = 'hey, handsome boy.';
 
 const PERSONALITY_OPTIONS = [
   'gentle', 'caring', 'playful', 'mysterious', 'confident', 'shy',
@@ -69,11 +84,16 @@ export default function CharacterCreatePage() {
     personality_tags: [],
     backstory: '',
     greeting: '',
+    voice_id: '',
     generate_images: true,
     generate_video: true,
   });
   
   const [templates, setTemplates] = useState<any[]>([]);
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [playingVoiceDbId, setPlayingVoiceDbId] = useState<string | null>(null);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   const fetchTemplates = async () => {
     try {
@@ -84,9 +104,76 @@ export default function CharacterCreatePage() {
     }
   };
 
+  const fetchVoices = async () => {
+    try {
+      const response = await api.get('/admin/api/voices?page_size=200&provider=elevenlabs');
+      setVoices(response.data?.voices || []);
+    } catch {
+      setVoices([]);
+    }
+  };
+
+  const getSelectedVoice = () =>
+    voices.find((voice) => voice.provider_voice_id === (manualForm.voice_id || '')) || null;
+
+  const handlePreviewVoice = async () => {
+    const selectedVoice = getSelectedVoice();
+    if (!selectedVoice) return;
+
+    if (playingVoiceDbId === selectedVoice.id) {
+      if (audioElement) {
+        audioElement.pause();
+      }
+      setPlayingVoiceDbId(null);
+      return;
+    }
+
+    if (audioElement) {
+      audioElement.pause();
+    }
+
+    setPreviewLoading(true);
+    try {
+      let audioUrl = selectedVoice.preview_url;
+      if (!audioUrl) {
+        const response = await api.post(`/admin/api/voices/${selectedVoice.id}/preview`, {
+          text: PREVIEW_TEXT,
+        });
+        audioUrl = response.data?.audio_url;
+        if (audioUrl) {
+          setVoices((prev) =>
+            prev.map((voice) =>
+              voice.id === selectedVoice.id ? { ...voice, preview_url: audioUrl } : voice
+            )
+          );
+        }
+      }
+      if (!audioUrl) return;
+
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setPlayingVoiceDbId(null);
+      audio.onerror = () => setPlayingVoiceDbId(null);
+      setAudioElement(audio);
+      await audio.play();
+      setPlayingVoiceDbId(selectedVoice.id);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchTemplates();
+    fetchVoices();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+      }
+    };
+  }, [audioElement]);
 
   if (authLoading) {
     return (
@@ -538,6 +625,42 @@ export default function CharacterCreatePage() {
                 rows={2}
                 className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg resize-none"
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm text-zinc-400 mb-2">声音 (ElevenLabs)</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={manualForm.voice_id || ''}
+                  onChange={(e) => setManualForm({ ...manualForm, voice_id: e.target.value })}
+                  className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200"
+                >
+                  <option value="">-- 不使用声音 --</option>
+                  {voices.map((voice) => (
+                    <option key={voice.id} value={voice.provider_voice_id}>
+                      {voice.display_name || voice.name} ({voice.provider_voice_id})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handlePreviewVoice}
+                  disabled={!manualForm.voice_id || previewLoading}
+                  className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm disabled:opacity-50"
+                  title="试听"
+                >
+                  {previewLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : playingVoiceDbId && getSelectedVoice()?.id === playingVoiceDbId ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              {manualForm.voice_id && (
+                <p className="text-xs text-zinc-500">Voice ID: {manualForm.voice_id}</p>
+              )}
             </div>
 
             <div className="flex items-center gap-6">
