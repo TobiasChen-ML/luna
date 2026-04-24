@@ -92,7 +92,6 @@ class RelationshipAnalyzer:
                     },
                     "required": ["sentiment", "intimacy_change", "trust_change", "desire_change", "dependency_change", "reasoning"],
                 },
-                provider="deepseek",
             )
             
             data = response.data or {}

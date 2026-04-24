@@ -160,7 +160,9 @@ class CharacterFactory:
     async def _get_active_loras_from_db(self, applies_to: str = "img2img") -> list[dict]:
         try:
             rows = await db.execute(
-                "SELECT id, name, model_name, strength, trigger_word, description FROM lora_presets "
+                "SELECT id, name, model_name, strength, trigger_word, description, "
+                "example_prompt, example_negative_prompt, prompt_template_mode "
+                "FROM lora_presets "
                 "WHERE is_active = 1 AND (applies_to = ? OR applies_to = 'all') AND provider = 'novita'",
                 (applies_to,),
                 fetch_all=True,
@@ -179,6 +181,50 @@ class CharacterFactory:
             logger.info(f"[LoRA] Selected '{chosen['model_name']}' for {applies_to}")
             return [chosen]
         return []
+
+    @staticmethod
+    def _pick_random_template(raw: str) -> str:
+        """Pick one template from a multiline/pipe-separated prompt template field."""
+        text = (raw or "").strip()
+        if not text:
+            return ""
+
+        # Preferred format: one template per line. Also support "||" as delimiter.
+        candidates = [
+            part.strip()
+            for line in text.splitlines()
+            for part in line.split("||")
+            if part.strip()
+        ]
+        if not candidates:
+            return ""
+        return random.choice(candidates)
+
+    @staticmethod
+    def _compose_prompt_with_lora(base_prompt: str, lora: Optional[dict]) -> str:
+        if not lora:
+            return base_prompt
+        mode = (lora.get("prompt_template_mode") or "append_trigger").strip().lower()
+        example_prompt = CharacterFactory._pick_random_template(lora.get("example_prompt") or "")
+        trigger_word = (lora.get("trigger_word") or "").strip()
+
+        if mode == "use_example" and example_prompt:
+            return f"{example_prompt}, {base_prompt}"
+        if trigger_word:
+            return f"{trigger_word}, {base_prompt}"
+        return base_prompt
+
+    @staticmethod
+    def _compose_negative_with_lora(base_negative: str, lora: Optional[dict]) -> str:
+        if not lora:
+            return base_negative
+        mode = (lora.get("prompt_template_mode") or "append_trigger").strip().lower()
+        example_negative = CharacterFactory._pick_random_template(
+            lora.get("example_negative_prompt") or ""
+        )
+        if mode == "use_example" and example_negative:
+            return f"{example_negative}, {base_negative}"
+        return base_negative
 
     async def _generate_mature_with_ipadapter(
         self,
@@ -200,21 +246,13 @@ class CharacterFactory:
             logger.warning(f"IPAdapter download failed for {name}: {e}")
             return None
 
-        def _pick_one(raw: str) -> str:
-            parts = [p.strip() for p in raw.split(",") if p.strip()]
-            return random.choice(parts) if parts else ""
-
-        trigger_words = " ".join(
-            _pick_one(l["trigger_word"]) for l in loras if l.get("trigger_word")
-        )
-        mature_prompt = (
+        base_prompt = (
             f"nude full body photo of a beautiful {age}-year-old {ethnicity_style['avatar']}, "
             f"{personality} personality, completely naked, perfect body, "
-            f"{trigger_words}, "
             "detailed skin, photorealistic, masterpiece photography, "
             "lightrays, very detailed skin, 8k focus stacking, looking at camera"
         )
-        mature_negative = (
+        base_negative = (
             "low quality, bad anatomy, blur, blurry, ugly, wrong proportions, "
             "watermark, bad eyes, bad hands, bad arms, deformed, disfigured, "
             "extra fingers, mutated hands, poorly drawn hands, poorly drawn face, "
@@ -222,6 +260,9 @@ class CharacterFactory:
             "extra arms, extra legs, fused fingers, too many fingers, long neck, "
             "clothing, clothes, dressed"
         )
+        selected_lora = loras[0] if loras else None
+        mature_prompt = self._compose_prompt_with_lora(base_prompt, selected_lora)
+        mature_negative = self._compose_negative_with_lora(base_negative, selected_lora)
 
         lora_configs = [
             MediaLoRAConfig(model_name=l["model_name"], strength=l["strength"])
@@ -230,7 +271,7 @@ class CharacterFactory:
         ip_adapters = [IPAdapterConfig(
             image_base64=face_base64,
             strength=0.75,
-            model_name="ip-adapter_sd15.bin",
+            model_name="ip-adapter_sdxl.bin",
         )]
 
         try:
@@ -239,6 +280,7 @@ class CharacterFactory:
                 init_image_url=sfw_avatar_url,
                 prompt=mature_prompt,
                 negative_prompt=mature_negative,
+                model=novita.DEFAULT_MODEL,
                 strength=0.6,
                 width=768,
                 height=1024,
@@ -549,6 +591,12 @@ class CharacterFactory:
 
         images = await self._generate_character_images(character)
 
+        if not images.get("avatar_url"):
+            raise RuntimeError(
+                "Avatar image generation failed - no image URL returned. "
+                "Check NOVITA_API_KEY is set and the Novita API is reachable."
+            )
+
         update_data = {
             k: v for k, v in images.items()
             if k in {"avatar_url", "cover_url", "avatar_card_url", "profile_image_url",
@@ -846,9 +894,9 @@ class CharacterFactory:
 
     async def _generate_character_images(self, profile: dict) -> dict:
         """Three-step image generation:
-        1. Novita txt2img → SFW full-body selfie (avatar = cover)
-        2. Novita img2img + IPAdapter + DB LoRAs → Mature (mature_image = mature_cover)
-        3. Novita WAN2.1 img2video → mature_video (launched as background task)
+        1. Novita txt2img -> SFW full-body selfie (avatar = cover)
+        2. Novita img2img + IPAdapter + DB LoRAs -> Mature (mature_image = mature_cover)
+        3. Novita WAN2.1 img2video -> mature_video (launched as background task)
         """
         images: dict = {}
 
@@ -865,7 +913,7 @@ class CharacterFactory:
 
         novita = await self._get_txt2img_provider()
         if not novita:
-            logger.warning("Image provider not configured — skipping image generation")
+            logger.warning("Image provider not configured - skipping image generation")
             return images
 
         sfw_negative = (
@@ -918,31 +966,65 @@ class CharacterFactory:
                 images["cover_url"] = url        # cover = avatar (same image)
                 images["avatar_card_url"] = url
                 images["profile_image_url"] = url
+            else:
+                logger.error(
+                    f"[Step 1] Novita task {task_id} completed with no image. "
+                    f"Status={result.status}, error={result.error}"
+                )
         except Exception as e:
             logger.error(f"Novita avatar generation failed for {name}: {e}")
 
         # ── Step 2: Mature with IPAdapter + LoRAs ──────────────────────────────
         sfw_avatar_url = images.get("avatar_url")
         if sfw_avatar_url:
-            _mature_context = f"{name}, {personality} personality, {occupation_style}, mature scene"
-            loras = await self._select_lora_from_db("img2img", context=_mature_context)
-            mature_url = await self._generate_mature_with_ipadapter(
-                novita,
-                name=name,
-                age=age,
-                ethnicity_style=ethnicity_style,
-                personality=personality,
-                sfw_avatar_url=sfw_avatar_url,
-                loras=loras,
-            )
+            mature_url = None
+            retry_personalities = [
+                personality,
+                f"{personality} seductive".strip(),
+                f"{personality} intimate lighting".strip(),
+            ]
+            for idx, personality_variant in enumerate(retry_personalities, start=1):
+                _mature_context = (
+                    f"{name}, {personality_variant} personality, "
+                    f"{occupation_style}, mature scene, retry {idx}"
+                )
+                loras = await self._select_lora_from_db("img2img", context=_mature_context)
+                mature_url = await self._generate_mature_with_ipadapter(
+                    novita,
+                    name=name,
+                    age=age,
+                    ethnicity_style=ethnicity_style,
+                    personality=personality_variant,
+                    sfw_avatar_url=sfw_avatar_url,
+                    loras=loras,
+                )
+                if mature_url:
+                    logger.info(
+                        "Mature image generated for %s on retry %s/3",
+                        name,
+                        idx,
+                    )
+                    break
+                logger.warning(
+                    "Mature image generation attempt %s/3 failed for %s",
+                    idx,
+                    name,
+                )
+
             if mature_url:
                 images["mature_image_url"] = mature_url
                 images["mature_cover_url"] = mature_url  # mature_cover = mature_image
+            else:
+                logger.error(
+                    "Mature image generation failed after 3 retries for %s; "
+                    "downstream video may fall back to avatar_url.",
+                    name,
+                )
 
         return images
 
     async def _generate_character_video(self, profile: dict, mature_image_url: str) -> Optional[str]:
-        """Novita WAN2.1 img2video — image_url passed directly, no base64."""
+        """Novita WAN2.1 img2video - image_url passed directly, no base64."""
         try:
             novita_video = self._get_novita_video_provider()
             if not novita_video:
@@ -953,11 +1035,23 @@ class CharacterFactory:
             personality_tags = profile.get("personality_tags", [])
             personality = " ".join(personality_tags[:2]) if personality_tags else "sensual"
 
+            def _pick_one(raw: str) -> str:
+                parts = [p.strip() for p in raw.split(",") if p.strip()]
+                return random.choice(parts) if parts else ""
+
+            lora_context = f"{name}, {personality} personality, mature video motion"
+            video_loras = await self._select_lora_from_db("video", context=lora_context)
+            trigger_words = " ".join(
+                _pick_one(l["trigger_word"]) for l in video_loras if l.get("trigger_word")
+            )
+
             video_prompt = (
                 f"a beautiful nude woman, {personality}, "
                 "natural body movement, subtle breathing, slight blinking, "
                 "smooth motion, high quality, cinematic"
             )
+            if trigger_words:
+                video_prompt = f"{trigger_words}, {video_prompt}"
 
             logger.info(f"[Step 3] Novita WAN2.1 Mature video for {name}...")
             result = await novita_video.generate_video(
@@ -1021,10 +1115,40 @@ class CharacterFactory:
             loras=loras,
         )
 
+        if not mature_url:
+            fallback_prompt = (
+                f"nude full body photo of a beautiful {age}-year-old {ethnicity_style['avatar']}, "
+                f"{personality} personality, detailed skin, photorealistic, masterpiece photography, "
+                "lightrays, very detailed skin, 8k focus stacking, looking at camera"
+            )
+            fallback_negative = (
+                "low quality, bad anatomy, blur, blurry, ugly, wrong proportions, "
+                "watermark, bad eyes, bad hands, bad arms, deformed, disfigured"
+            )
+            logger.warning(
+                "Mature IPAdapter failed for %s (%s); trying non-IPAdapter fallback.",
+                character_id,
+                name,
+            )
+            mature_url = await self._generate_mature_variant(
+                novita,
+                name=name,
+                prompt=fallback_prompt,
+                base_image_urls=[sfw_avatar],
+                negative_prompt=fallback_negative,
+                width=768,
+                height=1024,
+                log_label="regenerate-mature-fallback",
+            )
+
         update_data: dict = {}
         if mature_url:
             update_data["mature_image_url"] = mature_url
             update_data["mature_cover_url"] = mature_url  # mature_cover = mature_image
+        else:
+            raise RuntimeError(
+                f"Mature generation failed for {character_id}: Novita returned no usable image"
+            )
 
         if generate_video:
             video_source = mature_url or sfw_avatar

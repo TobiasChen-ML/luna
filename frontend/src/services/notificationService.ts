@@ -159,10 +159,10 @@ class NotificationService {
   /**
    * Get the current Firebase auth token.
    */
-  private async getAuthToken(): Promise<string> {
+  private async getAuthToken(): Promise<string | null> {
     const user = auth.currentUser;
     if (!user) {
-      throw new Error('User not authenticated');
+      return null;
     }
     return user.getIdToken();
   }
@@ -253,6 +253,10 @@ class NotificationService {
     try {
       await this.startStream();
     } catch (error) {
+      if (error instanceof Error && error.message === 'User not authenticated') {
+        this.setConnectionState('disconnected');
+        return;
+      }
       console.error('Failed to connect notification service:', error);
       this.scheduleReconnect();
     }
@@ -270,6 +274,9 @@ class NotificationService {
 
     try {
       const token = await this.getAuthToken();
+      if (!token) {
+        throw new Error('User not authenticated');
+      }
 
       const response = await fetch(`${this.baseUrl}/api/notifications/stream`, {
         method: 'GET',

@@ -2,14 +2,19 @@ import json
 import logging
 import asyncio
 import uuid
+import random
+import re
+import hashlib
+import time
 from datetime import datetime
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Response, status
 from typing import Any, Optional
 from sse_starlette.sse import EventSourceResponse
 
 from app.models import (
     BaseResponse, ChatStreamRequest, ChatCompleteRequest,
-    ChatSession, ChatMessage, ChatMessageCreate as ChatMessageCreateModel
+    ChatSession, ChatMessage, ChatMessageCreate as ChatMessageCreateModel,
+    ChatSessionUpdate, ChatSessionCreate as ChatSessionCreateModel,
 )
 from app.core.events import EventType, SSEEvent
 from app.core.dependencies import get_current_user_required
@@ -28,12 +33,19 @@ from app.services.database_service import DatabaseService
 from app.services.credit_service import credit_service
 from app.services.pricing_service import pricing_service
 from app.services.script_library_service import script_library_service
+from app.core.database import db
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 
 VOICE_CREDIT_COST = 2
 IMAGE_CREDIT_COST = 2
+STORY_COMPLETION_MARKER = re.compile(r"\[\[STORY_COMPLETED:(good|neutral|bad|secret)\]\]", re.IGNORECASE)
+
+GUEST_MAX_CREDITS = 20
+GUEST_MESSAGE_COST = 1
+GUEST_STATE_TTL_SECONDS = 24 * 60 * 60
+_guest_states: dict[str, dict[str, Any]] = {}
 
 
 def _replace_script_placeholders(data: Any, character_name: str) -> Any:
@@ -52,6 +64,203 @@ def _get_user_id(request: Request) -> str:
 
 def _get_user_db_id(request: Request) -> Optional[str]:
     return getattr(request.state, "user_db_id", None)
+
+
+def _resolve_guest_id(request: Request, response: Optional[Response] = None) -> str:
+    cookie_id = request.cookies.get("guest_id")
+    if cookie_id:
+        if response is not None:
+            response.set_cookie(
+                key="guest_id",
+                value=cookie_id,
+                max_age=GUEST_STATE_TTL_SECONDS,
+                httponly=True,
+                samesite="lax",
+            )
+        return cookie_id
+
+    header_fingerprint = request.headers.get("x-device-fingerprint")
+    if header_fingerprint:
+        guest_id = f"fp_{header_fingerprint[:64]}"
+    else:
+        ip = (request.client.host if request.client else "0.0.0.0").strip()
+        ua = (request.headers.get("user-agent") or "unknown").strip()
+        digest = hashlib.sha256(f"{ip}|{ua}".encode("utf-8")).hexdigest()
+        guest_id = f"anon_{digest[:32]}"
+
+    if response is not None:
+        response.set_cookie(
+            key="guest_id",
+            value=guest_id,
+            max_age=GUEST_STATE_TTL_SECONDS,
+            httponly=True,
+            samesite="lax",
+        )
+    return guest_id
+
+
+def _get_guest_state(guest_id: str) -> dict[str, Any]:
+    now = int(time.time())
+    state = _guest_states.get(guest_id)
+    if not state or now - int(state.get("updated_at", 0)) > GUEST_STATE_TTL_SECONDS:
+        state = {
+            "credits_remaining": GUEST_MAX_CREDITS,
+            "updated_at": now,
+        }
+        _guest_states[guest_id] = state
+    else:
+        state["updated_at"] = now
+    return state
+
+
+def _render_guest_fallback(character_name: str, user_message: str) -> str:
+    message = (user_message or "").strip()
+    if not message:
+        return f"I'm here with you. What would you like to talk about?"
+    return (
+        f"{character_name}: I heard you say \"{message}\". "
+        "Tell me more and we can keep going."
+    )
+
+
+def _build_character_opening(character: Optional[dict[str, Any]], character_id: str) -> str:
+    if character and isinstance(character.get("greeting"), str):
+        greeting = character["greeting"].strip()
+        if greeting:
+            return greeting
+
+    name = (
+        (character or {}).get("first_name")
+        or (character or {}).get("name")
+        or character_id
+        or "AI"
+    )
+    personality = ((character or {}).get("personality_summary") or "").strip()
+    if personality:
+        return f"Hi, I'm {name}. {personality} What would you like to talk about today?"
+    return f"Hi, I'm {name}. It's great to meet you. What would you like to talk about today?"
+
+
+def _parse_json_dict(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
+def _extract_story_completion_marker(text: str) -> tuple[str, Optional[str]]:
+    match = STORY_COMPLETION_MARKER.search(text or "")
+    if not match:
+        return text, None
+    ending_type = match.group(1).lower()
+    cleaned = STORY_COMPLETION_MARKER.sub("", text).strip()
+    return cleaned, ending_type
+
+
+async def _list_bound_scripts(character_id: str) -> list[dict[str, Any]]:
+    try:
+        rows = await db.execute(
+            """
+            SELECT b.script_id, b.weight, s.title
+            FROM character_script_bindings b
+            JOIN script_library s ON s.id = b.script_id
+            WHERE b.character_id = ?
+              AND b.is_active = 1
+              AND s.status = 'published'
+            """,
+            (character_id,),
+            fetch_all=True,
+        )
+    except Exception as e:
+        logger.debug(f"Failed to read character script bindings: {e}")
+        return []
+    scripts: list[dict[str, Any]] = []
+    for row in rows or []:
+        try:
+            weight = int(row.get("weight") or 1)
+        except (TypeError, ValueError):
+            weight = 1
+        scripts.append({
+            "id": row.get("script_id"),
+            "title": row.get("title") or row.get("script_id"),
+            "weight": max(1, weight),
+        })
+    return [s for s in scripts if s.get("id")]
+
+
+def _pick_weighted_script(candidates: list[dict[str, Any]], excluded_ids: set[str]) -> Optional[dict[str, Any]]:
+    if not candidates:
+        return None
+    pool = [c for c in candidates if c.get("id") not in excluded_ids]
+    if not pool:
+        pool = candidates
+    total = sum(max(1, int(c.get("weight", 1))) for c in pool)
+    pivot = random.uniform(0, total)
+    running = 0.0
+    for item in pool:
+        running += max(1, int(item.get("weight", 1)))
+        if pivot <= running:
+            return item
+    return pool[-1]
+
+
+async def _assign_or_rotate_bound_script(
+    session_id: str,
+    character_id: str,
+    *,
+    force_rotate: bool = False,
+    completed_script_id: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str], bool]:
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        return None, None, False
+
+    bindings = await _list_bound_scripts(character_id)
+    if not bindings:
+        return session.get("script_id"), None, False
+
+    context = _parse_json_dict(session.get("context"))
+    rotation = _parse_json_dict(context.get("script_rotation"))
+    completed_ids = [str(x) for x in rotation.get("completed_ids", []) if x]
+    current_script_id = session.get("script_id")
+
+    if completed_script_id:
+        if completed_script_id in completed_ids:
+            completed_ids.remove(completed_script_id)
+        completed_ids.append(completed_script_id)
+        completed_ids = completed_ids[-50:]
+
+    if not force_rotate and current_script_id:
+        current = next((item for item in bindings if item["id"] == current_script_id), None)
+        if current:
+            return current_script_id, current.get("title"), False
+
+    selected = _pick_weighted_script(bindings, set(completed_ids) if force_rotate else set())
+    if not selected:
+        return current_script_id, None, False
+
+    next_script_id = selected["id"]
+    next_script_title = selected.get("title")
+    changed = next_script_id != current_script_id
+
+    rotation["completed_ids"] = completed_ids
+    rotation["current_id"] = next_script_id
+    rotation["updated_at"] = datetime.utcnow().isoformat()
+    context["script_rotation"] = rotation
+
+    if changed or force_rotate:
+        await chat_history_service.update_session(
+            session_id,
+            ChatSessionUpdate(script_id=next_script_id, context=context),
+        )
+
+    return next_script_id, next_script_title, changed
 
 
 async def _build_prompt_context(
@@ -208,6 +417,23 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
         )
         session_id = session["id"]
         script_id = session.get("script_id")
+
+        assigned_script_id, assigned_script_title, assigned_changed = await _assign_or_rotate_bound_script(
+            session_id,
+            data.character_id,
+        )
+        if assigned_script_id:
+            script_id = assigned_script_id
+            if assigned_changed:
+                yield SSEEvent(
+                    event=EventType.SCRIPT_STATE_UPDATED,
+                    data={
+                        "session_id": session_id,
+                        "script_id": assigned_script_id,
+                        "script_title": assigned_script_title or assigned_script_id,
+                        "reason": "random_assigned",
+                    },
+                ).to_sse()
         
         yield SSEEvent(
             event=EventType.SESSION_CREATED,
@@ -366,8 +592,9 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
             output_safety = await content_safety.check_output(full_response)
             if not output_safety.is_safe:
                 full_response = content_safety.get_redirect_message()
+            full_response, ending_type = _extract_story_completion_marker(full_response)
             
-            await chat_history_service.save_message(
+            saved_assistant_message = await chat_history_service.save_message(
                 ChatMessageCreateModel(
                     session_id=session_id,
                     role="assistant",
@@ -379,8 +606,51 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
             
             yield SSEEvent(
                 event=EventType.TEXT_DONE,
-                data={"content": full_response}
+                data={
+                    "message_id": saved_assistant_message["id"],
+                    "full_content": full_response,
+                    "content": full_response,
+                }
             ).to_sse()
+
+            if ending_type and script_id:
+                completed_script_id = script_id
+                completed_script = await script_library_service.get_script(script_id)
+                completed_title = completed_script.title if completed_script else script_id
+
+                next_script_id, next_script_title, switched = await _assign_or_rotate_bound_script(
+                    session_id,
+                    data.character_id,
+                    force_rotate=True,
+                    completed_script_id=script_id,
+                )
+                if next_script_id:
+                    script_id = next_script_id
+
+                yield SSEEvent(
+                    event=EventType.STORY_COMPLETED,
+                    data={
+                        "story_id": completed_script.id if completed_script else completed_script_id,
+                        "story_title": completed_title,
+                        "ending_type": ending_type,
+                        "rewards": {},
+                        "completion_time_minutes": None,
+                        "narrative": "",
+                        "next_script_id": next_script_id,
+                        "next_script_title": next_script_title,
+                    }
+                ).to_sse()
+
+                if switched and next_script_id:
+                    yield SSEEvent(
+                        event=EventType.SCRIPT_STATE_UPDATED,
+                        data={
+                            "session_id": session_id,
+                            "script_id": next_script_id,
+                            "script_title": next_script_title or next_script_id,
+                            "reason": "rotated_after_completion",
+                        },
+                    ).to_sse()
             
             if is_audio_intent and credit_deducted:
                 message_id = f"msg_{uuid.uuid4().hex[:12]}"
@@ -508,41 +778,68 @@ async def chat_send(request: Request, data: dict[str, Any]) -> BaseResponse:
 
 
 @router.get("/sessions", response_model=dict[str, Any])
-async def get_sessions(request: Request) -> dict[str, Any]:
+async def get_sessions(
+    request: Request,
+    character_id: Optional[str] = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    user_id = _get_user_id(request)
+    safe_limit = max(1, min(limit, 100))
+    sessions = await chat_history_service.get_user_sessions(
+        user_id=user_id,
+        character_id=character_id,
+        limit=safe_limit,
+    )
     return {
-        "sessions": [
-            ChatSession(
-                id="session_001",
-                user_id="user_001",
-                character_id="char_001",
-                title="Chat with Character",
-                created_at=datetime.now(),
-            )
-        ],
-        "total": 1
+        "sessions": sessions,
+        "total": len(sessions),
     }
 
 
 @router.post("/sessions", response_model=ChatSession)
 async def create_session(request: Request, data: dict[str, Any]) -> ChatSession:
-    return ChatSession(
-        id="session_002",
-        user_id="user_001",
-        character_id=data.get("character_id", "char_001"),
-        title="New Chat",
-        created_at=datetime.now(),
+    character_id = str(data.get("character_id") or "").strip()
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id is required")
+
+    session = await chat_history_service.create_session(
+        ChatSessionCreateModel(
+            user_id=_get_user_id(request),
+            character_id=character_id,
+            script_id=data.get("script_id"),
+            context=data.get("context") if isinstance(data.get("context"), dict) else None,
+        )
     )
+
+    if data.get("title") is not None:
+        updated = await chat_history_service.update_session(
+            session["id"],
+            ChatSessionUpdate(title=str(data.get("title"))),
+        )
+        if updated:
+            session = updated
+
+    if session.get("context") is None:
+        session["context"] = {}
+
+    return session
 
 
 @router.get("/sessions/{session_id}", response_model=ChatSession)
 async def get_session(request: Request, session_id: str) -> ChatSession:
-    return ChatSession(
-        id=session_id,
-        user_id="user_001",
-        character_id="char_001",
-        title="Chat Session",
-        created_at=datetime.now(),
-    )
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        now = datetime.utcnow()
+        return ChatSession(
+            id=session_id,
+            user_id=_get_user_id(request),
+            character_id="unknown",
+            title="Chat Session",
+            context={},
+            created_at=now,
+            updated_at=now,
+        )
+    return session
 
 
 @router.patch("/sessions/{session_id}/style", response_model=BaseResponse)
@@ -551,6 +848,20 @@ async def update_session_style(
     session_id: str, 
     data: dict[str, Any]
 ) -> BaseResponse:
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        return BaseResponse(success=True, message="Style updated")
+
+    style = data.get("style")
+    if style is None:
+        raise HTTPException(status_code=400, detail="style is required")
+
+    context = session.get("context") if isinstance(session.get("context"), dict) else {}
+    context["style"] = str(style)
+    await chat_history_service.update_session(
+        session_id,
+        ChatSessionUpdate(context=context),
+    )
     return BaseResponse(success=True, message="Style updated")
 
 
@@ -560,44 +871,163 @@ async def update_session_context(
     session_id: str, 
     data: dict[str, Any]
 ) -> BaseResponse:
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        return BaseResponse(success=True, message="Context updated")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="context body must be object")
+
+    context = session.get("context") if isinstance(session.get("context"), dict) else {}
+    context.update(data)
+    await chat_history_service.update_session(
+        session_id,
+        ChatSessionUpdate(context=context),
+    )
     return BaseResponse(success=True, message="Context updated")
 
 
 @router.get("/sessions/{session_id}/messages", response_model=dict[str, Any])
 async def get_session_messages(
     request: Request, 
-    session_id: str
+    session_id: str,
+    limit: int = 20,
+    before_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        return {
+            "messages": [],
+            "has_more": False,
+            "oldest_message_id": None,
+            "total_count": 0,
+        }
+
+    safe_limit = max(1, min(limit, 100))
+    if before_id:
+        messages = await chat_history_service.get_messages_before(
+            session_id=session_id,
+            before_message_id=before_id,
+            limit=safe_limit,
+        )
+        messages = list(reversed(messages))
+    else:
+        rows = await db.execute(
+            """SELECT * FROM chat_messages
+               WHERE session_id = ?
+               ORDER BY created_at DESC
+               LIMIT ?""",
+            (session_id, safe_limit),
+            fetch_all=True,
+        )
+        messages = [
+            chat_history_service._message_row_to_dict(row)  # noqa: SLF001
+            for row in reversed(rows or [])
+        ]
+
+    total_row = await db.execute(
+        "SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?",
+        (session_id,),
+        fetch=True,
+    )
+    total_count = int(total_row["count"]) if total_row else len(messages)
+    oldest_message_id = messages[0]["id"] if messages else None
+    has_more = total_count > len(messages)
+    if before_id and messages:
+        first_created_at = messages[0].get("created_at")
+        older_count_row = await db.execute(
+            "SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ? AND created_at < ?",
+            (session_id, first_created_at),
+            fetch=True,
+        )
+        has_more = bool(older_count_row and int(older_count_row["count"]) > 0)
+
+    normalized_messages: list[dict[str, Any]] = []
+    for m in messages:
+        image_urls = m.get("image_urls") or []
+        first_image_url = image_urls[0] if isinstance(image_urls, list) and image_urls else None
+        normalized_messages.append(
+            {
+                **m,
+                "timestamp": m.get("created_at"),
+                "image_url": first_image_url,
+            }
+        )
+
     return {
-        "messages": [
-            ChatMessage(
-                id="msg_001",
-                session_id=session_id,
-                role="user",
-                content="Hello!",
-                created_at=datetime.now(),
-            ),
-            ChatMessage(
-                id="msg_002",
-                session_id=session_id,
-                role="assistant",
-                content="Hi there! How can I help you?",
-                created_at=datetime.now(),
-            )
-        ],
-        "total": 2
+        "messages": normalized_messages,
+        "has_more": has_more,
+        "oldest_message_id": oldest_message_id,
+        "total_count": total_count,
     }
 
 
-@router.post("/sessions/initialize", response_model=ChatSession)
-async def initialize_session(request: Request, data: dict[str, Any]) -> ChatSession:
-    return ChatSession(
-        id="session_init",
-        user_id="user_001",
-        character_id=data.get("character_id", "char_001"),
-        title="Initialized Session",
-        created_at=datetime.now(),
+@router.post("/sessions/initialize", response_model=dict[str, Any])
+async def initialize_session(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    character_id = str(data.get("character_id") or "").strip()
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id is required")
+
+    session, opening_message, opening_message_id, is_new = await _initialize_character_session(
+        user_id=_get_user_id(request),
+        character_id=character_id,
     )
+
+    return {
+        **session,
+        "session_id": session["id"],
+        "is_new": is_new,
+        "scene": None,
+        "synopsis": None,
+        "opening_message": opening_message,
+        "message_id": opening_message_id,
+    }
+
+
+async def _initialize_character_session(
+    user_id: str,
+    character_id: str,
+) -> tuple[dict[str, Any], Optional[str], Optional[str], bool]:
+    existing = await chat_history_service.get_user_sessions(
+        user_id=user_id,
+        character_id=character_id,
+        limit=1,
+    )
+    is_new = False
+    if existing:
+        session = existing[0]
+    else:
+        session = await chat_history_service.create_session(
+            ChatSessionCreateModel(
+                user_id=user_id,
+                character_id=character_id,
+            )
+        )
+        is_new = True
+
+    opening_message: Optional[str] = None
+    opening_message_id: Optional[str] = None
+
+    existing_messages = await chat_history_service.get_recent_messages(session["id"], limit=1)
+    if existing_messages:
+        msg = existing_messages[-1]
+        if msg.get("role") == "assistant" and isinstance(msg.get("content"), str):
+            opening_message = msg["content"]
+            opening_message_id = msg.get("id")
+    else:
+        character = await character_service.get_character_by_id(character_id)
+        opening_message = _build_character_opening(character, character_id)
+        saved_opening = await chat_history_service.save_message(
+            ChatMessageCreateModel(
+                session_id=session["id"],
+                role="assistant",
+                content=opening_message,
+                character_id=character_id,
+                user_id=user_id,
+            )
+        )
+        opening_message_id = saved_opening.get("id")
+
+    return session, opening_message, opening_message_id, is_new
 
 
 @router.post("/start_official/{official_id}", response_model=ChatSession)
@@ -605,13 +1035,11 @@ async def start_official_chat(
     request: Request, 
     official_id: str
 ) -> ChatSession:
-    return ChatSession(
-        id="session_official",
-        user_id="user_001",
+    session, _, _, _ = await _initialize_character_session(
+        user_id=_get_user_id(request),
         character_id=official_id,
-        title="Official Character Chat",
-        created_at=datetime.now(),
     )
+    return ChatSession(**session)
 
 
 @router.post("/chat_now_official/{official_id}", response_model=ChatSession)
@@ -619,23 +1047,94 @@ async def chat_now_official(
     request: Request, 
     official_id: str
 ) -> ChatSession:
-    return ChatSession(
-        id="session_now",
-        user_id="guest",
+    session, _, _, _ = await _initialize_character_session(
+        user_id=_get_user_id(request),
         character_id=official_id,
-        title="Quick Chat",
-        created_at=datetime.now(),
     )
+    return ChatSession(**session)
 
 
 @router.get("/guest/credits")
-async def get_guest_credits(request: Request) -> dict[str, Any]:
-    return {"credits": 5, "max_credits": 10}
+async def get_guest_credits(request: Request, response: Response) -> dict[str, Any]:
+    guest_id = _resolve_guest_id(request, response)
+    state = _get_guest_state(guest_id)
+    credits_remaining = max(0, int(state.get("credits_remaining", GUEST_MAX_CREDITS)))
+    return {
+        "credits": credits_remaining,
+        "max_credits": GUEST_MAX_CREDITS,
+        "is_exhausted": credits_remaining <= 0,
+    }
 
 
-@router.post("/guest/send", response_model=BaseResponse)
-async def guest_send(request: Request, data: dict[str, Any]) -> BaseResponse:
-    return BaseResponse(success=True, message="Guest message sent")
+@router.post("/guest/send")
+async def guest_send(request: Request, response: Response, data: dict[str, Any]) -> dict[str, Any]:
+    character_id = str(data.get("character_id") or "").strip()
+    message = str(data.get("message") or "").strip()
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id is required")
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    character = await character_service.get_character_by_id(character_id) or {
+        "name": "AI",
+        "personality_summary": "",
+        "backstory": "",
+    }
+
+    guest_id = _resolve_guest_id(request, response)
+    state = _get_guest_state(guest_id)
+    credits_remaining = max(0, int(state.get("credits_remaining", GUEST_MAX_CREDITS)))
+    if credits_remaining < GUEST_MESSAGE_COST:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error_code": "guest_credits_exhausted",
+                "message": "Guest credits exhausted. Please register to continue chatting.",
+                "credits_remaining": 0,
+                "is_exhausted": True,
+            },
+        )
+
+    llm = LLMService.get_instance()
+    character_name = character.get("first_name") or character.get("name") or "AI"
+    personality_summary = character.get("personality_summary") or ""
+    backstory = character.get("backstory") or ""
+
+    system_prompt = (
+        "You are roleplaying as the following AI companion.\n"
+        f"Name: {character_name}\n"
+        f"Personality: {personality_summary}\n"
+        f"Backstory: {backstory}\n"
+        "Reply naturally, warmly, and keep it concise (1-3 short paragraphs)."
+    )
+
+    try:
+        llm_response = await llm.generate(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ],
+            temperature=0.8,
+            max_tokens=220,
+        )
+        assistant_content = (llm_response.content or "").strip()
+        if not assistant_content:
+            assistant_content = _render_guest_fallback(character_name, message)
+    except Exception as e:
+        logger.warning(f"Guest chat LLM failed, using fallback response: {e}")
+        assistant_content = _render_guest_fallback(character_name, message)
+
+    next_credits = max(0, credits_remaining - GUEST_MESSAGE_COST)
+    state["credits_remaining"] = next_credits
+    state["updated_at"] = int(time.time())
+
+    return {
+        "success": True,
+        "content": assistant_content,
+        "credits_remaining": next_credits,
+        "is_exhausted": next_credits <= 0,
+    }
 
 
 @router.post("/guest/audio/generate", response_model=BaseResponse)

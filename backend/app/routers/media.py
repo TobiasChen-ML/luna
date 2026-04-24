@@ -1,4 +1,5 @@
 import logging
+import random
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends
 from typing import Any, Optional
@@ -20,25 +21,48 @@ router = APIRouter(prefix="/api/images", tags=["media"])
 media_service = MediaService.get_instance()
 
 
+def _pick_random_template(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    candidates = [
+        part.strip()
+        for line in text.splitlines()
+        for part in line.split("||")
+        if part.strip()
+    ]
+    if not candidates:
+        return ""
+    return random.choice(candidates)
+
+
 async def _resolve_lora_preset(
     lora_preset_id: Optional[str],
     *,
     context: str = "",
     applies_to: str = "img2img",
-) -> tuple[list[LoRAConfig], str]:
-    """Return (lora_configs, trigger_word) for the given preset id.
+) -> tuple[list[LoRAConfig], dict[str, str]]:
+    """Return (lora_configs, prompt_hints) for the given preset id.
 
     When lora_preset_id is None the LLM selector picks one automatically using
     the prompt text as context.  Raises HTTPException 404 only when a specific
     id is given but does not exist or is disabled.
     """
+    def _prompt_hints_from_row(row: dict[str, Any]) -> dict[str, str]:
+        return {
+            "trigger_word": row.get("trigger_word") or "",
+            "example_prompt": row.get("example_prompt") or "",
+            "example_negative_prompt": row.get("example_negative_prompt") or "",
+            "prompt_template_mode": row.get("prompt_template_mode") or "append_trigger",
+        }
+
     if not lora_preset_id:
         from app.services.lora_selector_service import select_lora
         chosen = await select_lora(context=context, applies_to=applies_to)
         if not chosen:
-            return [], ""
+            return [], {}
         lora_cfg = LoRAConfig(model_name=chosen["model_name"], strength=float(chosen["strength"]))
-        return [lora_cfg], chosen.get("trigger_word") or ""
+        return [lora_cfg], _prompt_hints_from_row(chosen)
 
     row = await db.execute(
         "SELECT * FROM lora_presets WHERE id = ? AND is_active = 1",
@@ -51,7 +75,19 @@ async def _resolve_lora_preset(
             detail=f"LoRA preset '{lora_preset_id}' not found or is disabled",
         )
     lora_cfg = LoRAConfig(model_name=row["model_name"], strength=float(row["strength"]))
-    return [lora_cfg], row["trigger_word"] or ""
+    return [lora_cfg], _prompt_hints_from_row(dict(row))
+
+
+def _compose_prompt_with_lora(base_prompt: str, prompt_hints: dict[str, str]) -> str:
+    mode = prompt_hints.get("prompt_template_mode") or "append_trigger"
+    trigger_word = prompt_hints.get("trigger_word") or ""
+    example_prompt = _pick_random_template(prompt_hints.get("example_prompt") or "")
+
+    if mode == "use_example" and example_prompt:
+        return f"{example_prompt}, {base_prompt}"
+    if trigger_word:
+        return f"{trigger_word}, {base_prompt}"
+    return base_prompt
 
 
 def _get_user_id(request: Request) -> str:
@@ -161,7 +197,7 @@ async def generate_mature_lora(
     user_db_id = _get_user_db_id(request)
 
     # Resolve LoRA preset before charging credits so a bad id fails fast (no charge).
-    lora_configs, trigger_word = await _resolve_lora_preset(
+    lora_configs, prompt_hints = await _resolve_lora_preset(
         data.lora_preset_id, context=data.prompt, applies_to="img2img"
     )
 
@@ -181,14 +217,21 @@ async def generate_mature_lora(
     prompt = data.prompt
 
     # db-managed LoRA preset takes priority; fall back to legacy trigger-word preset
-    if trigger_word:
-        prompt = f"{trigger_word}, {prompt}"
+    if prompt_hints:
+        prompt = _compose_prompt_with_lora(prompt, prompt_hints)
     elif data.lora_id:
         legacy = get_lora_config(data.lora_id)
         if legacy:
             prompt = f"{legacy.trigger_word}, {prompt}"
 
     negative_prompt = data.negative_prompt or NEGATIVE_PROMPTS["default"]
+    if prompt_hints:
+        mode = prompt_hints.get("prompt_template_mode") or "append_trigger"
+        example_negative = _pick_random_template(
+            prompt_hints.get("example_negative_prompt") or ""
+        )
+        if mode == "use_example" and example_negative:
+            negative_prompt = f"{example_negative}, {negative_prompt}"
 
     try:
         task_id = await provider.txt2img_async(
@@ -223,7 +266,7 @@ async def generate_pose_mature(
     user_db_id = _get_user_db_id(request)
 
     # Resolve LoRA preset before charging credits so a bad id fails fast (no charge).
-    lora_configs, trigger_word = await _resolve_lora_preset(
+    lora_configs, prompt_hints = await _resolve_lora_preset(
         data.lora_preset_id, context=data.prompt, applies_to="img2img"
     )
 
@@ -241,9 +284,16 @@ async def generate_pose_mature(
         raise HTTPException(status_code=503, detail="Novita image provider not available")
 
     prompt = data.prompt
-    if trigger_word:
-        prompt = f"{trigger_word}, {prompt}"
+    if prompt_hints:
+        prompt = _compose_prompt_with_lora(prompt, prompt_hints)
     negative_prompt = data.negative_prompt or NEGATIVE_PROMPTS["realistic"]
+    if prompt_hints:
+        mode = prompt_hints.get("prompt_template_mode") or "append_trigger"
+        example_negative = _pick_random_template(
+            prompt_hints.get("example_negative_prompt") or ""
+        )
+        if mode == "use_example" and example_negative:
+            negative_prompt = f"{example_negative}, {negative_prompt}"
 
     try:
         pose_image_base64 = await provider._download_image_base64(data.pose_image_url)
@@ -368,11 +418,11 @@ async def generate_video_wan_character(
 
     prompt = data.get("prompt", "")
     lora_preset_id = data.get("lora_preset_id")
-    _, trigger_word = await _resolve_lora_preset(
+    _, prompt_hints = await _resolve_lora_preset(
         lora_preset_id, context=prompt, applies_to="video"
     )
-    if trigger_word:
-        prompt = f"{trigger_word}, {prompt}"
+    if prompt_hints:
+        prompt = _compose_prompt_with_lora(prompt, prompt_hints)
 
     try:
         from app.services.media import NovitaVideoProvider

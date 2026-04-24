@@ -70,7 +70,7 @@ export default function CharacterCreatePage() {
     backstory: '',
     greeting: '',
     generate_images: true,
-    generate_video: false,
+    generate_video: true,
   });
   
   const [templates, setTemplates] = useState<any[]>([]);

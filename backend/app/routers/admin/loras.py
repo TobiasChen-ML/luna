@@ -21,6 +21,9 @@ class LoRAPresetCreate(BaseModel):
     strength: float = Field(default=0.8, ge=0.0, le=2.0)
     trigger_word: str = Field(default="", max_length=500)
     description: str = Field(default="", max_length=1000)
+    example_prompt: str = Field(default="", max_length=4000)
+    example_negative_prompt: str = Field(default="", max_length=4000)
+    prompt_template_mode: Literal["append_trigger", "use_example"] = "append_trigger"
     applies_to: AppliesTo = "all"
     provider: str = Field(default="novita", max_length=50)
     is_active: bool = True
@@ -32,6 +35,9 @@ class LoRAPresetUpdate(BaseModel):
     strength: Optional[float] = Field(None, ge=0.0, le=2.0)
     trigger_word: Optional[str] = Field(None, max_length=500)
     description: Optional[str] = Field(None, max_length=1000)
+    example_prompt: Optional[str] = Field(None, max_length=4000)
+    example_negative_prompt: Optional[str] = Field(None, max_length=4000)
+    prompt_template_mode: Optional[Literal["append_trigger", "use_example"]] = None
     applies_to: Optional[AppliesTo] = None
     provider: Optional[str] = Field(None, max_length=50)
     is_active: Optional[bool] = None
@@ -80,8 +86,8 @@ async def create_lora(
     now = _utcnow()
     await db.execute(
         """INSERT INTO lora_presets
-           (id, name, model_name, strength, trigger_word, description, applies_to, provider, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, name, model_name, strength, trigger_word, description, example_prompt, example_negative_prompt, prompt_template_mode, applies_to, provider, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             lora_id,
             data.name,
@@ -89,6 +95,9 @@ async def create_lora(
             data.strength,
             data.trigger_word,
             data.description,
+            data.example_prompt,
+            data.example_negative_prompt,
+            data.prompt_template_mode,
             data.applies_to,
             data.provider,
             1 if data.is_active else 0,

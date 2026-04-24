@@ -263,6 +263,28 @@ async def get_routing_templates(request: Request) -> list[dict[str, Any]]:
     ]
 
 
+@router.get("")
+async def list_characters(
+    request: Request,
+    page: int = Query(1),
+    page_size: int = Query(20),
+    top_category: Optional[str] = Query(None),
+    is_official: Optional[bool] = Query(None),
+    is_public: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    user: Optional[User] = Depends(get_optional_user),
+) -> list[dict[str, Any]]:
+    characters, _ = await character_service.list_characters(
+        page=page,
+        page_size=page_size,
+        top_category=top_category,
+        is_official=is_official,
+        is_public=is_public,
+        search=search,
+    )
+    return _filter_characters(characters, authenticated=user is not None)
+
+
 @router.post("", response_model=dict[str, Any])
 async def create_character(request: Request, data: dict[str, Any]) -> dict[str, Any]:
     from app.models.character import CharacterCreate

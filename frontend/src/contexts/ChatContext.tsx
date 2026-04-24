@@ -124,6 +124,16 @@ interface SessionInitData {
   message_id: string | null;
 }
 
+interface SessionInitResponseRaw {
+  session_id?: string;
+  id?: string;
+  is_new?: boolean;
+  scene?: string | null;
+  synopsis?: string | null;
+  opening_message?: string | null;
+  message_id?: string | null;
+}
+
 interface SessionInitCacheEntry {
   promise: Promise<SessionInitData>;
   resolvedAt?: number;
@@ -670,8 +680,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     const promise = api
-      .post<SessionInitData>('/chat/sessions/initialize', { character_id: characterId })
-      .then((r) => r.data);
+      .post<SessionInitResponseRaw>('/chat/sessions/initialize', { character_id: characterId })
+      .then((r) => {
+        const raw = r.data || {};
+        const normalizedSessionId = raw.session_id || raw.id;
+        if (!normalizedSessionId) {
+          throw new Error('Session initialize response missing session id');
+        }
+        return {
+          session_id: normalizedSessionId,
+          is_new: raw.is_new ?? true,
+          scene: raw.scene ?? null,
+          synopsis: raw.synopsis ?? null,
+          opening_message: raw.opening_message ?? null,
+          message_id: raw.message_id ?? null,
+        } satisfies SessionInitData;
+      });
     sessionInitCacheRef.current.set(characterId, { promise });
 
     promise

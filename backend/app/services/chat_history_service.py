@@ -261,19 +261,24 @@ class ChatHistoryService:
         key = f"chat_history:{session_id}"
         
         try:
-            cached = await self.redis.get(key) or {"messages": []}
+            cached = await self.redis.get_json(key)
+            if not isinstance(cached, dict):
+                cached = {}
             messages = cached.get("messages", [])
+            if not isinstance(messages, list):
+                messages = []
+            safe_content = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
             
             messages.append({
                 "id": message_id,
                 "role": role,
-                "content": content,
+                "content": safe_content,
                 "created_at": datetime.utcnow().isoformat(),
             })
             
             messages = messages[-50:]
             
-            await self.redis.set(key, {"messages": messages}, ex=REDIS_HISTORY_TTL)
+            await self.redis.set_json(key, {"messages": messages}, ex=REDIS_HISTORY_TTL)
             self._record_redis_success()
         except Exception as e:
             self._record_redis_failure(session_id, "cache_message", e)
@@ -292,7 +297,7 @@ class ChatHistoryService:
                     for m in messages[-50:]
                 ]
             }
-            await self.redis.set(key, data, ex=REDIS_HISTORY_TTL)
+            await self.redis.set_json(key, data, ex=REDIS_HISTORY_TTL)
             self._record_redis_success()
         except Exception as e:
             self._record_redis_failure(session_id, "cache_messages_bulk", e)
@@ -301,7 +306,7 @@ class ChatHistoryService:
         key = f"chat_history:{session_id}"
         
         try:
-            cached = await self.redis.get(key)
+            cached = await self.redis.get_json(key)
             if cached:
                 self._record_redis_success()
                 return cached.get("messages", [])

@@ -37,6 +37,22 @@ class TestRedisService:
         result = await service.get_json("test_key")
         assert result == {"key": "value"}
 
+    @pytest.mark.asyncio
+    async def test_set_serializes_dict_value(self):
+        from app.services.redis_service import RedisService
+
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=True)
+
+        service = RedisService()
+        service._client = mock_redis
+
+        success = await service.set("test_key", {"k": "v"})
+        assert success is True
+        args, kwargs = mock_redis.set.call_args
+        assert args[0] == "test_key"
+        assert args[1] == '{"k": "v"}'
+
 
 class TestDatabaseService:
     def test_init_db(self):

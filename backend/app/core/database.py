@@ -210,6 +210,20 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_characters_is_public ON characters(is_public);
             CREATE INDEX IF NOT EXISTS idx_characters_popularity ON characters(popularity_score DESC);
 
+            CREATE TABLE IF NOT EXISTS character_script_bindings (
+                character_id TEXT NOT NULL,
+                script_id TEXT NOT NULL,
+                weight INTEGER DEFAULT 1,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (character_id, script_id),
+                FOREIGN KEY (character_id) REFERENCES characters(id),
+                FOREIGN KEY (script_id) REFERENCES script_library(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_character_script_bindings_character ON character_script_bindings(character_id);
+            CREATE INDEX IF NOT EXISTS idx_character_script_bindings_script ON character_script_bindings(script_id);
+
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,

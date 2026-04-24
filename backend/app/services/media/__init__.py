@@ -53,7 +53,7 @@ class LoRAConfig:
 class IPAdapterConfig:
     image_base64: str
     strength: float = 0.8
-    model_name: str = "ip-adapter_sd15.bin"
+    model_name: str = "ip-adapter_sdxl.bin"
 
 
 @dataclass
@@ -75,10 +75,28 @@ class BaseMediaProvider:
     
     async def _download_image_base64(self, image_url: str) -> str:
         import httpx
+        import io
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.get(image_url)
             response.raise_for_status()
-            return base64.b64encode(response.content).decode("utf-8")
+            content = response.content
+            content_type = (response.headers.get("content-type") or "").lower()
+
+            # Novita img2img rejects WEBP input (INVALID_IMAGE_FORMAT).
+            # Normalize unsupported source formats to JPEG before base64 encoding.
+            if "image/webp" in content_type or image_url.lower().split("?", 1)[0].endswith(".webp"):
+                try:
+                    from PIL import Image
+
+                    with Image.open(io.BytesIO(content)) as img:
+                        buf = io.BytesIO()
+                        img.convert("RGB").save(buf, format="JPEG", quality=95)
+                        content = buf.getvalue()
+                    logger.info("Converted WEBP source to JPEG for img2img/IPAdapter request.")
+                except Exception as e:
+                    logger.warning("WEBP->JPEG conversion failed, using raw bytes: %s", e)
+
+            return base64.b64encode(content).decode("utf-8")
 
 
 class NovitaImageProvider(BaseMediaProvider):
@@ -367,7 +385,7 @@ class NovitaImageProvider(BaseMediaProvider):
         payload = {
             "extra": {"response_image_type": "jpeg"},
             "request": {
-                "model_name": model or self.DEFAULT_MODEL_SD15,
+                "model_name": model or self.DEFAULT_MODEL,
                 "prompt": prompt,
                 "negative_prompt": negative_prompt or self.DEFAULT_NEGATIVE_PROMPT,
                 "width": width,
@@ -379,7 +397,7 @@ class NovitaImageProvider(BaseMediaProvider):
                 "sampler_name": "DPM++ 2M",
                 "clip_skip": 1,
                 "ip_adapters": [{
-                    "model_name": "ip-adapter_sd15.bin",
+                    "model_name": "ip-adapter_sdxl.bin",
                     "image_base64": face_base64,
                     "strength": ip_adapter_strength,
                 }]
@@ -528,6 +546,20 @@ class ZImageTurboLoraProvider(NovitaImageProvider):
 
     ENDPOINT = "/async/z-image-turbo-lora"
 
+    @staticmethod
+    def _resolve_lora_path(model_name: str) -> str:
+        """Convert a civitai shorthand to a direct download URL.
+
+        Novita's z-image-turbo-lora endpoint rejects the `civitai:MID@VID`
+        shorthand with `failed to exec task`. It accepts HTTPS URLs pointing
+        at civitai's model download API. Anything else (URLs, Novita-native
+        names) is passed through unchanged.
+        """
+        if model_name.startswith("civitai:") and "@" in model_name:
+            version_id = model_name.split("@", 1)[1]
+            return f"https://civitai.com/api/download/models/{version_id}"
+        return model_name
+
     async def txt2img_async(
         self,
         prompt: str,
@@ -555,7 +587,7 @@ class ZImageTurboLoraProvider(NovitaImageProvider):
         }
         if loras:
             payload["loras"] = [
-                {"path": l.model_name, "scale": l.strength}
+                {"path": self._resolve_lora_path(l.model_name), "scale": l.strength}
                 for l in loras
             ]
 

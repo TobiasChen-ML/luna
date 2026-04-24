@@ -119,6 +119,13 @@ async def lifespan(app: FastAPI):
         print(f"Failed to initialize media providers: {e}")
 
     try:
+        from app.services.llm_service import LLMService
+        await LLMService.get_instance().refresh_providers()
+        print("LLM providers initialized from admin config")
+    except Exception as e:
+        print(f"Failed to initialize LLM providers: {e}")
+
+    try:
         from app.services.scheduler_service import start_scheduler
         start_scheduler()
         print("Scheduler started")

@@ -44,6 +44,9 @@ interface DiscoverCharacter {
   profile_image_url?: string;
   avatar_thumb_url?: string;
   avatar_card_url?: string;
+  mature_image_url?: string;
+  mature_cover_url?: string;
+  mature_video_url?: string;
   preview_video_url?: string | null;
   personality_summary?: string;
   greeting?: string;
@@ -208,22 +211,28 @@ export function LandingPage() {
         const response = await api.get<DiscoverCharacter[]>(`/characters/discover?${params.toString()}`);
         if (Array.isArray(response.data)) {
           const fetchedChars: HomeCharacter[] = response.data
-            .map((c) => ({
-              id: c.id,
-              name: c.first_name || c.name || 'Character',
-              age: c.age,
-              avatarImage: c.avatar_thumb_url || c.avatar_url || c.profile_image_url || '',
-              cardImage: c.avatar_card_url || c.avatar_url || c.profile_image_url || '',
-              previewVideoUrl: c.preview_video_url || null,
-              intro:
-                c.personality_summary ||
-                c.greeting ||
-                c.short_intro ||
-                c.tags?.slice?.(0, 3)?.join?.(', '),
-              description:
-                c.story_synopsis ||
-                c.description,
-            }))
+            .map((c) => {
+              const sfwAvatar = c.avatar_thumb_url || c.avatar_url || c.profile_image_url || '';
+              const sfwCard = c.avatar_card_url || c.avatar_url || c.profile_image_url || '';
+              const nsfwAvatar = c.mature_image_url || sfwAvatar;
+              const nsfwCard = c.mature_cover_url || c.mature_image_url || sfwCard;
+              return {
+                id: c.id,
+                name: c.first_name || c.name || 'Character',
+                age: c.age,
+                avatarImage: isAuthenticated ? nsfwAvatar : sfwAvatar,
+                cardImage: isAuthenticated ? nsfwCard : sfwCard,
+                previewVideoUrl: c.mature_video_url || c.preview_video_url || null,
+                intro:
+                  c.personality_summary ||
+                  c.greeting ||
+                  c.short_intro ||
+                  c.tags?.slice?.(0, 3)?.join?.(', '),
+                description:
+                  c.story_synopsis ||
+                  c.description,
+              };
+            })
             .filter((c: HomeCharacter) => Boolean(c.avatarImage || c.cardImage));
           setCharacters(fetchedChars);
         }
@@ -234,7 +243,7 @@ export function LandingPage() {
       }
     };
     fetchCharacters();
-  }, [activeFilterTag, debouncedSearch]);
+  }, [activeFilterTag, debouncedSearch, isAuthenticated]);
 
   const avatarRow = useMemo(() => characters.slice(0, 10), [characters]);
 

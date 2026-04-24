@@ -30,6 +30,8 @@ class EventType(str, Enum):
     ERROR = "error"
     INTIMACY_UPDATED = "intimacy_updated"
     RELATIONSHIP_UPDATE = "relationship_update"
+    SCRIPT_STATE_UPDATED = "script_state_updated"
+    STORY_COMPLETED = "story_completed"
 
 
 class SSEEvent(BaseModel):
@@ -37,9 +39,12 @@ class SSEEvent(BaseModel):
     data: dict[str, Any]
     timestamp: datetime = datetime.utcnow()
     
-    def to_sse(self) -> str:
+    def to_sse(self) -> dict[str, Any]:
+        # sse-starlette formats dicts via str(data), which would produce
+        # Python-literal single quotes (invalid JSON for frontend JSON.parse).
+        # Always send JSON string payload for SSE `data:` lines.
         import json
-        return f"event: {self.event.value}\ndata: {json.dumps(self.data)}\n\n"
+        return {"event": self.event.value, "data": json.dumps(self.data, ensure_ascii=False)}
 
 
 class TaskStatus(str, Enum):

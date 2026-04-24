@@ -2,7 +2,7 @@
 
 ## Identity
 You are working on **Roxy**, a FastAPI + React 19 AI companion platform.
-Always query the GitNexus knowledge graph before making structural changes.
+Always query the GitNexus knowledge graph before making structural changes. Run `gitnexus_impact({target: "symbol"})` and report blast radius before editing any service or shared module.
 
 ## Hard Constraints (never mutate)
 
@@ -31,11 +31,23 @@ Always query the GitNexus knowledge graph before making structural changes.
 - Functions max ~40 lines, files max ~800 lines
 - Immutable patterns — never mutate existing objects
 
+## GitNexus Knowledge Graph (configured)
+
+Before structural changes, query the knowledge graph:
+- `impact({target: "service_name", direction: "upstream"})` — blast radius analysis
+- `context({name: "symbol"})` — 360° dependency view (callers, callees, processes)
+- `query({query: "keyword"})` — process-grouped search
+- `detect_changes({scope: "all"})` — pre-commit impact check
+- `rename({symbol_name: "old", new_name: "new", dry_run: true})` — safe multi-file rename
+
+Index stats: 13,269 symbols | 30,875 relationships | 563 clusters | 300 flows
+Skills: 20 repo-specific skills in `.claude/skills/generated/` (Services, Routers, Chat, Llm, etc.)
+
 ## Delegation Rules
 1. Delegate ALL file edits to Claude Code
-2. Query GitNexus `get_dependencies()` before any refactor touching services/
+2. Run `gitnexus_impact({target: "symbol"})` before any refactor touching services/ — report blast radius first
 3. Check CLAUDE.md for patterns before inventing new ones
-4. SKILL.md files in each module are authoritative for call chains
+4. SKILL.md files in `.claude/skills/generated/` are authoritative for module call chains
 
 ## Self-Improvement Boundaries
 - Skills accumulated from past sessions may inform approach

@@ -50,6 +50,7 @@ interface Preset {
 
 type LoRAAppliesTo = 'txt2img' | 'img2img' | 'video' | 'all';
 type LoRAFormatType = 'civitai' | 'sdxl';
+type LoRAPromptTemplateMode = 'append_trigger' | 'use_example';
 
 function detectLoraFormat(modelName: string): LoRAFormatType {
   return modelName.startsWith('civitai:') ? 'civitai' : 'sdxl';
@@ -66,6 +67,9 @@ interface LoRAPreset {
   model_name: string;
   strength: number;
   trigger_word: string;
+  example_prompt: string;
+  example_negative_prompt: string;
+  prompt_template_mode: LoRAPromptTemplateMode;
   applies_to: LoRAAppliesTo;
   provider: string;
   is_active: boolean | number;
@@ -76,6 +80,9 @@ const EMPTY_LORA: Omit<LoRAPreset, 'id'> = {
   model_name: '',
   strength: 0.8,
   trigger_word: '',
+  example_prompt: '',
+  example_negative_prompt: '',
+  prompt_template_mode: 'append_trigger',
   applies_to: 'all',
   provider: 'novita',
   is_active: true,
@@ -295,6 +302,9 @@ export default function AdminSettingsPage() {
       model_name: lora.model_name,
       strength: lora.strength,
       trigger_word: lora.trigger_word,
+      example_prompt: lora.example_prompt || '',
+      example_negative_prompt: lora.example_negative_prompt || '',
+      prompt_template_mode: lora.prompt_template_mode || 'append_trigger',
       applies_to: lora.applies_to,
       provider: lora.provider,
       is_active: Boolean(lora.is_active),
@@ -625,7 +635,7 @@ export default function AdminSettingsPage() {
     const modelNamePlaceholder =
       loraFormatType === 'civitai'
         ? 'e.g. civitai:2268008@2617751'
-        : 'e.g. asian_style_44319.safetensors';
+        : 'e.g. 44319 (Novita model id)';
 
     const showFormatSelector = loraForm.applies_to === 'txt2img' || loraForm.applies_to === 'img2img' || appliesTo !== 'video';
 
@@ -760,7 +770,7 @@ export default function AdminSettingsPage() {
                     }}
                     className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white focus:border-pink-500 outline-none"
                   >
-                    <option value="sdxl">Novita SDXL (.safetensors)</option>
+                    <option value="sdxl">Novita SDXL (model id)</option>
                     <option value="civitai">Z-Image-Turbo (civitai:XXXXX@XXXXX)</option>
                   </select>
                   {appliesTo === 'img2img' && loraFormatType === 'civitai' && (
@@ -819,6 +829,40 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setLoraForm((f) => ({ ...f, trigger_word: e.target.value }))}
                   placeholder="e.g. asian style, detailed skin"
                   className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Prompt 模式</label>
+                <select
+                  value={loraForm.prompt_template_mode}
+                  onChange={(e) => setLoraForm((f) => ({ ...f, prompt_template_mode: e.target.value as LoRAPromptTemplateMode }))}
+                  className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white focus:border-pink-500 outline-none"
+                >
+                  <option value="append_trigger">append_trigger（触发词前置）</option>
+                  <option value="use_example">use_example（示例模板）</option>
+                </select>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-400 mb-1">示例正向 Prompt（可选）</label>
+                <textarea
+                  value={loraForm.example_prompt}
+                  onChange={(e) => setLoraForm((f) => ({ ...f, example_prompt: e.target.value }))}
+                  placeholder="可配置多条示例，每行一条；生成时会随机选择一条"
+                  rows={3}
+                  className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none resize-y"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-400 mb-1">示例负向 Prompt（可选）</label>
+                <textarea
+                  value={loraForm.example_negative_prompt}
+                  onChange={(e) => setLoraForm((f) => ({ ...f, example_negative_prompt: e.target.value }))}
+                  placeholder="可配置多条示例，每行一条；生成时会随机选择一条"
+                  rows={3}
+                  className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-pink-500 outline-none resize-y"
                 />
               </div>
 
@@ -902,7 +946,7 @@ export default function AdminSettingsPage() {
                 <span className="mt-0.5">🖼</span>
                 <span>
                   当前使用 <strong>Novita SDXL</strong> 端点，LoRA 需填写{' '}
-                  <code className="bg-blue-900/40 px-1 rounded">model_name.safetensors</code> 格式（Novita 模型名）
+                  <code className="bg-blue-900/40 px-1 rounded">model_id</code>（Novita 模型 ID）
                 </span>
               </div>
             ) : null}
@@ -924,7 +968,7 @@ export default function AdminSettingsPage() {
             <span className="mt-0.5">🖼</span>
             <span>
               图生图固定使用 <strong>Novita SDXL</strong> 端点（<code className="bg-blue-900/40 px-1 rounded">/async/img2img</code>），
-              LoRA 需填写 <code className="bg-blue-900/40 px-1 rounded">model_name.safetensors</code> 格式
+              LoRA 可直接填写 <code className="bg-blue-900/40 px-1 rounded">model_id</code>
             </span>
           </div>
           <div className="space-y-4">

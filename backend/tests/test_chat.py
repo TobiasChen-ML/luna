@@ -75,14 +75,15 @@ class TestChatRouter:
         data = response.json()
         assert "credits" in data
     
-    def test_guest_send(self, client: TestClient):
+    def test_guest_send(self, client: TestClient, mock_character_id: str):
         response = client.post("/api/chat/guest/send", json={
-            "character_id": "char_001",
+            "character_id": mock_character_id,
             "message": "Hello!"
         })
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
+        assert isinstance(data.get("content"), str)
     
     def test_guest_audio_generate(self, client: TestClient):
         response = client.post("/api/chat/guest/audio/generate", json={

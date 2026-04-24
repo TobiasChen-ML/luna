@@ -35,7 +35,8 @@ _SELECTION_SCHEMA = {
 async def _fetch_loras(applies_to: str) -> list[dict]:
     try:
         rows = await db.execute(
-            "SELECT id, name, model_name, strength, trigger_word, description "
+            "SELECT id, name, model_name, strength, trigger_word, description, "
+            "example_prompt, example_negative_prompt, prompt_template_mode "
             "FROM lora_presets "
             "WHERE is_active = 1 AND (applies_to = ? OR applies_to = 'all') AND provider = 'novita'",
             (applies_to,),
@@ -66,7 +67,8 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
     Use the LLM to pick the best LoRA for *context*.
 
     Returns one dict from lora_presets (with id, name, model_name, strength,
-    trigger_word, description), or None if no LoRAs are available.
+    trigger_word, description, example_prompt, example_negative_prompt,
+    prompt_template_mode), or None if no LoRAs are available.
     Falls back to random if the LLM fails or picks an invalid id.
     """
     loras = await _fetch_loras(applies_to)
@@ -100,19 +102,31 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         )
 
         structured = await provider.generate_structured(request, _SELECTION_SCHEMA)
-        chosen_name = structured.data.get("lora_name", "").strip()
+        raw_lora_name = structured.data.get("lora_name")
+        if isinstance(raw_lora_name, str):
+            chosen_name = raw_lora_name.strip()
+        elif raw_lora_name is False or raw_lora_name is None:
+            chosen_name = ""
+        else:
+            chosen_name = str(raw_lora_name).strip()
         reasoning = structured.data.get("reasoning", "")
 
-        if chosen_name in lora_map:
+        # Some LLM calls return boolean false/string "false" for invalid picks.
+        if chosen_name.lower() in {"false", "null", "none", "0"}:
+            chosen_name = ""
+
+        if not chosen_name:
+            logger.warning("[LoraSelector] LLM returned empty lora_name, falling back to random.")
+        elif chosen_name in lora_map:
             logger.info(
                 f"[LoraSelector] LLM chose '{chosen_name}' for applies_to={applies_to}. "
                 f"Reason: {reasoning}"
             )
             return lora_map[chosen_name]
-
-        logger.warning(
-            f"[LoraSelector] LLM returned unknown name '{chosen_name}', falling back to random."
-        )
+        else:
+            logger.warning(
+                f"[LoraSelector] LLM returned unknown name '{chosen_name}', falling back to random."
+            )
     except Exception as e:
         logger.warning(f"[LoraSelector] LLM selection failed: {e}, falling back to random.")
 

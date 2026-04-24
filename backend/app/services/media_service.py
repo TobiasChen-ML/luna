@@ -28,10 +28,17 @@ class MediaService:
     async def refresh_providers(self) -> None:
         config_svc = ConfigService()
         novita_key = await config_svc.get_config_value("NOVITA_API_KEY") or self.settings.novita_api_key
-        novita_base_url = await config_svc.get_config_value("NOVITA_BASE_URL") or NOVITA_DEFAULT_BASE_URL
+        raw_novita_base_url = await config_svc.get_config_value("NOVITA_BASE_URL") or NOVITA_DEFAULT_BASE_URL
+        novita_base_url = self._normalize_novita_base_url(raw_novita_base_url)
         el_api_key = await config_svc.get_config_value("ELEVENLABS_API_KEY") or self.settings.elevenlabs_api_key
         el_base_url = await config_svc.get_config_value("ELEVENLABS_BASE_URL") or ELEVENLABS_DEFAULT_BASE_URL
 
+        if str(raw_novita_base_url).rstrip("/") != novita_base_url:
+            logger.warning(
+                "NOVITA_BASE_URL normalized from '%s' to '%s' for async media endpoints",
+                raw_novita_base_url,
+                novita_base_url,
+            )
         logger.info(f"MediaService refreshing: novita_base_url={novita_base_url}")
 
         new_image: dict = {}
@@ -47,6 +54,22 @@ class MediaService:
         self._video_providers = new_video
         self._audio_providers = new_audio
         logger.info("MediaService providers refreshed from config")
+
+    @staticmethod
+    def _normalize_novita_base_url(base_url: str) -> str:
+        normalized = (base_url or "").strip().rstrip("/")
+        if not normalized:
+            return NOVITA_DEFAULT_BASE_URL
+        if normalized.startswith("https://api.novita.ai") or normalized.startswith("http://api.novita.ai"):
+            if normalized.endswith("/v3"):
+                return normalized
+            if normalized.endswith("/openai/v1"):
+                return normalized[: -len("/openai/v1")] + "/v3"
+            if normalized.endswith("/openai"):
+                return normalized[: -len("/openai")] + "/v3"
+            if normalized.endswith("api.novita.ai"):
+                return normalized + "/v3"
+        return normalized
 
     def get_image_provider(self, name: Optional[str] = None) -> Optional[NovitaImageProvider]:
         if name:

@@ -3,7 +3,7 @@ import logging
 from typing import Optional, AsyncIterator, Any
 from ..core.config import get_settings, get_config_value
 from .llm import LLMRequest, LLMResponse, StructuredResponse, Message, BaseLLMProvider
-from .llm.providers import NovitaLLMProvider, DeepseekProvider
+from .llm.providers import NovitaLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,31 +23,21 @@ class LLMService:
         return cls._instance
     
     def _init_providers(self):
-        if self.settings.novita_api_key:
+        # Prefer explicit NOVITA_API_KEY, but accept LLM_API_KEY for compatibility.
+        novita_key = self.settings.novita_api_key or self.settings.llm_api_key
+        if novita_key:
             self._providers["novita"] = NovitaLLMProvider(
-                api_key=self.settings.novita_api_key,
+                api_key=novita_key,
                 base_url=self.settings.llm_base_url,
                 default_model=self.settings.llm_primary_model
-            )
-            self._providers["novita_fallback"] = NovitaLLMProvider(
-                api_key=self.settings.novita_api_key,
-                base_url=self.settings.llm_base_url,
-                default_model=self.settings.llm_fallback_model
-            )
-        
-        if self.settings.llm_api_key:
-            self._providers["deepseek"] = DeepseekProvider(
-                api_key=self.settings.llm_api_key,
-                default_model=self.settings.llm_structured_model
             )
     
     async def refresh_providers(self) -> None:
         novita_key = await get_config_value("NOVITA_API_KEY", self.settings.novita_api_key)
-        llm_base_url = await get_config_value("LLM_LOCAL_BASE_URL", self.settings.llm_base_url)
+        if not novita_key:
+            novita_key = await get_config_value("LLM_API_KEY", self.settings.llm_api_key)
+        llm_base_url = await get_config_value("LLM_BASE_URL", self.settings.llm_base_url)
         primary_model = await get_config_value("LLM_CHAT_MODEL", self.settings.llm_primary_model)
-        fallback_model = await get_config_value("LLM_ORCHESTRATOR_MODEL", self.settings.llm_fallback_model)
-        llm_api_key = await get_config_value("LLM_API_KEY", self.settings.llm_api_key)
-        structured_model = await get_config_value("LLM_INTENT_MODEL", self.settings.llm_structured_model)
 
         new_providers: dict[str, Any] = {}
         if novita_key:
@@ -55,16 +45,6 @@ class LLMService:
                 api_key=novita_key,
                 base_url=llm_base_url,
                 default_model=primary_model,
-            )
-            new_providers["novita_fallback"] = NovitaLLMProvider(
-                api_key=novita_key,
-                base_url=llm_base_url,
-                default_model=fallback_model,
-            )
-        if llm_api_key:
-            new_providers["deepseek"] = DeepseekProvider(
-                api_key=llm_api_key,
-                default_model=structured_model,
             )
         self._providers = new_providers
         logger.info("LLMService providers refreshed from config")
@@ -101,18 +81,7 @@ class LLMService:
         prov = await self.get_provider(provider)
         if not prov:
             raise ValueError(f"Provider {provider or self.settings.llm_provider} not available")
-        
-        try:
-            return await prov.generate(request)
-        except Exception as e:
-            logger.error(f"Primary provider failed: {e}")
-            
-            fallback = self._providers.get("novita_fallback")
-            if fallback and provider != "novita_fallback":
-                logger.info("Trying fallback provider")
-                return await fallback.generate(request)
-            
-            raise
+        return await prov.generate(request)
     
     async def generate_stream(
         self,
@@ -146,6 +115,19 @@ class LLMService:
                 yield chunk
         except Exception as e:
             logger.error(f"Stream failed: {e}")
+            if isinstance(e, IndexError):
+                logger.warning("Falling back to non-stream response after stream IndexError")
+                fallback_request = LLMRequest(
+                    messages=normalized_messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=False,
+                )
+                fallback_response = await prov.generate(fallback_request)
+                if fallback_response.content:
+                    yield fallback_response.content
+                return
             raise
     
     async def generate_structured(
@@ -154,7 +136,7 @@ class LLMService:
         schema: dict,
         model: Optional[str] = None,
         temperature: float = 0.3,
-        provider: Optional[str] = "deepseek"
+        provider: Optional[str] = None
     ) -> StructuredResponse:
         normalized_messages = []
         for m in messages:
@@ -170,14 +152,19 @@ class LLMService:
             max_tokens=1024
         )
         
-        prov = await self.get_provider(provider)
-        if not prov:
-            prov = await self.get_provider()
-        
-        if not prov:
+        configured_provider = await get_config_value("LLM_PROVIDER", self.settings.llm_provider)
+        preferred_name = provider or configured_provider
+
+        preferred = await self.get_provider(preferred_name)
+        if not preferred:
             raise ValueError("No LLM provider available")
-        
-        return await prov.generate_structured(request, schema)
+
+        prov = preferred
+        try:
+            return await prov.generate_structured(request, schema)
+        except Exception as e:
+            logger.error(f"Structured generation failed on provider={preferred_name or 'default'}: {e}")
+            raise
     
     async def detect_intent(self, user_message: str, context: Optional[dict] = None) -> dict:
         intent_schema = {
@@ -270,7 +257,7 @@ Respond with valid JSON only."""
                 messages, 
                 video_intent_schema,
                 temperature=0.1,
-                provider="deepseek"
+                provider="novita"
             )
             return response.data
         except Exception as e:
@@ -334,7 +321,7 @@ Respond with valid JSON only."""
                 messages,
                 image_intent_schema,
                 temperature=0.1,
-                provider="deepseek"
+                provider="novita"
             )
             return response.data
         except Exception as e:

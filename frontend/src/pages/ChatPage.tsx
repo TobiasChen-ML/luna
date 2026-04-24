@@ -53,6 +53,7 @@ import { AudioFocusProvider } from '@/contexts/AudioFocusContext';
 interface CharacterMediaItem {
   type: 'image' | 'video';
   url: string;
+  label: string;
 }
 
 const CHAT_VOICE_MODE_STORAGE_KEY = 'chat_voice_mode';
@@ -116,6 +117,7 @@ function ChatContent() {
   const [isAdultMode, setIsAdultMode] = useState(true);
   const [isRealtimeCallOpen, setIsRealtimeCallOpen] = useState(false);
   const desktopLayoutRef = useRef<HTMLDivElement | null>(null);
+  const mediaTouchStartXRef = useRef<number | null>(null);
   const desktopNavWidth = isDesktopNavCollapsed ? 82 : 220;
   const { slug } = useParams<{ slug?: string }>();
   // slug-based route: resolve character ID from slug before using it
@@ -179,27 +181,34 @@ function ChatContent() {
 
     const media: CharacterMediaItem[] = [];
     const seen = new Set<string>();
-    const pushUnique = (type: 'image' | 'video', url?: string | null) => {
+    const pushUnique = (type: 'image' | 'video', label: string, url?: string | null) => {
       if (!url) return;
       const cleaned = url.trim();
       if (!cleaned || seen.has(cleaned)) return;
       seen.add(cleaned);
-      media.push({ type, url: cleaned });
+      media.push({ type, url: cleaned, label });
     };
 
-    // Keep first image source aligned with chat list avatar logic.
-    pushUnique('image', currentCharacter.profile_image_url || currentCharacter.media_urls?.avatar);
-    pushUnique('image', currentCharacter.profile_image_url);
-    pushUnique('image', currentCharacter.media_urls?.avatar);
-    (currentCharacter.media_urls?.gallery || []).forEach((url) => pushUnique('image', url));
-    pushUnique('video', currentCharacter.preview_video_url);
+    const currentCharacterWithMature = currentCharacter as Character & {
+      mature_image_url?: string | null;
+      mature_cover_url?: string | null;
+      mature_video_url?: string | null;
+    };
 
-    const rawVideoUrls = (currentCharacter as any).profile_videos || (currentCharacter as any).video_url;
-    pushUnique('video', rawVideoUrls?.IDLE_VIDEO_URL);
-    pushUnique('video', rawVideoUrls?.TALKING_VIDEO_URL);
+    // Guests: only SFW avatar. Authenticated users: SFW + Mature image + Mature video.
+    pushUnique('image', 'SFW Avatar', currentCharacter.profile_image_url || currentCharacter.media_urls?.avatar);
+
+    if (isAuthenticated) {
+      pushUnique(
+        'image',
+        'NSFW Avatar',
+        currentCharacterWithMature.mature_image_url || currentCharacterWithMature.mature_cover_url
+      );
+      pushUnique('video', 'NSFW Video', currentCharacterWithMature.mature_video_url);
+    }
 
     return media;
-  }, [currentCharacter]);
+  }, [currentCharacter, isAuthenticated]);
 
   useEffect(() => {
     setMediaIndex(0);
@@ -207,6 +216,35 @@ function ChatContent() {
 
   const activeMedia =
     mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))] || null;
+
+  const showPreviousMedia = () => {
+    if (mediaItems.length <= 1) return;
+    setMediaIndex((prev) => (prev - 1 + mediaItems.length) % mediaItems.length);
+  };
+
+  const showNextMedia = () => {
+    if (mediaItems.length <= 1) return;
+    setMediaIndex((prev) => (prev + 1) % mediaItems.length);
+  };
+
+  const handleMediaTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    mediaTouchStartXRef.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleMediaTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = mediaTouchStartXRef.current;
+    mediaTouchStartXRef.current = null;
+    if (startX == null || mediaItems.length <= 1) return;
+    const endX = event.changedTouches[0]?.clientX ?? startX;
+    const deltaX = endX - startX;
+    const swipeThreshold = 40;
+    if (Math.abs(deltaX) < swipeThreshold) return;
+    if (deltaX > 0) {
+      showPreviousMedia();
+    } else {
+      showNextMedia();
+    }
+  };
   const safeCharacterAvatar = getSafeAvatarUrl(
     currentCharacter?.profile_image_url || currentCharacter?.media_urls?.avatar
   );
@@ -1045,7 +1083,11 @@ function ChatContent() {
           </div>
 
           <div className="p-4 flex-1 overflow-y-auto space-y-4">
-            <div className="relative rounded-xl overflow-hidden bg-black border border-white/10">
+            <div
+              className="relative rounded-xl overflow-hidden bg-black border border-white/10"
+              onTouchStart={handleMediaTouchStart}
+              onTouchEnd={handleMediaTouchEnd}
+            >
               {activeMedia ? (
                 activeMedia.type === 'video' ? (
                   <video
@@ -1069,16 +1111,14 @@ function ChatContent() {
               {mediaItems.length > 1 && (
                 <>
                   <button
-                    onClick={() =>
-                      setMediaIndex((prev) => (prev - 1 + mediaItems.length) % mediaItems.length)
-                    }
+                    onClick={showPreviousMedia}
                     className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 border border-white/20 text-white flex items-center justify-center hover:bg-black/80"
                     title="Previous media"
                   >
                     <ChevronLeft size={16} />
                   </button>
                   <button
-                    onClick={() => setMediaIndex((prev) => (prev + 1) % mediaItems.length)}
+                    onClick={showNextMedia}
                     className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 border border-white/20 text-white flex items-center justify-center hover:bg-black/80"
                     title="Next media"
                   >
@@ -1092,7 +1132,7 @@ function ChatContent() {
               <div className="text-xs text-zinc-400 flex items-center gap-2">
                 {activeMedia.type === 'video' ? <Video size={14} /> : <Image size={14} />}
                 <span>
-                  {activeMedia.type === 'video' ? 'Video' : 'Image'} {mediaIndex + 1}/{mediaItems.length || 1}
+                  {activeMedia.label} {mediaIndex + 1}/{mediaItems.length || 1}
                 </span>
               </div>
             )}

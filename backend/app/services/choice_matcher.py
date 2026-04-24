@@ -172,7 +172,7 @@ Respond with valid JSON only."""
                 messages,
                 schema,
                 temperature=0.1,
-                provider="deepseek"
+                provider="novita"
             )
 
             data = response.data

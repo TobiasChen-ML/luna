@@ -41,6 +41,24 @@ interface Character {
   meta_description?: string;
   is_public?: boolean;
   lifecycle_status?: string;
+  popularity_score?: number;
+  chat_count?: number;
+  view_count?: number;
+  created_at?: string;
+}
+
+interface StoryOption {
+  id: string;
+  title: string;
+  status: string;
+  age_rating?: string;
+}
+
+interface StoryBinding {
+  script_id: string;
+  weight: number;
+  is_active: boolean;
+  title?: string;
 }
 
 const PERSONALITY_OPTIONS = [
@@ -72,6 +90,12 @@ export default function CharacterEditPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [storyOptions, setStoryOptions] = useState<StoryOption[]>([]);
+  const [bindings, setBindings] = useState<StoryBinding[]>([]);
+  const [bindingsLoading, setBindingsLoading] = useState(false);
+  const [bindingsSaving, setBindingsSaving] = useState(false);
+  const [bindingsAutoMatching, setBindingsAutoMatching] = useState(false);
+  const [newBindingScriptId, setNewBindingScriptId] = useState('');
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [formData, setFormData] = useState<Character>({
@@ -89,8 +113,10 @@ export default function CharacterEditPage() {
   useEffect(() => {
     if (characterId) {
       fetchCharacter();
+      fetchStoryBindings(characterId);
     }
     fetchVoices();
+    fetchStoryOptions();
   }, [characterId]);
 
   const fetchVoices = async () => {
@@ -116,6 +142,35 @@ export default function CharacterEditPage() {
       setMessage({ type: 'error', text: '加载角色失败' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStoryOptions = async () => {
+    try {
+      const response = await api.get('/admin/api/stories/options', {
+        params: { status: 'published', page_size: 500 },
+      });
+      setStoryOptions(response.data?.items || []);
+    } catch {
+      setStoryOptions([]);
+    }
+  };
+
+  const fetchStoryBindings = async (id: string) => {
+    setBindingsLoading(true);
+    try {
+      const response = await api.get(`/admin/api/characters/${id}/story-bindings`);
+      const items = (response.data?.items || []) as StoryBinding[];
+      setBindings(items.map((item) => ({
+        script_id: item.script_id,
+        weight: Number(item.weight || 1),
+        is_active: item.is_active !== false,
+        title: item.title,
+      })));
+    } catch {
+      setBindings([]);
+    } finally {
+      setBindingsLoading(false);
     }
   };
 
@@ -168,7 +223,7 @@ export default function CharacterEditPage() {
     }
   };
 
-  const handleRegenerateNsfw = async (withVideo = false) => {
+  const handleRegenerateMatureImage = async () => {
     setRegenerating(true);
     setMessage(null);
 
@@ -176,20 +231,37 @@ export default function CharacterEditPage() {
       await api.post(
         `/admin/api/characters/${characterId}/regenerate-mature`,
         null,
-        { params: { generate_video: withVideo } }
+        { params: { generate_video: false } }
       );
-      setMessage({ type: 'success', text: `Mature ${withVideo ? '图片+视频' : '图片'}重新生成成功` });
+      setMessage({ type: 'success', text: 'Mature image regenerated successfully' });
       fetchCharacter();
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || 'Mature生成失败',
+        text: error.response?.data?.detail || 'Mature image generation failed',
       });
     } finally {
       setRegenerating(false);
     }
   };
-  
+
+  const handleRegenerateMatureVideo = async () => {
+    setRegenerating(true);
+    setMessage(null);
+
+    try {
+      await api.post(`/admin/api/characters/${characterId}/regenerate-video`);
+      setMessage({ type: 'success', text: 'Mature video regenerated successfully' });
+      fetchCharacter();
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.detail || 'Mature video generation failed',
+      });
+    } finally {
+      setRegenerating(false);
+    }
+  };  
   const handleAIFill = async () => {
     setSaving(true);
     setMessage(null);
@@ -222,6 +294,79 @@ export default function CharacterEditPage() {
       });
     }
   };
+
+  const addBinding = () => {
+    if (!newBindingScriptId) return;
+    if (bindings.some((b) => b.script_id === newBindingScriptId)) return;
+    const selected = storyOptions.find((item) => item.id === newBindingScriptId);
+    setBindings((prev) => [
+      ...prev,
+      {
+        script_id: newBindingScriptId,
+        weight: 1,
+        is_active: true,
+        title: selected?.title || newBindingScriptId,
+      },
+    ]);
+    setNewBindingScriptId('');
+  };
+
+  const removeBinding = (scriptId: string) => {
+    setBindings((prev) => prev.filter((item) => item.script_id !== scriptId));
+  };
+
+  const updateBinding = (scriptId: string, patch: Partial<StoryBinding>) => {
+    setBindings((prev) =>
+      prev.map((item) => (item.script_id === scriptId ? { ...item, ...patch } : item))
+    );
+  };
+
+  const saveBindings = async () => {
+    if (!characterId) return;
+    setBindingsSaving(true);
+    setMessage(null);
+    try {
+      await api.put(`/admin/api/characters/${characterId}/story-bindings`, {
+        items: bindings.map((item) => ({
+          script_id: item.script_id,
+          weight: Number(item.weight || 1),
+          is_active: !!item.is_active,
+        })),
+      });
+      setMessage({ type: 'success', text: 'Story bindings saved successfully' });
+      await fetchStoryBindings(characterId);
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.detail || '剧本绑定保存失败',
+      });
+    } finally {
+      setBindingsSaving(false);
+    }
+  };
+
+  const autoMatchBindings = async () => {
+    if (!characterId) return;
+    setBindingsAutoMatching(true);
+    setMessage(null);
+    try {
+      const response = await api.post(`/admin/api/characters/${characterId}/story-bindings/auto-match`, {
+        count: 5,
+        apply: true,
+        append: true,
+      });
+      const count = Number(response.data?.count || 0);
+      setMessage({ type: 'success', text: `Auto-configured and added ${count} scripts` });
+      await fetchStoryBindings(characterId);
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.detail || 'Auto-config failed',
+      });
+    } finally {
+      setBindingsAutoMatching(false);
+    }
+  };
   
   if (loading) {
     return (
@@ -234,7 +379,7 @@ export default function CharacterEditPage() {
   if (!character) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-zinc-400">角色不存在</div>
+        <div className="text-zinc-400">Character not found</div>
       </div>
     );
   }
@@ -314,7 +459,7 @@ export default function CharacterEditPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">名字（显示用）</label>
+                  <label className="block text-sm text-zinc-400 mb-2">Display Name</label>
                   <input
                     type="text"
                     value={formData.first_name || ''}
@@ -366,7 +511,7 @@ export default function CharacterEditPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">简介</label>
+                  <label className="block text-sm text-zinc-400 mb-2">Description</label>
                   <textarea
                     value={formData.description || ''}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -376,18 +521,18 @@ export default function CharacterEditPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">性格简介</label>
+                  <label className="block text-sm text-zinc-400 mb-2">Personality Summary</label>
                   <input
                     type="text"
                     value={formData.personality_summary || ''}
                     onChange={(e) => setFormData({ ...formData, personality_summary: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    placeholder="简短的性格描述，用于卡片展示"
+                    placeholder="Short personality summary for card display"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">性格标签</label>
+                  <label className="block text-sm text-zinc-400 mb-2">鎬ф牸鏍囩</label>
                   <div className="flex flex-wrap gap-2">
                     {PERSONALITY_OPTIONS.map((trait) => (
                       <button
@@ -416,7 +561,7 @@ export default function CharacterEditPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">开场白</label>
+                  <label className="block text-sm text-zinc-400 mb-2">寮€场白</label>
                   <textarea
                     value={formData.greeting || ''}
                     onChange={(e) => setFormData({ ...formData, greeting: e.target.value })}
@@ -426,7 +571,7 @@ export default function CharacterEditPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">系统提示词</label>
+                  <label className="block text-sm text-zinc-400 mb-2">System Prompt</label>
                   <textarea
                     value={formData.system_prompt || ''}
                     onChange={(e) => setFormData({ ...formData, system_prompt: e.target.value })}
@@ -442,13 +587,13 @@ export default function CharacterEditPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">SEO标题</label>
+                  <label className="block text-sm text-zinc-400 mb-2">SEO鏍囬</label>
                   <input
                     type="text"
                     value={formData.meta_title || ''}
                     onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    placeholder="SEO标题"
+                    placeholder="SEO鏍囬"
                   />
                 </div>
                 
@@ -505,24 +650,22 @@ export default function CharacterEditPage() {
 
             <div className="bg-zinc-900 border border-red-900/40 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-red-400">Mature 内容</h2>
+                <h2 className="text-lg font-semibold text-red-400">Mature 鍐呭</h2>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleRegenerateNsfw(false)}
+                    onClick={handleRegenerateMatureImage}
                     disabled={regenerating}
                     className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg text-xs text-red-300 flex items-center gap-1 disabled:opacity-50"
                   >
                     {regenerating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    重生成图片
-                  </button>
+                    閲嶇敓鎴愬浘鐗?                  </button>
                   <button
-                    onClick={() => handleRegenerateNsfw(true)}
+                    onClick={handleRegenerateMatureVideo}
                     disabled={regenerating}
                     className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg text-xs text-red-300 flex items-center gap-1 disabled:opacity-50"
                   >
                     {regenerating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    重生成图片+视频
-                  </button>
+                    閲嶇敓鎴愯棰?                  </button>
                 </div>
               </div>
 
@@ -538,7 +681,7 @@ export default function CharacterEditPage() {
                       />
                     ) : (
                       <div className="w-full aspect-square bg-zinc-800 rounded-lg flex items-center justify-center">
-                        <span className="text-xs text-zinc-600">未生成</span>
+                        <span className="text-xs text-zinc-600">Not generated</span>
                       </div>
                     )}
                   </div>
@@ -552,7 +695,7 @@ export default function CharacterEditPage() {
                       />
                     ) : (
                       <div className="w-full aspect-square bg-zinc-800 rounded-lg flex items-center justify-center">
-                        <span className="text-xs text-zinc-600">未生成</span>
+                        <span className="text-xs text-zinc-600">Not generated</span>
                       </div>
                     )}
                   </div>
@@ -570,7 +713,7 @@ export default function CharacterEditPage() {
                     />
                   ) : (
                     <div className="w-full h-24 bg-zinc-800 rounded-lg flex items-center justify-center">
-                      <span className="text-xs text-zinc-600">未生成</span>
+                      <span className="text-xs text-zinc-600">Not generated</span>
                     </div>
                   )}
                 </div>
@@ -578,11 +721,11 @@ export default function CharacterEditPage() {
             </div>
             
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-              <h2 className="text-lg font-semibold mb-4">状态设置</h2>
+              <h2 className="text-lg font-semibold mb-4">Status Settings</h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">生命周期状态</label>
+                  <label className="block text-sm text-zinc-400 mb-2">Lifecycle Status</label>
                   <select
                     value={formData.lifecycle_status || 'active'}
                     onChange={(e) => setFormData({ ...formData, lifecycle_status: e.target.value })}
@@ -601,8 +744,101 @@ export default function CharacterEditPage() {
                     onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
                     className="rounded border-zinc-600"
                   />
-                  <span className="text-sm text-zinc-300">公开可见</span>
+                  <span className="text-sm text-zinc-300">鍏紑鍙</span>
                 </label>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">剧本绑定（多选）</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={autoMatchBindings}
+                    disabled={bindingsAutoMatching || bindingsLoading}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-medium disabled:opacity-50"
+                  >
+                    {bindingsAutoMatching ? '自动匹配中...' : '自动匹配 +5'}
+                  </button>
+                  <button
+                    onClick={saveBindings}
+                    disabled={bindingsSaving || bindingsLoading}
+                    className="px-3 py-1.5 bg-pink-600 hover:bg-pink-500 rounded text-xs font-medium disabled:opacity-50"
+                  >
+                    {bindingsSaving ? '保存中...' : '保存绑定'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <select
+                    value={newBindingScriptId}
+                    onChange={(e) => setNewBindingScriptId(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm"
+                  >
+                    <option value="">选择一个已发布剧本</option>
+                    {storyOptions.map((story) => (
+                      <option key={story.id} value={story.id}>
+                        {story.title} ({story.id})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addBinding}
+                    disabled={!newBindingScriptId}
+                    className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm disabled:opacity-50"
+                  >
+                    添加
+                  </button>
+                </div>
+
+                {bindingsLoading ? (
+                  <div className="text-sm text-zinc-400">加载中...</div>
+                ) : bindings.length === 0 ? (
+                  <div className="text-sm text-zinc-500">暂无绑定剧本，聊天时不会触发随机剧本。</div>
+                ) : (
+                  <div className="space-y-2">
+                    {bindings.map((binding) => (
+                      <div key={binding.script_id} className="p-3 bg-zinc-800/60 rounded-lg space-y-2">
+                        <div className="text-sm text-zinc-200 break-all">{binding.title || binding.script_id}</div>
+                        <div className="text-xs text-zinc-500 break-all">{binding.script_id}</div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-xs text-zinc-400">权重</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={1000}
+                            value={binding.weight}
+                            onChange={(e) =>
+                              updateBinding(binding.script_id, {
+                                weight: Number.parseInt(e.target.value || '1', 10) || 1,
+                              })
+                            }
+                            className="w-24 px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-sm"
+                          />
+                          <label className="flex items-center gap-1 text-xs text-zinc-300">
+                            <input
+                              type="checkbox"
+                              checked={binding.is_active}
+                              onChange={(e) =>
+                                updateBinding(binding.script_id, { is_active: e.target.checked })
+                              }
+                            />
+                            启用
+                          </label>
+                          <button
+                            onClick={() => removeBinding(binding.script_id)}
+                            className="ml-auto p-1.5 text-red-400 hover:bg-zinc-700 rounded"
+                            title="移除绑定"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -622,7 +858,7 @@ export default function CharacterEditPage() {
                       {voices.map((v) => (
                         <option key={v.id} value={v.provider_voice_id}>
                           {v.display_name || v.name}
-                          {' '}({v.provider === 'elevenlabs' ? 'EL' : v.provider} · {v.gender === 'female' ? '女' : v.gender === 'male' ? '男' : '中性'} · {v.provider_voice_id})
+                          {' '}({v.provider === 'elevenlabs' ? 'EL' : v.provider} / {v.gender === 'female' ? 'Female' : v.gender === 'male' ? 'Male' : 'Neutral'} / {v.provider_voice_id})
                         </option>
                       ))}
                     </select>
@@ -670,3 +906,4 @@ export default function CharacterEditPage() {
     </div>
   );
 }
+

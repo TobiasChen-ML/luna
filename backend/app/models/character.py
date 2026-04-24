@@ -197,7 +197,7 @@ class CharacterBatchGenerate(BaseModel):
     age_min: Optional[int] = Field(20, ge=18)
     age_max: Optional[int] = Field(30, le=99)
     generate_images: bool = True
-    generate_video: bool = False
+    generate_video: bool = True
     optimize_seo: bool = True
 
 

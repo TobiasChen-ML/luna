@@ -22,9 +22,9 @@ class Settings(BaseSettings):
 
     llm_provider: str = "novita"
     llm_api_key: Optional[str] = None
-    llm_base_url: str = "https://api.novita.ai/openai"
-    llm_primary_model: str = "meta-llama/llama-3.3-70b-instruct"
-    llm_fallback_model: str = "sao10k/l3-70b-euryale-v2.2"
+    llm_base_url: str = "https://api.novita.ai/openai/v1"
+    llm_primary_model: str = "sao10k/l3-8b-lunaris"
+    llm_fallback_model: str = "sao10k/l3-8b-lunaris"
     llm_structured_model: str = "deepseek/deepseek-v3.2"
     llm_timeout: int = 120
 
@@ -159,8 +159,8 @@ ENV_TO_SETTINGS_MAP = {
     "LLM_API_KEY": "llm_api_key",
     "LLM_BASE_URL": "llm_base_url",
     "LLM_CHAT_MODEL": "llm_primary_model",
-    "LLM_ORCHESTRATOR_MODEL": "llm_primary_model",
-    "LLM_INTENT_MODEL": "llm_primary_model",
+    "LLM_ORCHESTRATOR_MODEL": "llm_fallback_model",
+    "LLM_INTENT_MODEL": "llm_structured_model",
     "LLM_LOCAL_BASE_URL": "local_model_url",
     "NOVITA_API_KEY": "novita_api_key",
     "NOVITA_BASE_URL": "novita_base_url",

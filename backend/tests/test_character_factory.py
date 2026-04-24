@@ -291,6 +291,87 @@ class TestCharacterFactoryMatureFallbacks:
         mock_video.assert_awaited_once()
         assert mock_video.call_args[0][1] == "https://example.com/mature-cover.png"
 
+    @pytest.mark.asyncio
+    async def test_generate_character_images_retries_mature_prompt_three_times(self):
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+        profile = {
+            "name": "Retry Character",
+            "age": 25,
+            "ethnicity": "asian",
+            "occupation": "college_student",
+            "personality_tags": ["playful"],
+        }
+
+        novita_provider = MagicMock()
+        novita_provider.txt2img_async = AsyncMock(return_value="task_avatar")
+        novita_provider.wait_for_task = AsyncMock(
+            return_value=MagicMock(image_url="https://novita.example/avatar.png")
+        )
+
+        with patch.object(factory, "_get_txt2img_provider", new_callable=AsyncMock) as mock_provider:
+            with patch.object(factory, "_select_lora_from_db", new_callable=AsyncMock) as mock_select_lora:
+                with patch.object(factory, "_generate_mature_with_ipadapter", new_callable=AsyncMock) as mock_mature:
+                    with patch("app.services.character_factory.storage_service") as mock_storage:
+                        mock_provider.return_value = novita_provider
+                        mock_select_lora.return_value = []
+                        mock_mature.side_effect = [
+                            None,
+                            None,
+                            "https://r2.example.com/mature-final.png",
+                        ]
+                        mock_storage.upload_from_url = AsyncMock(
+                            return_value="https://r2.example.com/avatar.png"
+                        )
+
+                        images = await factory._generate_character_images(profile)
+
+        assert images["mature_image_url"] == "https://r2.example.com/mature-final.png"
+        assert images["mature_cover_url"] == "https://r2.example.com/mature-final.png"
+        assert mock_mature.await_count == 3
+        personalities = [call.kwargs["personality"] for call in mock_mature.await_args_list]
+        assert personalities[0] == "playful"
+        assert "seductive" in personalities[1]
+        assert "intimate lighting" in personalities[2]
+
+    @pytest.mark.asyncio
+    async def test_generate_character_images_mature_missing_after_three_retries(self):
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+        profile = {
+            "name": "Retry Fail Character",
+            "age": 24,
+            "ethnicity": "latina",
+            "occupation": "college_student",
+            "personality_tags": ["confident"],
+        }
+
+        novita_provider = MagicMock()
+        novita_provider.txt2img_async = AsyncMock(return_value="task_avatar")
+        novita_provider.wait_for_task = AsyncMock(
+            return_value=MagicMock(image_url="https://novita.example/avatar.png")
+        )
+
+        with patch.object(factory, "_get_txt2img_provider", new_callable=AsyncMock) as mock_provider:
+            with patch.object(factory, "_select_lora_from_db", new_callable=AsyncMock) as mock_select_lora:
+                with patch.object(factory, "_generate_mature_with_ipadapter", new_callable=AsyncMock) as mock_mature:
+                    with patch("app.services.character_factory.storage_service") as mock_storage:
+                        mock_provider.return_value = novita_provider
+                        mock_select_lora.return_value = []
+                        mock_mature.side_effect = [None, None, None]
+                        mock_storage.upload_from_url = AsyncMock(
+                            return_value="https://r2.example.com/avatar.png"
+                        )
+
+                        images = await factory._generate_character_images(profile)
+
+        assert images["avatar_url"] == "https://r2.example.com/avatar.png"
+        assert "mature_image_url" not in images
+        assert "mature_cover_url" not in images
+        assert mock_mature.await_count == 3
+
 
 class TestCharacterFactoryRegenerateImages:
     """Test regenerate_images functionality"""

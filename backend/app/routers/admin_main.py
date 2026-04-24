@@ -348,8 +348,8 @@ async def create_character_api(
     data: dict[str, Any],
     admin: User = Depends(get_admin_user)
 ) -> dict[str, Any]:
-    generate_images = data.pop("generate_images", False)
-    generate_video = data.pop("generate_video", False)
+    generate_images = data.pop("generate_images", True)
+    generate_video = data.pop("generate_video", True)
 
     if generate_images:
         from app.services.character_factory import character_factory
@@ -441,6 +441,364 @@ async def update_character_api(
     return character
 
 
+@admin_api_router.get("/characters/{character_id}/story-bindings")
+async def get_character_story_bindings_api(
+    request: Request,
+    character_id: str,
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.core.database import db
+    from app.services.character_service import character_service
+
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    rows = await db.execute(
+        """
+        SELECT b.character_id, b.script_id, b.weight, b.is_active,
+               s.title, s.status, s.age_rating
+        FROM character_script_bindings b
+        LEFT JOIN script_library s ON s.id = b.script_id
+        WHERE b.character_id = ?
+        ORDER BY b.weight DESC, b.script_id ASC
+        """,
+        (character_id,),
+        fetch_all=True,
+    )
+
+    bindings = []
+    for row in rows or []:
+        bindings.append({
+            "character_id": row.get("character_id"),
+            "script_id": row.get("script_id"),
+            "weight": row.get("weight", 1),
+            "is_active": bool(row.get("is_active", 1)),
+            "title": row.get("title") or row.get("script_id"),
+            "status": row.get("status"),
+            "age_rating": row.get("age_rating"),
+        })
+
+    return {"items": bindings, "total": len(bindings)}
+
+
+@admin_api_router.put("/characters/{character_id}/story-bindings")
+async def update_character_story_bindings_api(
+    request: Request,
+    character_id: str,
+    data: dict[str, Any],
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.core.database import db
+    from app.services.character_service import character_service
+
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="items must be a list")
+
+    cleaned: list[tuple[str, int, int]] = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        script_id = str(item.get("script_id") or "").strip()
+        if not script_id or script_id in seen:
+            continue
+        seen.add(script_id)
+        weight_raw = item.get("weight", 1)
+        try:
+            weight = int(weight_raw)
+        except (ValueError, TypeError):
+            weight = 1
+        weight = max(1, min(weight, 1000))
+        is_active = 1 if item.get("is_active", True) else 0
+        cleaned.append((script_id, weight, is_active))
+
+    if cleaned:
+        placeholders = ",".join("?" for _ in cleaned)
+        valid_rows = await db.execute(
+            f"SELECT id FROM script_library WHERE id IN ({placeholders})",
+            tuple(script_id for script_id, _, _ in cleaned),
+            fetch_all=True,
+        )
+        valid_ids = {r.get("id") for r in (valid_rows or [])}
+        cleaned = [item for item in cleaned if item[0] in valid_ids]
+
+    await db.execute(
+        "DELETE FROM character_script_bindings WHERE character_id = ?",
+        (character_id,),
+    )
+
+    if cleaned:
+        now = datetime.now().isoformat()
+        for script_id, weight, is_active in cleaned:
+            await db.execute(
+                """
+                INSERT INTO character_script_bindings
+                (character_id, script_id, weight, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (character_id, script_id, weight, is_active, now, now),
+            )
+
+    return {"success": True, "count": len(cleaned)}
+
+
+@admin_api_router.get("/stories/options")
+async def list_story_options_api(
+    request: Request,
+    status: str = "published",
+    page_size: int = 500,
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.core.database import db
+
+    page_size = max(1, min(page_size, 1000))
+    rows = await db.execute(
+        """
+        SELECT id, title, status, age_rating
+        FROM script_library
+        WHERE (? = '' OR status = ?)
+        ORDER BY updated_at DESC
+        LIMIT ?
+        """,
+        (status, status, page_size),
+        fetch_all=True,
+    )
+
+    items = [{
+        "id": row.get("id"),
+        "title": row.get("title") or row.get("id"),
+        "status": row.get("status"),
+        "age_rating": row.get("age_rating"),
+    } for row in (rows or [])]
+    return {"items": items, "total": len(items)}
+
+
+@admin_api_router.post("/characters/{character_id}/story-bindings/auto-match")
+async def auto_match_character_story_bindings_api(
+    request: Request,
+    character_id: str,
+    data: dict[str, Any],
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.core.database import db
+    from app.services.character_service import character_service
+    import json
+    import re
+
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    count_raw = data.get("count", data.get("limit", 5))
+    try:
+        limit = int(count_raw)
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(limit, 20))
+    apply_result = bool(data.get("apply", True))
+    mode = str(data.get("mode") or "").strip().lower()
+    append_raw = data.get("append")
+    if isinstance(append_raw, bool):
+        append_mode = append_raw
+    elif mode:
+        append_mode = mode != "replace"
+    else:
+        append_mode = True
+
+    def _to_set(raw: Any) -> set[str]:
+        if isinstance(raw, list):
+            return {str(x).strip().lower() for x in raw if str(x).strip()}
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return {str(x).strip().lower() for x in parsed if str(x).strip()}
+            except json.JSONDecodeError:
+                pass
+        return set()
+
+    char_personality_tags = _to_set(character.get("personality_tags"))
+    char_blob = " ".join([
+        str(character.get("name") or ""),
+        str(character.get("description") or ""),
+        str(character.get("personality_summary") or ""),
+        str(character.get("backstory") or ""),
+        str(character.get("greeting") or ""),
+        str(character.get("system_prompt") or ""),
+        " ".join(char_personality_tags),
+        str(character.get("top_category") or ""),
+        str(character.get("occupation") or ""),
+    ]).lower()
+
+    char_gender = str(character.get("gender") or "").lower()
+    char_occupation = str(character.get("occupation") or "").lower().strip()
+
+    emotion_hints: dict[str, list[str]] = {
+        "sweet": ["sweet", "gentle", "caring", "romantic", "温柔", "甜", "治愈"],
+        "healing": ["healing", "warm", "care", "治愈", "温暖"],
+        "comedy": ["funny", "playful", "joke", "搞笑", "轻松"],
+        "suspense": ["mystery", "mysterious", "suspense", "悬疑", "推理"],
+        "dark": ["dark", "obsessive", "yandere", "病娇", "暗黑", "占有"],
+        "angst": ["angst", "hurt", "虐", "痛苦", "纠葛"],
+        "revenge": ["revenge", "复仇"],
+        "rebirth": ["rebirth", "重生"],
+    }
+
+    relation_hints: dict[str, list[str]] = {
+        "boss_subordinate": ["boss", "office", "职场", "上司"],
+        "teacher_student": ["teacher", "school", "校园", "老师"],
+        "childhood_friend": ["childhood", "friend", "青梅竹马", "童年"],
+        "enemy_to_lovers": ["enemy", "rival", "对手", "相爱相杀"],
+        "strangers_to_lovers": ["stranger", "陌生", "邂逅"],
+        "idol_fan": ["idol", "fan", "偶像", "粉丝"],
+    }
+
+    existing_rows = await db.execute(
+        """
+        SELECT script_id
+        FROM character_script_bindings
+        WHERE character_id = ?
+        """,
+        (character_id,),
+        fetch_all=True,
+    )
+    existing_bound_ids = {
+        str(row.get("script_id") or "").strip()
+        for row in (existing_rows or [])
+        if str(row.get("script_id") or "").strip()
+    }
+
+    rows = await db.execute(
+        """
+        SELECT id, title, summary, emotion_tones, relation_types, character_gender,
+               profession, era, age_rating
+        FROM script_library
+        WHERE status = 'published'
+        ORDER BY updated_at DESC
+        LIMIT 1200
+        """,
+        fetch_all=True,
+    )
+
+    candidates: list[dict[str, Any]] = []
+    token_words = set(re.findall(r"[a-z]{4,}", char_blob))
+    token_words = {w for w in token_words if w not in {"this", "that", "with", "from", "have", "your", "character"}}
+
+    for row in rows or []:
+        script_id = row.get("id")
+        if not script_id:
+            continue
+        if append_mode and script_id in existing_bound_ids:
+            continue
+
+        emotion_set = _to_set(row.get("emotion_tones"))
+        relation_set = _to_set(row.get("relation_types"))
+        script_gender = str(row.get("character_gender") or "").lower()
+        script_profession = str(row.get("profession") or "").lower()
+        script_blob = " ".join([
+            str(row.get("title") or ""),
+            str(row.get("summary") or ""),
+            script_profession,
+            str(row.get("era") or ""),
+            " ".join(emotion_set),
+            " ".join(relation_set),
+        ]).lower()
+
+        score = 0.0
+
+        if char_gender.startswith("f") and script_gender == "female_char":
+            score += 8
+        elif char_gender.startswith("m") and script_gender == "male_char":
+            score += 8
+        elif script_gender in {"both", "any", ""}:
+            score += 3
+
+        if char_occupation and script_profession and char_occupation in script_profession:
+            score += 8
+
+        if "girls" in str(character.get("top_category") or "").lower() and script_gender == "female_char":
+            score += 4
+        if "guys" in str(character.get("top_category") or "").lower() and script_gender == "male_char":
+            score += 4
+
+        for emotion_id, hints in emotion_hints.items():
+            if emotion_id in emotion_set and any(h in char_blob for h in hints):
+                score += 4.5
+        for relation_id, hints in relation_hints.items():
+            if relation_id in relation_set and any(h in char_blob for h in hints):
+                score += 5
+
+        if "dominant" in char_personality_tags and {"dark", "revenge"} & emotion_set:
+            score += 2
+        if "submissive" in char_personality_tags and {"sweet", "healing"} & emotion_set:
+            score += 2
+        if "romantic" in char_personality_tags and {"sweet", "angst"} & emotion_set:
+            score += 2
+        if "playful" in char_personality_tags and {"comedy", "sweet"} & emotion_set:
+            score += 2
+
+        overlap_hits = 0
+        for word in token_words:
+            if word in script_blob:
+                overlap_hits += 1
+                if overlap_hits >= 10:
+                    break
+        score += min(6.0, overlap_hits * 0.7)
+
+        if score <= 0:
+            continue
+
+        candidates.append({
+            "script_id": script_id,
+            "title": row.get("title") or script_id,
+            "score": round(score, 2),
+            "weight": max(1, min(1000, int(round(score)))),
+        })
+
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    selected = candidates[:limit]
+    selected_ids = {item["script_id"] for item in selected}
+    applied_items = selected
+
+    if apply_result:
+        if append_mode:
+            applied_items = [item for item in selected if item["script_id"] not in existing_bound_ids]
+        else:
+            await db.execute(
+                "DELETE FROM character_script_bindings WHERE character_id = ?",
+                (character_id,),
+            )
+
+        if applied_items:
+            now = datetime.now().isoformat()
+            for item in applied_items:
+                await db.execute(
+                    """
+                    INSERT INTO character_script_bindings
+                    (character_id, script_id, weight, is_active, created_at, updated_at)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    (character_id, item["script_id"], item["weight"], now, now),
+                )
+
+    return {
+        "success": True,
+        "character_id": character_id,
+        "applied": apply_result,
+        "append": append_mode,
+        "count": len(applied_items) if apply_result else len(selected),
+        "requested_count": limit,
+        "selected_count": len(selected_ids),
+        "items": applied_items if apply_result else selected,
+    }
+
+
 @admin_api_router.post("/characters/{character_id}/regenerate-mature")
 async def regenerate_mature_media_api(
     request: Request,
@@ -500,11 +858,35 @@ async def batch_generate_characters_api(
         generate_video=config.generate_video,
         optimize_seo=config.optimize_seo,
     )
+
+    # Auto step 4: bind up to 5 matched scripts for each newly created character.
+    auto_bound_count = 0
+    auto_bind_failed_ids: list[str] = []
+    for character in characters:
+        character_id = str(character.get("id") or "").strip()
+        if not character_id:
+            continue
+        try:
+            await auto_match_character_story_bindings_api(
+                request=request,
+                character_id=character_id,
+                data={"count": 5, "apply": True, "append": True},
+                admin=admin,
+            )
+            auto_bound_count += 1
+        except Exception:
+            # Non-blocking: character creation should still succeed even if auto-bind fails.
+            auto_bind_failed_ids.append(character_id)
     
     return {
         "success": True,
         "created_count": len(characters),
         "characters": characters,
+        "auto_story_bindings": {
+            "requested_per_character": 5,
+            "applied_characters": auto_bound_count,
+            "failed_character_ids": auto_bind_failed_ids,
+        },
     }
 
 

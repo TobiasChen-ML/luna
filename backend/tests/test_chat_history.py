@@ -17,8 +17,9 @@ class TestChatHistoryServiceRedisFailure:
     @pytest.fixture
     def mock_redis_failure(self):
         redis_mock = MagicMock()
+        redis_mock.get_json = AsyncMock(side_effect=ConnectionError("Redis connection refused"))
+        redis_mock.set_json = AsyncMock(side_effect=ConnectionError("Redis connection refused"))
         redis_mock.get = AsyncMock(side_effect=ConnectionError("Redis connection refused"))
-        redis_mock.set = AsyncMock(side_effect=ConnectionError("Redis connection refused"))
         return redis_mock
     
     @pytest.fixture
@@ -73,6 +74,20 @@ class TestChatHistoryServiceRedisFailure:
         await chat_history_service._cache_message("test_session", "msg_001", "user", "Hello")
         
         assert chat_history_service._redis_failure_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_cache_message_recovers_from_malformed_cache(self, chat_history_service):
+        mock_redis = MagicMock()
+        mock_redis.get_json = AsyncMock(return_value={"messages": {"bad": "shape"}})
+        mock_redis.set_json = AsyncMock(return_value=True)
+        chat_history_service.redis = mock_redis
+
+        await chat_history_service._cache_message("test_session", "msg_001", "user", "Hello")
+
+        mock_redis.set_json.assert_called_once()
+        written_payload = mock_redis.set_json.call_args.args[1]
+        assert isinstance(written_payload["messages"], list)
+        assert written_payload["messages"][0]["content"] == "Hello"
     
     @pytest.mark.asyncio
     async def test_redis_health_check_returns_degraded_status(self, chat_history_service, mock_redis_failure):
@@ -109,8 +124,8 @@ class TestChatHistoryServiceDBFallback:
     @pytest.mark.asyncio
     async def test_get_recent_messages_with_redis_down(self, chat_history_service):
         mock_redis = MagicMock()
-        mock_redis.get = AsyncMock(side_effect=ConnectionError("Redis down"))
-        mock_redis.set = AsyncMock(side_effect=ConnectionError("Redis down"))
+        mock_redis.get_json = AsyncMock(side_effect=ConnectionError("Redis down"))
+        mock_redis.set_json = AsyncMock(side_effect=ConnectionError("Redis down"))
         chat_history_service.redis = mock_redis
         
         mock_db_rows = [
@@ -131,8 +146,8 @@ class TestChatHistoryServiceDBFallback:
     @pytest.mark.asyncio
     async def test_cache_ttl_expiry_triggers_reload(self, chat_history_service):
         mock_redis_expired = MagicMock()
-        mock_redis_expired.get = AsyncMock(return_value=None)
-        mock_redis_expired.set = AsyncMock(return_value=True)
+        mock_redis_expired.get_json = AsyncMock(return_value=None)
+        mock_redis_expired.set_json = AsyncMock(return_value=True)
         chat_history_service.redis = mock_redis_expired
         
         mock_db_rows = [
@@ -146,7 +161,7 @@ class TestChatHistoryServiceDBFallback:
             
             assert len(messages) == 1
             assert messages[0]["content"] == "New message"
-            mock_redis_expired.set.assert_called_once()
+            mock_redis_expired.set_json.assert_called_once()
 
 
 class TestChatHistoryServiceRecovery:
@@ -164,8 +179,8 @@ class TestChatHistoryServiceRecovery:
         chat_history_service._redis_degraded = True
         
         mock_redis_recovered = MagicMock()
-        mock_redis_recovered.get = AsyncMock(return_value={"messages": [{"id": "msg_001"}]})
-        mock_redis_recovered.set = AsyncMock(return_value=True)
+        mock_redis_recovered.get_json = AsyncMock(return_value={"messages": [{"id": "msg_001"}]})
+        mock_redis_recovered.set_json = AsyncMock(return_value=True)
         chat_history_service.redis = mock_redis_recovered
         
         with caplog.at_level(logging.INFO):

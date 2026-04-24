@@ -438,35 +438,50 @@ export interface ChatStreamRequest {
  *   (blank line separates events)
  */
 function* parseSSE(text: string): Generator<SSEStreamEvent> {
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   let currentEventType: string | null = null;
-  let currentData: string | null = null;
+  let currentDataLines: string[] = [];
   let currentEventId: string | null = null;
 
-  for (const line of lines) {
-    if (line.startsWith('id: ')) {
-      currentEventId = line.slice(4).trim();
-    } else if (line.startsWith('event: ')) {
-      currentEventType = line.slice(7).trim();
-    } else if (line.startsWith('data: ')) {
-      currentData = line.slice(6);
-    } else if (line === '' && currentEventType && currentData) {
-      // End of event
-      try {
-        const parsed = JSON.parse(currentData);
-        yield {
-          id: currentEventId || undefined,
-          type: currentEventType as SSEEventType,
-          data: parsed,
-        } as SSEStreamEvent;
-      } catch {
-        console.warn('Failed to parse SSE data:', currentData);
-      }
+  const flush = () => {
+    if (!currentEventType || currentDataLines.length === 0) return;
+    const rawData = currentDataLines.join('\n');
+    try {
+      const parsed = JSON.parse(rawData);
+      return {
+        id: currentEventId || undefined,
+        type: currentEventType as SSEEventType,
+        data: parsed,
+      } as SSEStreamEvent;
+    } catch {
+      console.warn('Failed to parse SSE data:', rawData);
+      return undefined;
+    } finally {
       currentEventId = null;
       currentEventType = null;
-      currentData = null;
+      currentDataLines = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (line.startsWith(':')) {
+      // SSE comment/heartbeat line.
+      continue;
+    }
+    if (line.startsWith('id:')) {
+      currentEventId = line.slice(3).trim();
+    } else if (line.startsWith('event:')) {
+      currentEventType = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      currentDataLines.push(line.slice(5).trimStart());
+    } else if (line === '') {
+      const evt = flush();
+      if (evt) yield evt;
     }
   }
+
+  const evt = flush();
+  if (evt) yield evt;
 }
 
 // ==================== SSE Service ====================
@@ -527,7 +542,14 @@ class SSEService {
     const { signal } = this.abortController;
 
     try {
-      const token = await this.getAuthToken();
+      let token: string | null = null;
+      try {
+        token = await this.getAuthToken();
+      } catch (error) {
+        // App JWT cookie sessions (or guest mode) may not have an active Firebase user.
+        // Fall back to cookie-based auth instead of failing before network request.
+        console.warn('SSE stream using cookie auth fallback:', error);
+      }
       const idempotencyKey =
         request.idempotencyKey ||
         `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -551,13 +573,14 @@ class SSEService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
           Accept: 'text/event-stream',
           'X-Device-Fingerprint': this.getDeviceFingerprint(),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(request.lastEventId || this.lastEventId
             ? { 'Last-Event-ID': request.lastEventId || this.lastEventId || '' }
             : {}),
         },
+        credentials: 'include',
         body: JSON.stringify({
           character_id: request.characterId,
           message: request.message,
@@ -614,8 +637,8 @@ class SSEService {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete events (separated by double newlines)
-        const parts = buffer.split('\n\n');
+        // Process complete events (support both LF and CRLF separators).
+        const parts = buffer.split(/\r?\n\r?\n/);
 
         // Keep the last potentially incomplete part in the buffer
         buffer = parts.pop() || '';

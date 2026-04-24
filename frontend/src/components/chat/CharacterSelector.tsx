@@ -121,7 +121,11 @@ export function CharacterSelector({
             </p>
           </div>
         ) : (
-          filteredCharacters.map((character) => (
+          filteredCharacters.map((character) => {
+            const displayName = normalizeName(character);
+            const avatarInitial = displayName.charAt(0).toUpperCase() || '?';
+
+            return (
             <button
               key={character.id}
               disabled={disabled}
@@ -144,19 +148,19 @@ export function CharacterSelector({
                 {character.profile_image_url || character.media_urls?.avatar ? (
                   <img 
                     src={character.profile_image_url || character.media_urls?.avatar} 
-                    alt={character.first_name}
+                    alt={displayName}
                     className="w-12 h-12 rounded-full object-cover flex-shrink-0 border border-white/10"
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0 text-white font-semibold">
-                    {character.first_name.charAt(0)}
+                    {avatarInitial}
                   </div>
                 )}
 
                 {/* Character Info */}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-white truncate">
-                    {character.first_name}, {character.age}
+                    {displayName}, {character.age}
                   </h3>
                   <p className="text-sm text-zinc-400 truncate">
                     {(character.personality_tags || []).slice(0, 2).join(', ')}
@@ -165,7 +169,7 @@ export function CharacterSelector({
                 </div>
               </div>
             </button>
-          ))
+          )})
         )}
       </div>
 

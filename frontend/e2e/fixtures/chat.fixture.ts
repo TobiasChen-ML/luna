@@ -1,11 +1,10 @@
-import { test as base, Page, Route, Request } from '@playwright/test';
+import { test as base, Page } from '@playwright/test';
 import {
   mockChatCharacter,
   mockChatCharacterAnime,
   mockUser,
   mockChatSession,
   mockAIResponses,
-  createMockJWT,
   createSSEResponse,
   createSSEStreamChunk,
   mockCharacterListForChat,
@@ -72,11 +71,13 @@ export const test = base.extend<ChatFixtures>({
       const character = id === mockChatCharacterAnime.id 
         ? mockChatCharacterAnime 
         : mockChatCharacter;
+
+      const { slug: _slug, ...characterWithoutSlug } = character as typeof character & { slug?: string };
       
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(character),
+        body: JSON.stringify(characterWithoutSlug),
       });
     });
 
@@ -139,6 +140,61 @@ export const test = base.extend<ChatFixtures>({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ messages: [] }),
+      });
+    });
+
+    await page.route('**/api/chat/guest/credits', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          credits: guestCredits,
+          is_exhausted: guestCredits <= 0,
+        }),
+      });
+    });
+
+    await page.route('**/api/chat/guest/send', async (route) => {
+      const request = route.request();
+      const requestBody = request.postDataJSON() as { message?: string } | null;
+      const userMessage = requestBody?.message?.trim() || 'Hello';
+
+      if (guestCredits <= 0) {
+        await route.fulfill({
+          status: 402,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              error: 'Insufficient credits',
+              required: mockGuestCredits.per_message_cost,
+              available: 0,
+            },
+          }),
+        });
+        return;
+      }
+
+      guestCredits = Math.max(0, guestCredits - mockGuestCredits.per_message_cost);
+
+      let responseContent = mockAIResponses.greeting;
+      if (
+        userMessage.toLowerCase().includes('about yourself') ||
+        userMessage.toLowerCase().includes('who are you')
+      ) {
+        responseContent = mockAIResponses.about_me;
+      } else if (requestCount > 2) {
+        responseContent = mockAIResponses.follow_up;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          content: responseContent,
+          credits_remaining: guestCredits,
+          is_exhausted: guestCredits <= 0,
+        }),
       });
     });
 
@@ -259,16 +315,13 @@ export function createAgeVerifiedStorage(): string {
 }
 
 export async function setupAuthenticatedUser(page: Page, options: { credits?: number } = {}) {
-  const token = createMockJWT({ sub: 'test-user-001' });
   await page.addInitScript((args) => {
-    localStorage.setItem('roxy_access_token', args.token);
-    localStorage.setItem('roxy_refresh_token', args.token);
+    document.cookie = 'session_active=1; path=/';
     localStorage.setItem('aigirl_age_verified', args.ageVerified);
     if (args.credits !== undefined) {
       localStorage.setItem('test_user_credits', String(args.credits));
     }
   }, { 
-    token, 
     ageVerified: createAgeVerifiedStorage(),
     credits: options.credits,
   });

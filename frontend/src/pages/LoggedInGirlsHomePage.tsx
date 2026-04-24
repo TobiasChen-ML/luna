@@ -21,6 +21,9 @@ interface DiscoverCharacter {
   profile_image_url?: string;
   avatar_thumb_url?: string;
   avatar_card_url?: string;
+  mature_image_url?: string;
+  mature_cover_url?: string;
+  mature_video_url?: string;
   preview_video_url?: string | null;
   personality_summary?: string;
   tags?: string[];
@@ -181,8 +184,10 @@ function getName(char: DiscoverCharacter) {
   return char.first_name || char.name || 'Character';
 }
 
-function getAvatar(char: DiscoverCharacter) {
-  return char.avatar_card_url || char.avatar_url || char.profile_image_url;
+function getDisplayMedia(char: DiscoverCharacter) {
+  const avatar = char.mature_cover_url || char.mature_image_url || char.avatar_card_url || char.avatar_url || char.profile_image_url;
+  const video = char.mature_video_url || char.preview_video_url || null;
+  return { avatar, video };
 }
 
 function getTags(char: DiscoverCharacter) {
@@ -195,7 +200,7 @@ function CharacterCard({ char, onClick }: { char: DiscoverCharacter; onClick: ()
 
   const name = getName(char);
   const ageText = char.age !== undefined && char.age !== null ? String(char.age) : null;
-  const avatar = getAvatar(char);
+  const { avatar, video } = getDisplayMedia(char);
   const tags = getTags(char);
   const summary = char.personality_summary || tags[0] || null;
 
@@ -228,7 +233,7 @@ function CharacterCard({ char, onClick }: { char: DiscoverCharacter; onClick: ()
           alt={name}
           className={cn(
             'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
-            isHovering && char.preview_video_url ? 'opacity-0' : 'opacity-100'
+            isHovering && video ? 'opacity-0' : 'opacity-100'
           )}
           loading="lazy"
         />
@@ -237,12 +242,12 @@ function CharacterCard({ char, onClick }: { char: DiscoverCharacter; onClick: ()
       )}
 
       {/* Hover video */}
-      {char.preview_video_url && (
+      {video && (
         <video
           ref={(el) => {
             videoRef.current = el;
           }}
-          src={char.preview_video_url}
+          src={video}
           className={cn(
             'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
             isHovering ? 'opacity-100' : 'opacity-0'

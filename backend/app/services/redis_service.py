@@ -29,9 +29,16 @@ class RedisService:
         client = await self._get_client()
         return await client.get(key)
     
-    async def set(self, key: str, value: str, ex: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
         client = await self._get_client()
-        return await client.set(key, value, ex=ex)
+        serialized = value
+        if isinstance(value, (dict, list, tuple)):
+            serialized = json.dumps(value)
+        elif value is None:
+            serialized = ""
+        elif not isinstance(value, (str, int, float, bytes)):
+            serialized = str(value)
+        return await client.set(key, serialized, ex=ex)
     
     async def delete(self, key: str) -> bool:
         client = await self._get_client()

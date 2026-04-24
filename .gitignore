@@ -45,3 +45,4 @@ build/
 
 # Windows reserved filename edge case found in repo
 backend/nul
+.gitnexus
