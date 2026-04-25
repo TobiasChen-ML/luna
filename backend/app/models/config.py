@@ -73,13 +73,13 @@ CONFIG_DEFINITIONS: list[ConfigGroupDefinition] = [
                 key="LLM_CHAT_MODEL",
                 label="Chat Model",
                 type="model_select",
-                default="meta-llama/llama-3.3-70b-instruct",
+                default="sao10k/l3-8b-lunaris",
             ),
             ConfigFieldDefinition(
                 key="LLM_ORCHESTRATOR_MODEL",
                 label="Orchestrator Model",
                 type="model_select",
-                default="sao10k/l3-8b-lunaris",
+                default="deepseek/deepseek-v3.2",
             ),
             ConfigFieldDefinition(
                 key="LLM_INTENT_MODEL",

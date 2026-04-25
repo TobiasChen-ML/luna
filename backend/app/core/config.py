@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = None
     llm_base_url: str = "https://api.novita.ai/openai/v1"
     llm_primary_model: str = "sao10k/l3-8b-lunaris"
-    llm_fallback_model: str = "sao10k/l3-8b-lunaris"
+    llm_fallback_model: str = "deepseek/deepseek-v3.2"
     llm_structured_model: str = "deepseek/deepseek-v3.2"
     llm_timeout: int = 120
 
