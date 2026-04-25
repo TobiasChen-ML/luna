@@ -1237,9 +1237,14 @@ async def chat_now_official(
     request: Request, 
     official_id: str
 ) -> ChatSession:
+    user_id = _get_user_id(request)
+    character = await character_service.get_or_create_official_clone(official_id, user_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Official character not found")
+
     session, _, _, _ = await _initialize_character_session(
-        user_id=_get_user_id(request),
-        character_id=official_id,
+        user_id=user_id,
+        character_id=character["id"],
     )
     return ChatSession(**session)
 
@@ -1382,13 +1387,129 @@ async def request_voice_note(request: Request, data: dict[str, Any]) -> BaseResp
     return BaseResponse(success=True, message="Voice note requested")
 
 
-@router.post("/messages/{message_id}/audio", response_model=BaseResponse)
+@router.post("/messages/{message_id}/audio", response_model=dict[str, Any])
 async def add_message_audio(
     request: Request, 
     message_id: str, 
-    data: dict[str, Any]
-) -> BaseResponse:
-    return BaseResponse(success=True, message="Audio added to message")
+    data: Optional[dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+) -> dict[str, Any]:
+    payload = data or {}
+    effective_session_id = str(payload.get("session_id") or session_id or "").strip()
+    message = await chat_history_service.get_message(message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if effective_session_id and message.get("session_id") != effective_session_id:
+        raise HTTPException(status_code=404, detail="Message not found in session")
+
+    cached_audio_url = str(message.get("audio_url") or "").strip()
+    if cached_audio_url:
+        return {
+            "success": True,
+            "message": "Audio already available",
+            "audio_url": cached_audio_url,
+            "cached": True,
+            "credits_deducted": False,
+        }
+
+    text = str(message.get("content") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message has no text to synthesize")
+
+    character_id = str(message.get("character_id") or "").strip()
+    character = await character_service.get_character_by_id(character_id) if character_id else None
+    voice_id = (character or {}).get("voice_id")
+    if not voice_id:
+        raise HTTPException(status_code=400, detail="Character voice is not configured")
+
+    user_id = _get_user_id(request)
+    user_db_id = _get_user_db_id(request)
+    voice_cost = await _get_usage_cost("voice")
+    credits_deducted = False
+    remaining_credits: Optional[float] = None
+    guest_state: Optional[dict[str, Any]] = None
+    guest_original_credits: Optional[float] = None
+
+    if user_db_id and user_id != "guest":
+        balance = await credit_service.get_balance(user_db_id)
+        if balance["total"] < voice_cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error_code": "insufficient_credits",
+                    "required": voice_cost,
+                    "available": balance["total"],
+                    "message": "Not enough credits for voice generation",
+                },
+            )
+        await credit_service.deduct_credits(
+            user_id=user_db_id,
+            amount=voice_cost,
+            usage_type="voice",
+            character_id=character_id,
+            session_id=message.get("session_id"),
+        )
+        credits_deducted = True
+        remaining_credits = balance["total"] - voice_cost
+    elif user_id == "guest":
+        guest_state = _get_guest_state(_resolve_guest_id(request))
+        guest_remaining = float(guest_state.get("credits_remaining", GUEST_MAX_CREDITS))
+        guest_original_credits = guest_remaining
+        if guest_remaining < voice_cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error_code": "guest_credits_exhausted",
+                    "required": voice_cost,
+                    "available": guest_remaining,
+                    "message": "Guest credits exhausted. Please register to continue.",
+                },
+            )
+        guest_state["credits_remaining"] = max(0.0, guest_remaining - voice_cost)
+        guest_state["updated_at"] = int(time.time())
+        credits_deducted = voice_cost > 0
+        remaining_credits = guest_state["credits_remaining"]
+
+    try:
+        voice_service = VoiceService()
+        audio_result = await voice_service.generate_tts(
+            text=text,
+            voice_id=voice_id,
+        )
+        audio_url = audio_result.get("audio_url")
+        if not audio_url:
+            raise HTTPException(status_code=500, detail="Voice provider did not return audio")
+
+        await db.execute(
+            "UPDATE chat_messages SET audio_url = ? WHERE id = ?",
+            (audio_url, message_id),
+        )
+
+        return {
+            "success": True,
+            "message": "Audio generated",
+            "audio_url": audio_url,
+            "duration": audio_result.get("duration"),
+            "cached": False,
+            "credits_deducted": credits_deducted,
+            "credits_remaining": remaining_credits,
+        }
+    except Exception:
+        if credits_deducted and user_db_id and user_id != "guest":
+            try:
+                await credit_service.refund_credits_simple(
+                    user_id=user_db_id,
+                    amount=voice_cost,
+                    usage_type="voice_failed",
+                    character_id=character_id,
+                    session_id=message.get("session_id"),
+                )
+            except Exception as refund_error:
+                logger.error(f"Failed to refund credits after message audio failure: {refund_error}")
+        elif credits_deducted and guest_state is not None and guest_original_credits is not None:
+            guest_state["credits_remaining"] = guest_original_credits
+            guest_state["updated_at"] = int(time.time())
+        raise
 
 
 @router.get("/gallery/{character_id}")

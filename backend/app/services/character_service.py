@@ -540,6 +540,115 @@ class CharacterService:
         logger.info(f"Created UGC character: {character_id} - {data.name} by user {creator_id}")
         
         return await self.get_character_by_id(character_id)
+
+    async def get_or_create_official_clone(self, official_id: str, user_id: str) -> Optional[dict]:
+        official = await self.get_character_by_id(official_id)
+        if not official or not official.get("is_official"):
+            return None
+
+        existing = await db.execute(
+            """
+            SELECT * FROM characters
+            WHERE creator_id = ?
+              AND family_id = ?
+              AND generation_mode = 'official_clone'
+              AND lifecycle_status = 'active'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_id, official_id),
+            fetch=True,
+        )
+        if existing:
+            return self._row_to_dict(existing)
+
+        character_id = generate_character_id()
+        base_slug = generate_slug(official.get("name") or official_id)
+        slug = f"{base_slug}-{user_id[-6:]}-{character_id[-6:]}".lower()
+        now = datetime.utcnow().isoformat()
+        extra_data = {
+            "source": "official_clone",
+            "source_official_id": official_id,
+            "does_not_count_toward_character_limit": True,
+        }
+
+        character_data = {
+            "id": character_id,
+            "name": official.get("name"),
+            "first_name": official.get("first_name"),
+            "slug": slug,
+            "description": official.get("description"),
+            "age": official.get("age"),
+            "gender": official.get("gender") or "female",
+            "ethnicity": official.get("ethnicity"),
+            "nationality": official.get("nationality"),
+            "occupation": official.get("occupation"),
+            "top_category": official.get("top_category") or "girls",
+            "sub_category": official.get("sub_category"),
+            "filter_tags": json.dumps(official.get("filter_tags")) if official.get("filter_tags") else None,
+            "personality_tags": json.dumps(official.get("personality_tags")) if official.get("personality_tags") else None,
+            "keywords": json.dumps(official.get("keywords")) if official.get("keywords") else None,
+            "personality_summary": official.get("personality_summary"),
+            "personality_example": official.get("personality_example"),
+            "backstory": official.get("backstory"),
+            "system_prompt": official.get("system_prompt"),
+            "greeting": official.get("greeting"),
+            "avatar_url": official.get("avatar_url"),
+            "cover_url": official.get("cover_url"),
+            "avatar_card_url": official.get("avatar_card_url"),
+            "profile_image_url": official.get("profile_image_url"),
+            "preview_video_url": official.get("preview_video_url"),
+            "mature_image_url": official.get("mature_image_url"),
+            "mature_cover_url": official.get("mature_cover_url"),
+            "mature_video_url": official.get("mature_video_url"),
+            "voice_id": official.get("voice_id"),
+            "meta_title": official.get("meta_title"),
+            "meta_description": official.get("meta_description"),
+            "seo_optimized": 0,
+            "is_official": 0,
+            "is_public": 0,
+            "template_id": official.get("template_id"),
+            "generation_mode": "official_clone",
+            "popularity_score": official.get("popularity_score") or 0.0,
+            "chat_count": 0,
+            "view_count": 0,
+            "creator_id": user_id,
+            "family_id": official_id,
+            "lifecycle_status": "active",
+            "review_status": "approved",
+            "reviewed_at": now,
+            "reviewer_id": None,
+            "rejection_reason": None,
+            "created_at": now,
+            "updated_at": now,
+            "extra_data": json.dumps(extra_data),
+        }
+
+        columns = ", ".join(character_data.keys())
+        placeholders = ", ".join(["?" for _ in character_data])
+        await db.execute(
+            f"INSERT INTO characters ({columns}) VALUES ({placeholders})",
+            tuple(character_data.values()),
+        )
+
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO character_script_bindings
+                (character_id, script_id, weight, is_active, created_at, updated_at)
+            SELECT ?, script_id, weight, is_active, ?, ?
+            FROM character_script_bindings
+            WHERE character_id = ?
+            """,
+            (character_id, now, now, official_id),
+        )
+
+        logger.info(
+            "Created official character clone: %s from %s for user %s",
+            character_id,
+            official_id,
+            user_id,
+        )
+        return await self.get_character_by_id(character_id)
     
     async def list_user_characters(
         self,
@@ -551,9 +660,10 @@ class CharacterService:
         params = [user_id]
         
         where_clause = " AND ".join(conditions)
+        quota_where_clause = f"{where_clause} AND COALESCE(generation_mode, '') != 'official_clone'"
         
         count_row = await db.execute(
-            f"SELECT COUNT(*) as total FROM characters WHERE {where_clause}",
+            f"SELECT COUNT(*) as total FROM characters WHERE {quota_where_clause}",
             tuple(params),
             fetch=True
         )

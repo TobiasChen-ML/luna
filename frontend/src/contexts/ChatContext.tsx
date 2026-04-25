@@ -171,25 +171,28 @@ function mergeStreamingText(
   current: string,
   incoming: string
 ): { merged: string; appended: string } {
-  if (!incoming) return { merged: current, appended: '' };
-  if (!current) return { merged: incoming, appended: incoming };
+  const safeCurrent = typeof current === 'string' ? current : '';
+  const safeIncoming = typeof incoming === 'string' ? incoming : '';
 
-  if (incoming.startsWith(current)) {
-    return { merged: incoming, appended: incoming.slice(current.length) };
+  if (!safeIncoming) return { merged: safeCurrent, appended: '' };
+  if (!safeCurrent) return { merged: safeIncoming, appended: safeIncoming };
+
+  if (safeIncoming.startsWith(safeCurrent)) {
+    return { merged: safeIncoming, appended: safeIncoming.slice(safeCurrent.length) };
   }
 
-  if (current.endsWith(incoming)) {
-    return { merged: current, appended: '' };
+  if (safeCurrent.endsWith(safeIncoming)) {
+    return { merged: safeCurrent, appended: '' };
   }
 
-  const maxOverlap = Math.min(current.length, incoming.length);
+  const maxOverlap = Math.min(safeCurrent.length, safeIncoming.length);
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (current.slice(current.length - overlap) === incoming.slice(0, overlap)) {
-      return { merged: current + incoming.slice(overlap), appended: incoming.slice(overlap) };
+    if (safeCurrent.slice(safeCurrent.length - overlap) === safeIncoming.slice(0, overlap)) {
+      return { merged: safeCurrent + safeIncoming.slice(overlap), appended: safeIncoming.slice(overlap) };
     }
   }
 
-  return { merged: current + incoming, appended: incoming };
+  return { merged: safeCurrent + safeIncoming, appended: safeIncoming };
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
@@ -877,9 +880,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         case 'user_message':
           // User message confirmed - update temp ID if needed
+          if (!event.data.message_id) break;
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id.startsWith('temp-') && msg.role === 'user'
+              typeof msg.id === 'string' && msg.id.startsWith('temp-') && msg.role === 'user'
                 ? { ...msg, id: event.data.message_id }
                 : msg
             )
@@ -1045,14 +1049,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             streamRenderTimerRef.current = null;
           }
           console.error('SSE Error:', event.data);
-          if (event.data.error_code === 'age_verification_required') {
+          const errorData = (event.data || {}) as {
+            error_code?: string;
+            message?: string;
+            required?: number;
+            available?: number;
+          };
+          if (errorData.error_code === 'age_verification_required') {
             setAgeVerificationRequired(true);
-            setAgeVerificationMessage(event.data.message || 'Age verification is required to continue.');
+            setAgeVerificationMessage(errorData.message || 'Age verification is required to continue.');
           }
-          if (event.data.error_code === 'insufficient_credits') {
+          if (errorData.error_code === 'insufficient_credits') {
             showInsufficientCreditsModal(
-              event.data.required,
-              event.data.available
+              errorData.required,
+              errorData.available
             );
           }
           setIsTyping(false);
