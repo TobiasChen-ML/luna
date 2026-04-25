@@ -69,8 +69,16 @@ function CreateCharacterContent() {
 
     if ((user?.subscription_tier || 'free') === 'free') {
       try {
-        const existingCharacters = await api.get<Array<{ id: string }>>('/characters');
-        const createdCount = Array.isArray(existingCharacters.data) ? existingCharacters.data.length : 0;
+        const quotaResponse = await api.get<{ items?: Array<{ id: string }>; total?: number }>(
+          '/characters/my',
+          { params: { page: 1, page_size: 1 } }
+        );
+        const createdCount =
+          typeof quotaResponse.data?.total === 'number'
+            ? quotaResponse.data.total
+            : Array.isArray(quotaResponse.data?.items)
+              ? quotaResponse.data.items.length
+              : 0;
 
         if (createdCount >= FREE_CHARACTER_LIMIT) {
           ensureOfferEndsAt();
@@ -79,8 +87,7 @@ function CreateCharacterContent() {
         }
       } catch (limitCheckError) {
         console.error('Failed to check character limit:', limitCheckError);
-        setError('Failed to verify free plan character limit. Please try again.');
-        return;
+        // Do not block creation on quota-check transient failures.
       }
     }
 

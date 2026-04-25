@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
 
 class TestCharacterRouter:
@@ -139,6 +140,23 @@ class TestCharacterRouter:
         assert response.status_code == 200
         data = response.json()
         assert "id" in data
+
+    def test_preview_voice_alias_maps_to_elevenlabs_id(self, client: TestClient):
+        with patch("app.routers.character.voice_service.generate_tts", new_callable=AsyncMock) as mock_generate_tts:
+            mock_generate_tts.return_value = {
+                "audio_url": "https://example.com/voice.mp3",
+                "duration": 1.23,
+                "provider": "elevenlabs",
+            }
+            response = client.post("/api/characters/voice/preview", json={
+                "text": "Alias mapping test.",
+                "voice_id": "Sensual_Hypnotic",
+            })
+
+        assert response.status_code == 200
+        called = mock_generate_tts.call_args.kwargs
+        assert called["voice_id"] == "PB6BdkFkZLbI39GHdnbQ"
+        assert called["voice_db_id"] == "Sensual_Hypnotic"
     
     def test_get_voice_preview(self, client: TestClient, mock_task_id: str):
         response = client.get(f"/api/characters/voice/preview/{mock_task_id}")

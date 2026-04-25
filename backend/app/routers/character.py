@@ -1,15 +1,29 @@
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Query, Depends
 from typing import Any, Optional
+import uuid
 
 from app.models import BaseResponse, Task, TaskStatus
 from app.services.character_service import character_service
+from app.services.voice_service import VoiceService
 from app.core.dependencies import get_current_user_required, get_optional_user
 from app.models import User
 
 router = APIRouter(prefix="/api/characters", tags=["characters"])
+voice_service = VoiceService()
+_voice_preview_tasks: dict[str, Task] = {}
 
 _MATURE_FIELDS = {"mature_image_url", "mature_cover_url", "mature_video_url"}
+_VOICE_PREVIEW_ALIASES: dict[str, str] = {
+    "ASMR_Whisperer": "j05EIz3iI3JmBTWC3CsA",
+    "Sensual_Hypnotic": "PB6BdkFkZLbI39GHdnbQ",
+    "Soft_Husky": "6z4qitu552uH4K9c5vrj",
+    "Mysterious_Warm": "rsCVCASkcJ6wDNekWF5H",
+    "Hollywood_Actress": "MftN0gvsFPPOYnV3DU0Y",
+    "Lively_Girl": "JnLbZVB3BDIX9KH4Bc1H",
+    "Seductive_Calm": "ZP7ctTmcovXNUmOj695o",
+    "Meditative_ASMR": "du9lwz8ZPYY8gsZt7QO5",
+}
 
 
 def _strip_mature(character: dict) -> dict:
@@ -20,6 +34,12 @@ def _filter_characters(characters: list[dict], authenticated: bool) -> list[dict
     if authenticated:
         return characters
     return [_strip_mature(c) for c in characters]
+
+
+def _resolve_preview_voice_inputs(raw_voice_id: str) -> tuple[str, str]:
+    # Keep backwards compatibility: UI may send alias, db id, or provider voice id.
+    normalized = (raw_voice_id or "").strip() or "default"
+    return _VOICE_PREVIEW_ALIASES.get(normalized, normalized), normalized
 
 
 @router.get("/official")
@@ -416,21 +436,58 @@ async def lock_relationship(request: Request, character_id: str) -> BaseResponse
 
 
 @router.post("/voice/preview", response_model=Task)
-async def preview_voice(request: Request, data: dict[str, Any]) -> Task:
-    return Task(
-        id="task_voice_preview",
+async def preview_voice(
+    request: Request,
+    data: Optional[dict[str, Any]] = None,
+    voice_id: Optional[str] = Query(None),
+) -> Task:
+    payload = data or {}
+    requested_voice_id = str(payload.get("voice_id") or voice_id or "default")
+    preview_voice_id, preview_voice_db_id = _resolve_preview_voice_inputs(requested_voice_id)
+
+    preview_text = payload.get("text") or "Hello, this is your voice preview."
+    task_id = f"task_voice_preview_{uuid.uuid4().hex[:8]}"
+
+    task = Task(
+        id=task_id,
         type="voice_preview",
         status=TaskStatus.PENDING,
         created_at=datetime.now(),
     )
+    _voice_preview_tasks[task_id] = task
+
+    try:
+        result = await voice_service.generate_tts(
+            text=preview_text,
+            voice_id=preview_voice_id,
+            voice_db_id=preview_voice_db_id,
+        )
+        task.status = TaskStatus.COMPLETED
+        task.result = result
+        task.progress = 1.0
+    except Exception as exc:
+        task.status = TaskStatus.FAILED
+        task.error = str(exc)
+    finally:
+        task.updated_at = datetime.now()
+
+    _voice_preview_tasks[task_id] = task
+    return task
 
 
 @router.get("/voice/preview/{task_id}", response_model=Task)
 async def get_voice_preview(request: Request, task_id: str) -> Task:
-    return Task(
-        id=task_id,
-        type="voice_preview",
-        status=TaskStatus.COMPLETED,
-        result={"audio_url": "https://example.com/preview.mp3"},
-        created_at=datetime.now(),
-    )
+    task = _voice_preview_tasks.get(task_id)
+    if not task and task_id == "task_voice_preview" and _voice_preview_tasks:
+        # Backward compatibility for older clients hard-coding this task id.
+        task = next(reversed(_voice_preview_tasks.values()))
+    if not task:
+        task = Task(
+            id=task_id,
+            type="voice_preview",
+            status=TaskStatus.FAILED,
+            error="Voice preview task not found",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+    return task

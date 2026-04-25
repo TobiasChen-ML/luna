@@ -169,11 +169,107 @@ def _render_guest_fallback(character_name: str, user_message: str) -> str:
     )
 
 
-def _build_character_opening(character: Optional[dict[str, Any]], character_id: str) -> str:
+def _compose_script_opening(
+    *,
+    character_name: str,
+    personality: str,
+    opening_line: str,
+    opening_scene: str,
+    world_setting: str,
+    user_role: str,
+) -> str:
+    base = opening_line.strip()
+    if not base:
+        if opening_scene:
+            base = f"*{opening_scene}*"
+        elif world_setting:
+            base = f"We're in {world_setting}."
+        elif personality:
+            base = f"Hi, I'm {character_name}. {personality}"
+        else:
+            base = f"Hi, I'm {character_name}."
+
+    if user_role:
+        starter = (
+            f"You are {user_role} in this story. "
+            "Start by telling me your first move in this scene."
+        )
+    elif opening_scene or world_setting:
+        starter = "Start by telling me what you do first in this scene."
+    else:
+        starter = "Start by telling me what kind of moment you want to have."
+
+    return f"{base}\n\n{starter}"
+
+
+async def _build_script_opening(
+    character: Optional[dict[str, Any]],
+    character_id: str,
+    script_id: Optional[str],
+) -> Optional[str]:
+    sid = str(script_id or "").strip()
+    if not sid:
+        return None
+
+    name = (
+        (character or {}).get("first_name")
+        or (character or {}).get("name")
+        or character_id
+        or "AI"
+    )
+    personality = ((character or {}).get("personality_summary") or "").strip()
+
+    if sid.startswith("ethical_") or sid.startswith("script_lib_"):
+        script_lib = await script_library_service.get_script(sid)
+        if not script_lib:
+            return None
+
+        full_script = script_lib.full_script if isinstance(script_lib.full_script, dict) else {}
+        opening_line = str(
+            full_script.get("opening_line")
+            or full_script.get("opening")
+            or full_script.get("opening_message")
+            or ""
+        ).strip()
+        opening_scene = str(full_script.get("opening_scene") or full_script.get("prologue") or "").strip()
+        world_setting = str(getattr(script_lib, "summary", "") or "").strip()
+
+        return _compose_script_opening(
+            character_name=name,
+            personality=personality,
+            opening_line=opening_line,
+            opening_scene=opening_scene,
+            world_setting=world_setting,
+            user_role="",
+        )
+
+    script = await script_service.get_script(sid)
+    if not script:
+        return None
+
+    return _compose_script_opening(
+        character_name=name,
+        personality=personality,
+        opening_line=str(script.get("opening_line") or "").strip(),
+        opening_scene=str(script.get("opening_scene") or "").strip(),
+        world_setting=str(script.get("world_setting") or "").strip(),
+        user_role=str(script.get("user_role") or "").strip(),
+    )
+
+
+async def _build_character_opening(
+    character: Optional[dict[str, Any]],
+    character_id: str,
+    script_id: Optional[str] = None,
+) -> str:
+    script_opening = await _build_script_opening(character, character_id, script_id)
+    if script_opening:
+        return script_opening
+
     if character and isinstance(character.get("greeting"), str):
         greeting = character["greeting"].strip()
         if greeting:
-            return greeting
+            return f"{greeting}\n\nStart by telling me what's on your mind right now."
 
     name = (
         (character or {}).get("first_name")
@@ -183,8 +279,14 @@ def _build_character_opening(character: Optional[dict[str, Any]], character_id: 
     )
     personality = ((character or {}).get("personality_summary") or "").strip()
     if personality:
-        return f"Hi, I'm {name}. {personality} What would you like to talk about today?"
-    return f"Hi, I'm {name}. It's great to meet you. What would you like to talk about today?"
+        return (
+            f"Hi, I'm {name}. {personality}\n\n"
+            "Start by telling me what kind of vibe you want right now."
+        )
+    return (
+        f"Hi, I'm {name}. It's great to meet you.\n\n"
+        f"If you want an easy start, say: \"Hey {name}, how should we begin?\""
+    )
 
 
 def _parse_json_dict(raw: Any) -> dict[str, Any]:
@@ -1078,6 +1180,9 @@ async def _initialize_character_session(
         )
         is_new = True
 
+    if not isinstance(session.get("context"), dict):
+        session["context"] = {}
+
     opening_message: Optional[str] = None
     opening_message_id: Optional[str] = None
 
@@ -1088,8 +1193,19 @@ async def _initialize_character_session(
             opening_message = msg["content"]
             opening_message_id = msg.get("id")
     else:
+        assigned_script_id, _, _ = await _assign_or_rotate_bound_script(
+            session["id"],
+            character_id,
+        )
+        if assigned_script_id:
+            session["script_id"] = assigned_script_id
+
         character = await character_service.get_character_by_id(character_id)
-        opening_message = _build_character_opening(character, character_id)
+        opening_message = await _build_character_opening(
+            character,
+            character_id,
+            script_id=session.get("script_id"),
+        )
         saved_opening = await chat_history_service.save_message(
             ChatMessageCreateModel(
                 session_id=session["id"],

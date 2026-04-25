@@ -112,7 +112,10 @@ export function Step6Voice() {
     try {
       const response = await api.get(`/characters/voice/preview/${taskId}`);
       const status = response.data?.status as string | undefined;
-      const audioUrl = response.data?.audio_url as string | undefined;
+      const audioUrl = (
+        response.data?.result?.audio_url ??
+        response.data?.audio_url
+      ) as string | undefined;
 
       if (status === 'completed' && audioUrl) {
         clearPendingTask();
@@ -169,15 +172,20 @@ export function Step6Voice() {
       setPlayingVoice(null);
       setLoadingVoice(voiceId);
 
-      const response = await api.post(`/characters/voice/preview?voice_id=${voiceId}`);
+      const response = await api.post('/characters/voice/preview', { voice_id: voiceId });
+      const status = response.data?.status as string | undefined;
+      const audioUrl = (
+        response.data?.result?.audio_url ??
+        response.data?.audio_url
+      ) as string | undefined;
+      const taskId = response.data?.task_id ?? response.data?.id as string | undefined;
 
-      if (response.data.success && response.data.status === 'completed' && response.data.audio_url) {
-        await playAudio(response.data.audio_url as string, voiceId);
+      if (status === 'completed' && audioUrl) {
+        await playAudio(audioUrl, voiceId);
         return;
       }
 
-      const taskId = response.data?.task_id as string | undefined;
-      if (response.data.success && taskId) {
+      if ((status === 'pending' || status === 'processing') && taskId) {
         savePendingTask(taskId, voiceId);
         await pollPreviewTask(taskId, voiceId);
         return;

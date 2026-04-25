@@ -29,6 +29,27 @@ class CharacterService:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    @staticmethod
+    def _build_default_greeting(data: CharacterCreate) -> str:
+        name = (data.first_name or data.name or "AI").strip() or "AI"
+        personality = (data.personality_summary or "").strip()
+        occupation = (data.occupation or "").strip()
+        backstory = (data.backstory or "").strip()
+
+        intro = f"Hi, I'm {name}."
+        if personality:
+            intro = f"{intro} {personality}"
+        elif occupation:
+            intro = f"{intro} I'm a {occupation}."
+        elif backstory:
+            intro = f"{intro} {backstory[:120].rstrip()}"
+
+        return (
+            f"{intro} "
+            "Tell me what mood you're in, or start with: "
+            f"\"Hey {name}, what kind of moment are we in right now?\""
+        )
     
     async def create_character(self, data: CharacterCreate) -> dict:
         character_id = generate_character_id()
@@ -39,6 +60,7 @@ class CharacterService:
             slug = f"{slug}-{character_id[-6:]}"
         
         now = datetime.utcnow().isoformat()
+        greeting = (data.greeting or "").strip() or self._build_default_greeting(data)
         
         character_data = {
             "id": character_id,
@@ -60,7 +82,7 @@ class CharacterService:
             "personality_example": data.personality_example,
             "backstory": data.backstory,
             "system_prompt": data.system_prompt,
-            "greeting": data.greeting,
+            "greeting": greeting,
             "avatar_url": data.avatar_url,
             "cover_url": data.cover_url,
             "avatar_card_url": data.avatar_card_url,
@@ -461,6 +483,7 @@ class CharacterService:
             slug = f"{slug}-{character_id[-6:]}"
         
         now = datetime.utcnow().isoformat()
+        greeting = (data.greeting or "").strip() or self._build_default_greeting(data)
         
         character_data = {
             "id": character_id,
@@ -482,7 +505,7 @@ class CharacterService:
             "personality_example": data.personality_example,
             "backstory": data.backstory,
             "system_prompt": data.system_prompt,
-            "greeting": data.greeting,
+            "greeting": greeting,
             "avatar_url": data.avatar_url,
             "cover_url": data.cover_url,
             "avatar_card_url": data.avatar_card_url,

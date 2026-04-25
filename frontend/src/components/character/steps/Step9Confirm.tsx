@@ -174,9 +174,29 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
         characterData.outfit.description,
         'looking at viewer, portrait',
       ];
-      const prompt = promptParts.filter(Boolean).join(', ');
+      const promptBase = promptParts.filter(Boolean).join(', ');
+      const sceneVariants = [
+        'close-up portrait, direct eye contact, studio soft light, clean background',
+        'waist-up candid selfie, natural outdoor daylight, cinematic depth of field',
+        'three-quarter portrait, indoor window light, editorial style composition',
+      ];
+      const moodVariants = [
+        'gentle smile, calm confident vibe',
+        'playful expression, warm charming vibe',
+        'mysterious expression, elegant poised vibe',
+      ];
+      const variantOffset = avatarGenerationCount % sceneVariants.length;
+      const prompts = [0, 1].map((offset) => {
+        const scene = sceneVariants[(variantOffset + offset) % sceneVariants.length];
+        const mood = moodVariants[(variantOffset + offset) % moodVariants.length];
+        return `${promptBase}, ${scene}, ${mood}`;
+      });
 
-      const response = await api.post('/images/generate-batch', { prompt, count: 2 });
+      const response = await api.post('/images/generate-batch', {
+        prompts,
+        width: 768,
+        height: 1024,
+      });
       const initialImageUrls = extractImageUrls(response.data);
       const taskIds = extractTaskIds(response.data);
 
@@ -194,11 +214,13 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
 
       const finalImageUrls = uniqueUrls([...initialImageUrls, ...polledImageUrls]);
 
-      if (finalImageUrls.length > 0) {
-        setGeneratedOptions((prev) => uniqueUrls([...prev, ...finalImageUrls]));
+      const latestTwoImages = finalImageUrls.slice(0, 2);
+
+      if (latestTwoImages.length > 0) {
+        setGeneratedOptions(latestTwoImages);
         onAvatarGenerated();
-        if (!characterData.avatarUrl) {
-          updateField('avatarUrl', finalImageUrls[0]);
+        if (!characterData.avatarUrl || !latestTwoImages.includes(characterData.avatarUrl)) {
+          updateField('avatarUrl', latestTwoImages[0]);
         }
       }
     } catch (error) {
@@ -221,6 +243,7 @@ export function Step9Confirm({ avatarGenerationCount, onAvatarGenerated }: Step9
     characterData.outfit.style,
     characterData.outfit.description,
     characterData.avatarUrl,
+    avatarGenerationCount,
     hasGeneratedBefore,
     regenerateLimitReached,
     onAvatarGenerated,

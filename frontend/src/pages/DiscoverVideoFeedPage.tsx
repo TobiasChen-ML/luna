@@ -38,6 +38,10 @@ function getDisplayMedia(char: DiscoverCharacter) {
   return { poster, video };
 }
 
+function hasPlayableVideo(char: DiscoverCharacter) {
+  return Boolean(char.mature_video_url || char.preview_video_url);
+}
+
 function pseudoCount(seed: string, base: number, mod: number) {
   let value = 0;
   for (let i = 0; i < seed.length; i += 1) value = (value * 31 + seed.charCodeAt(i)) % 100000;
@@ -84,11 +88,20 @@ export function DiscoverVideoFeedPage() {
   });
 
   const allCharacters = useMemo(() => (data?.pages ?? []).flat(), [data]);
+  const allVideoCharacters = useMemo(
+    () => allCharacters.filter((char) => hasPlayableVideo(char)),
+    [allCharacters]
+  );
   const visibleCharacters = useMemo(
-    () => (isAuthenticated ? allCharacters : allCharacters.slice(0, GUEST_BROWSE_LIMIT)),
-    [allCharacters, isAuthenticated]
+    () => (isAuthenticated ? allVideoCharacters : allVideoCharacters.slice(0, GUEST_BROWSE_LIMIT)),
+    [allVideoCharacters, isAuthenticated]
   );
   const currentCharacter = visibleCharacters[currentIndex] ?? null;
+
+  useEffect(() => {
+    if (currentIndex < visibleCharacters.length) return;
+    setCurrentIndex(Math.max(0, visibleCharacters.length - 1));
+  }, [currentIndex, visibleCharacters.length]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

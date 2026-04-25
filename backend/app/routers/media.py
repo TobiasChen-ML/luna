@@ -1060,9 +1060,10 @@ async def generate_image(request: Request, data: dict[str, Any]) -> dict[str, An
 
 @router.post("/generate-batch", response_model=Task)
 async def generate_images_batch(request: Request, data: dict[str, Any]) -> Task:
-    provider = media_service.get_image_provider("novita")
-    if not provider or not isinstance(provider, NovitaImageProvider):
+    novita_provider = media_service.get_image_provider("novita")
+    if not novita_provider or not isinstance(novita_provider, NovitaImageProvider):
         raise HTTPException(status_code=503, detail="Novita image provider not available")
+    provider = media_service.get_image_provider("z_image_turbo_lora") or novita_provider
 
     prompt = str(data.get("prompt") or "").strip()
     prompts_raw = data.get("prompts")
@@ -1113,6 +1114,32 @@ async def generate_images_batch(request: Request, data: dict[str, Any]) -> Task:
     session_id = str(data.get("session_id") or "").strip() or None
     character_id = str(data.get("character_id") or "").strip() or None
     user_id = _get_user_id(request)
+    selected_lora_name: Optional[str] = None
+    selected_lora_configs: Optional[list[LoRAConfig]] = None
+
+    try:
+        lora_row = await db.execute(
+            """
+            SELECT model_name, strength
+            FROM lora_presets
+            WHERE is_active = 1
+              AND provider = 'novita'
+              AND (applies_to = 'txt2img' OR applies_to = 'all')
+            ORDER BY RANDOM()
+            LIMIT 1
+            """,
+            fetch=True,
+        )
+        if lora_row and lora_row.get("model_name"):
+            selected_lora_name = str(lora_row["model_name"])
+            selected_lora_configs = [
+                LoRAConfig(
+                    model_name=selected_lora_name,
+                    strength=float(lora_row.get("strength") or 0.85),
+                )
+            ]
+    except Exception as e:
+        logger.warning("Failed to select random txt2img LoRA for generate-batch: %s", e)
 
     async def _submit_one(batch_prompt: str) -> str:
         task_id = await provider.txt2img_async(
@@ -1123,6 +1150,7 @@ async def generate_images_batch(request: Request, data: dict[str, Any]) -> Task:
             steps=steps,
             guidance_scale=guidance_scale,
             image_num=1,
+            loras=selected_lora_configs,
             restore_faces=True,
         )
         if not task_id:
@@ -1163,6 +1191,8 @@ async def generate_images_batch(request: Request, data: dict[str, Any]) -> Task:
             "requested_count": len(prompts),
             "submitted_count": len(task_ids),
             "failed_count": len(prompts) - len(task_ids),
+            "provider": "z_image_turbo_lora" if provider is not novita_provider else "novita",
+            "lora_model_name": selected_lora_name,
             "errors": errors[:5] if errors else [],
         },
         created_at=datetime.now(),
