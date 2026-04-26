@@ -14,6 +14,7 @@ class ConfigGroup(str, Enum):
     RECAPTCHA = "recaptcha"
     VOICE = "voice"
     FIREBASE = "firebase"
+    TELEGRAM = "telegram"
     MISC = "misc"
 
 
@@ -315,6 +316,16 @@ CONFIG_DEFINITIONS: list[ConfigGroupDefinition] = [
         fields=[
             ConfigFieldDefinition(key="FIREBASE_PROJECT_ID", label="Project ID"),
             ConfigFieldDefinition(key="FIREBASE_CREDENTIALS_PATH", label="Credentials File Path", placeholder="./firebase-credentials.json"),
+        ],
+    ),
+    ConfigGroupDefinition(
+        group=ConfigGroup.TELEGRAM,
+        label="Telegram Bot Settings",
+        description="Telegram Mini App bot configuration",
+        fields=[
+            ConfigFieldDefinition(key="TELEGRAM_BOT_TOKEN", label="Bot Token", type="password", secret=True, required=True),
+            ConfigFieldDefinition(key="TELEGRAM_BOT_USERNAME", label="Bot Username", placeholder="RoxyClubBot"),
+            ConfigFieldDefinition(key="TELEGRAM_ADMIN_USER_ID", label="Admin User ID", placeholder="8603986053"),
         ],
     ),
     ConfigGroupDefinition(

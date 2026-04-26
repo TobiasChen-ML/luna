@@ -107,6 +107,8 @@ class Settings(BaseSettings):
     livekit_ws_url: Optional[str] = None
 
     telegram_bot_token: Optional[str] = None
+    telegram_admin_user_id: Optional[str] = None
+    telegram_bot_username: Optional[str] = None
 
     admin_password: Optional[str] = None
     admin_emails: list[str] = ["admin@roxy.ai"]
