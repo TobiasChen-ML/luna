@@ -14,6 +14,7 @@ interface CreditConfig {
 
 interface CreditPack {
   id: string;
+  pack_id?: string;
   name: string;
   credits: number;
   price_cents: number;
@@ -523,13 +524,13 @@ export default function CreditsTab() {
                         <td className="py-3">
                           <div className="flex gap-1">
                             <button
-                              onClick={() => updatePack(pack.id, { is_active: !pack.is_active })}
+                              onClick={() => updatePack(pack.pack_id || pack.id, { is_active: !pack.is_active })}
                               className="p-1 hover:bg-zinc-700 rounded"
                             >
                               <Edit className="w-4 h-4 text-zinc-400" />
                             </button>
                             <button
-                              onClick={() => deletePack(pack.id)}
+                              onClick={() => deletePack(pack.pack_id || pack.id)}
                               className="p-1 hover:bg-zinc-700 rounded"
                             >
                               <Trash2 className="w-4 h-4 text-red-400" />

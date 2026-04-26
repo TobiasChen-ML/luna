@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ConfigGroup(str, Enum):
@@ -18,6 +18,8 @@ class ConfigGroup(str, Enum):
 
 
 class ConfigFieldDefinition(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     key: str
     label: str
     type: str = "text"
@@ -156,6 +158,11 @@ CONFIG_DEFINITIONS: list[ConfigGroupDefinition] = [
             ConfigFieldDefinition(key="NOVITA_API_KEY", label="Novita API Key", type="password", secret=True),
             ConfigFieldDefinition(key="NOVITA_BASE_URL", label="Novita Base URL", default="https://api.novita.ai/v3"),
             ConfigFieldDefinition(
+                key="NOVITA_WEBHOOK_BASE_URL",
+                label="Novita Webhook Base URL",
+                description="Public backend origin used for Novita async callbacks, e.g. https://api.example.com",
+            ),
+            ConfigFieldDefinition(
                 key="IMAGE_TXT2IMG_MODEL",
                 label="txt2img Model",
                 type="model_select",
@@ -169,7 +176,27 @@ CONFIG_DEFINITIONS: list[ConfigGroupDefinition] = [
                 default="juggernautXL_v9Rdphoto2Lightning_285361.safetensors",
                 model_provider="novita_image",
             ),
-            ConfigFieldDefinition(key="IMG2IMG_STRENGTH", label="img2img Strength", type="number", default="0.7"),
+            ConfigFieldDefinition(
+                key="IMG2IMG_STRENGTH",
+                label="img2img Strength",
+                type="number",
+                default="0.45",
+                description="Recommended 0.35-0.55 to preserve body structure.",
+            ),
+            ConfigFieldDefinition(
+                key="IP_ADAPTER_STRENGTH",
+                label="IPAdapter Strength",
+                type="number",
+                default="0.45",
+                description="Recommended 0.35-0.55 so identity does not overpower pose/prompt.",
+            ),
+            ConfigFieldDefinition(
+                key="OPENPOSE_CONTROLNET_STRENGTH",
+                label="OpenPose/DWPose Strength",
+                type="number",
+                default="0.65",
+                description="Recommended 0.55-0.8 to lock the large pose.",
+            ),
             ConfigFieldDefinition(
                 key="IMG2IMG_SAMPLER",
                 label="img2img Sampler",
@@ -186,7 +213,13 @@ CONFIG_DEFINITIONS: list[ConfigGroupDefinition] = [
             ConfigFieldDefinition(key="IMAGE_DEFAULT_WIDTH", label="Default Width", type="number", default="1024"),
             ConfigFieldDefinition(key="IMAGE_DEFAULT_HEIGHT", label="Default Height", type="number", default="1024"),
             ConfigFieldDefinition(key="IMAGE_DEFAULT_STEPS", label="Default Steps", type="number", default="20"),
-            ConfigFieldDefinition(key="IMAGE_DEFAULT_CFG", label="Default CFG", type="number", default="7.5"),
+            ConfigFieldDefinition(
+                key="IMAGE_DEFAULT_CFG",
+                label="Default CFG",
+                type="number",
+                default="6",
+                description="Recommended 5-7; too high can force prompt details and deform anatomy.",
+            ),
             ConfigFieldDefinition(
                 key="VIDEO_PROVIDER",
                 label="Video Provider",

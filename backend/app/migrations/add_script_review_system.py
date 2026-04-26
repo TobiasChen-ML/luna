@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 async def migrate():
-    from app.core.config import settings
+    from app.core.config import resolve_sqlite_path, settings
     
-    db_path = Path(settings.database_url.replace("sqlite:///", ""))
+    db_path = Path(resolve_sqlite_path(settings.database_url))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     
     logger.info(f"Starting script review system migration on {db_path}...")

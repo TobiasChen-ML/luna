@@ -723,6 +723,116 @@ class BillingService:
     ) -> dict:
         return await self._set_telegram_stars_order_terminal_state(order_id, "cancelled", webhook_payload)
 
+    async def mark_telegram_stars_order_refunded(
+        self,
+        order_id: str,
+        webhook_payload: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        from ..models.credit_transaction import CreditTransaction
+        from ..models.user import User
+
+        order = await self.get_telegram_stars_order(order_id)
+        if not order:
+            raise ValueError("Order not found")
+
+        user_id = order.get("user_id")
+        if not user_id:
+            raise ValueError("Order missing user_id")
+
+        with self.db.transaction() as session:
+            existing_refund = (
+                session.query(CreditTransaction)
+                .filter(
+                    CreditTransaction.user_id == user_id,
+                    CreditTransaction.order_id == order_id,
+                    CreditTransaction.transaction_type == "refund_deduction",
+                )
+                .first()
+            )
+            if existing_refund:
+                now = datetime.utcnow().isoformat()
+                order["status"] = "refunded"
+                order["updated_at"] = now
+                order["refunded_at"] = now
+                order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
+                await self.redis.set_json(
+                    self._telegram_stars_order_key(order_id),
+                    order,
+                    ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+                )
+                return {
+                    "order_id": order_id,
+                    "status": "refunded",
+                    "already_processed": True,
+                    "credits_deducted": 0.0,
+                }
+
+            purchase_tx = (
+                session.query(CreditTransaction)
+                .filter(
+                    CreditTransaction.user_id == user_id,
+                    CreditTransaction.order_id == order_id,
+                    CreditTransaction.transaction_type == "purchase",
+                )
+                .first()
+            )
+            if not purchase_tx:
+                now = datetime.utcnow().isoformat()
+                order["status"] = "refunded"
+                order["updated_at"] = now
+                order["refunded_at"] = now
+                order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
+                await self.redis.set_json(
+                    self._telegram_stars_order_key(order_id),
+                    order,
+                    ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+                )
+                return {
+                    "order_id": order_id,
+                    "status": "refunded",
+                    "already_processed": True,
+                    "credits_deducted": 0.0,
+                }
+
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise ValueError("User not found")
+
+            credits_to_deduct = min(
+                float(purchase_tx.amount or 0),
+                float(user.purchased_credits or 0),
+            )
+            user.purchased_credits = float(user.purchased_credits or 0) - credits_to_deduct
+            user.credits = float(user.monthly_credits or 0) + float(user.purchased_credits or 0)
+
+            deduction_transaction = CreditTransaction(
+                user_id=user.id,
+                transaction_type="refund_deduction",
+                amount=-credits_to_deduct,
+                balance_after=user.credits,
+                credit_source="purchased",
+                order_id=order_id,
+                description="Telegram Stars refund processed",
+            )
+            session.add(deduction_transaction)
+
+        now = datetime.utcnow().isoformat()
+        order["status"] = "refunded"
+        order["updated_at"] = now
+        order["refunded_at"] = now
+        order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
+        await self.redis.set_json(
+            self._telegram_stars_order_key(order_id),
+            order,
+            ex=TELEGRAM_STARS_ORDER_TTL_SECONDS,
+        )
+        return {
+            "order_id": order_id,
+            "status": "refunded",
+            "already_processed": False,
+            "credits_deducted": credits_to_deduct,
+        }
+
     async def _set_telegram_stars_order_terminal_state(
         self,
         order_id: str,
@@ -790,23 +900,276 @@ class BillingService:
     async def get_billing_history(
         self,
         user_id: str,
+        offset: int = 0,
         limit: int = 20,
-    ) -> list[dict]:
-        return []
+    ) -> dict[str, Any]:
+        from ..models.credit_transaction import CreditTransaction
+
+        with self.db.get_session() as session:
+            query = session.query(CreditTransaction).filter(CreditTransaction.user_id == user_id)
+            query = query.filter(
+                CreditTransaction.transaction_type.in_(["purchase", "subscription", "refund_deduction"])
+            )
+            total = query.count()
+            rows = (
+                query.order_by(CreditTransaction.created_at.desc())
+                .offset(max(0, offset))
+                .limit(max(1, limit))
+                .all()
+            )
+
+        payments: list[dict[str, Any]] = []
+        for row in rows:
+            tx_type = row.transaction_type or "purchase"
+            if tx_type == "subscription":
+                payment_type = "subscription"
+            elif tx_type == "refund_deduction":
+                payment_type = "refund"
+            else:
+                payment_type = "credit_pack"
+
+            status = "refunded" if tx_type == "refund_deduction" else "succeeded"
+            credits_granted = int(row.amount) if row.amount and row.amount > 0 else None
+
+            payments.append(
+                {
+                    "id": str(row.id),
+                    "type": payment_type,
+                    "amount_cents": 0,
+                    "currency": "USD",
+                    "status": status,
+                    "credits_granted": credits_granted,
+                    "description": row.description or tx_type,
+                    "created_at": row.created_at.isoformat() if row.created_at else datetime.utcnow().isoformat(),
+                }
+            )
+
+        return {
+            "payments": payments,
+            "total": total,
+            "limit": max(1, limit),
+            "offset": max(0, offset),
+        }
+
+    async def create_credit_pack_checkout(
+        self,
+        user_id: str,
+        pack_id: str,
+        success_url: Optional[str] = None,
+        cancel_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        from .pricing_service import pricing_service
+
+        packs = await pricing_service.get_credit_packs(active_only=True)
+        pack = next((p for p in packs if p.pack_id == pack_id), None)
+        if not pack:
+            raise ValueError("Invalid pack_id")
+
+        credits = int((pack.credits or 0) + (pack.bonus_credits or 0))
+        if credits <= 0:
+            raise ValueError("Credit pack has invalid credits")
+
+        checkout_success_url = success_url or "https://example.com/billing/success"
+        checkout_cancel_url = cancel_url or "https://example.com/billing/cancel"
+
+        stripe_key = await self._configure_stripe()
+        if stripe_key:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "usd",
+                            "product_data": {
+                                "name": pack.name or f"{credits} Credits Pack",
+                            },
+                            "unit_amount": int(pack.price_cents),
+                        },
+                        "quantity": 1,
+                    }
+                ],
+                mode="payment",
+                success_url=checkout_success_url,
+                cancel_url=checkout_cancel_url,
+                metadata={
+                    "user_id": user_id,
+                    "pack_id": pack.pack_id,
+                    "credits": credits,
+                },
+            )
+            return {
+                "checkout_url": session.url,
+                "session_id": session.id,
+                "pack_id": pack.pack_id,
+                "credits": credits,
+            }
+
+        fallback_session_id = f"pack_{uuid.uuid4().hex[:12]}"
+        return {
+            "checkout_url": f"{checkout_success_url}?session_id={fallback_session_id}",
+            "session_id": fallback_session_id,
+            "pack_id": pack.pack_id,
+            "credits": credits,
+        }
+
+    @staticmethod
+    def _load_user_metadata(raw_metadata: Optional[str]) -> dict[str, Any]:
+        if not raw_metadata:
+            return {}
+        try:
+            parsed = json.loads(raw_metadata)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            logger.warning("Failed to parse user metadata JSON; falling back to empty dict")
+        return {}
+
+    @staticmethod
+    def _extract_billing_state(metadata: dict[str, Any]) -> dict[str, Any]:
+        billing_state = metadata.get("billing")
+        if isinstance(billing_state, dict):
+            return billing_state
+        return {}
+
+    async def get_current_subscription(self, user_id: str) -> dict[str, Any]:
+        with self.db.get_session() as session:
+            from ..models.user import User
+
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                return {
+                    "subscription": None,
+                    "tier": "free",
+                    "is_active": False,
+                }
+
+            now = datetime.utcnow()
+            tier = (user.tier or "free").lower()
+            current_period_end = user.subscription_end_date
+            is_active = tier != "free" and (current_period_end is None or current_period_end > now)
+
+            metadata = self._load_user_metadata(getattr(user, "user_metadata", None))
+            billing_state = self._extract_billing_state(metadata)
+            cancel_at_period_end = bool(billing_state.get("cancel_at_period_end", False))
+            canceled_at = billing_state.get("cancel_at")
+
+            subscription = None
+            if tier != "free":
+                period = "year" if (user.subscription_period or "").lower() == "1y" else "month"
+                subscription = {
+                    "id": f"sub_{user.id}",
+                    "user_id": user.id,
+                    "tier": tier,
+                    "billing_period": period,
+                    "status": "active" if is_active else "canceled",
+                    "current_period_start": (
+                        user.subscription_start_date.isoformat()
+                        if user.subscription_start_date
+                        else now.isoformat()
+                    ),
+                    "current_period_end": current_period_end.isoformat() if current_period_end else None,
+                    "cancel_at_period_end": cancel_at_period_end,
+                    "canceled_at": canceled_at if cancel_at_period_end else None,
+                    "created_at": user.created_at.isoformat() if user.created_at else now.isoformat(),
+                }
+
+            return {
+                "subscription": subscription,
+                "tier": tier,
+                "is_active": is_active,
+            }
+
+    async def create_subscription_checkout(
+        self,
+        user_id: str,
+        tier: str,
+        billing_period: str = "month",
+        success_url: Optional[str] = None,
+        cancel_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        normalized_tier = (tier or "").lower()
+        if normalized_tier not in self.SUBSCRIPTION_TIERS:
+            raise ValueError(f"Unsupported subscription tier: {tier}")
+
+        normalized_period = (billing_period or "month").lower()
+        if normalized_period not in {"month", "year"}:
+            raise ValueError("billing_period must be 'month' or 'year'")
+
+        checkout_success_url = success_url or "https://example.com/billing/success"
+        checkout_cancel_url = cancel_url or "https://example.com/billing/cancel"
+
+        session = await self.create_checkout_session(
+            user_id=user_id,
+            tier=normalized_tier,
+            success_url=checkout_success_url,
+            cancel_url=checkout_cancel_url,
+            provider="stripe",
+        )
+
+        session["tier"] = normalized_tier
+        session["billing_period"] = normalized_period
+        return session
+
+    async def get_subscription_portal_url(self, user_id: str, return_url: Optional[str] = None) -> str:
+        fallback_url = return_url or "https://example.com/billing"
+
+        with self.db.get_session() as session:
+            from ..models.user import User
+
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user or not user.stripe_customer_id:
+                return fallback_url
+
+            stripe_key = await self._configure_stripe()
+            if not stripe_key:
+                return fallback_url
+
+            try:
+                portal = stripe.billing_portal.Session.create(
+                    customer=user.stripe_customer_id,
+                    return_url=fallback_url,
+                )
+                return str(portal.url)
+            except Exception as exc:
+                logger.warning(f"Failed to create Stripe billing portal: {exc}")
+                return fallback_url
 
     async def cancel_subscription(self, user_id: str) -> dict:
         with self.db.get_session() as session:
             from ..models.user import User
-            user = session.query(User).filter(User.firebase_uid == user_id).first()
-            
-            if user:
-                user.subscription_tier = "free"
-                session.commit()
-        
-        return {"status": "cancelled"}
+            user = session.query(User).filter(User.id == user_id).first()
+
+            if not user or (user.tier or "free") == "free":
+                return {"status": "no_active_subscription", "cancel_at": None}
+
+            metadata = self._load_user_metadata(getattr(user, "user_metadata", None))
+            billing_state = self._extract_billing_state(metadata)
+            cancel_at = (user.subscription_end_date or datetime.utcnow()).isoformat()
+            billing_state["cancel_at_period_end"] = True
+            billing_state["cancel_at"] = cancel_at
+            metadata["billing"] = billing_state
+            user.user_metadata = json.dumps(metadata, ensure_ascii=False)
+            session.commit()
+
+            return {"status": "scheduled", "cancel_at": cancel_at}
 
     async def reactivate_subscription(self, user_id: str) -> dict:
-        return {"status": "reactivated"}
+        with self.db.get_session() as session:
+            from ..models.user import User
+            user = session.query(User).filter(User.id == user_id).first()
+
+            if not user or (user.tier or "free") == "free":
+                return {"status": "no_active_subscription"}
+
+            metadata = self._load_user_metadata(getattr(user, "user_metadata", None))
+            billing_state = self._extract_billing_state(metadata)
+            billing_state["cancel_at_period_end"] = False
+            billing_state.pop("cancel_at", None)
+            metadata["billing"] = billing_state
+            user.user_metadata = json.dumps(metadata, ensure_ascii=False)
+            session.commit()
+
+            return {"status": "reactivated"}
 
     async def health_check(self) -> dict:
         stripe_key = await get_config_value("STRIPE_SECRET_KEY", self.settings.stripe_secret_key)

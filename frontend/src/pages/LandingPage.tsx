@@ -23,6 +23,7 @@ import { publicAsset } from '@/utils/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommingSoonModal, LanguageModal } from '@/components/common';
 import type { CategoriesResponse, FilterTagMeta } from '@/types';
+import { startOfficialChat } from '@/utils/startOfficialChat';
 
 interface HomeCharacter {
   id: string;
@@ -258,12 +259,10 @@ export function LandingPage() {
     }
 
     try {
-      const response = await api.post(`/chat/chat_now_official/${characterId}`);
-      const userCharacterId = response.data?.character_id;
-      if (!userCharacterId) {
-        throw new Error('Missing character_id in chat_now_official response');
-      }
-      navigate(`/chat?character=${userCharacterId}&ready=1`);
+      await startOfficialChat(navigate, {
+        isAuthenticated,
+        characterId,
+      });
     } catch (error) {
       console.error('Failed to start chat from landing page:', error);
       alert('Failed to start chat. Please try again.');
@@ -296,11 +295,11 @@ export function LandingPage() {
     },
     {
       q: 'Is roxyclub.ai legitimate and safe to use?',
-      a: 'Yes, roxyclub.ai is a legitimate service. It employs encrypted transactions, adheres to GDPR-compliant data privacy standards, and uses discreet billing methods to ensure user safety and confidentiality.',
+      a: 'Yes, roxyclub.ai is a legitimate service. It uses secure account systems, GDPR-conscious data privacy practices, and Telegram Stars for paid digital benefit activation in the Telegram Mini App.',
     },
     {
-      q: 'How will roxyclub.ai appear on my bank statements?',
-      a: 'Transactions are processed securely and appear under a neutral merchant name. There is no direct reference to roxyclub.ai or its services on your bank statement, ensuring user privacy.',
+      q: 'How do purchases work on Web or PWA?',
+      a: 'Web and PWA access are for using supported features and existing benefits. Paid digital benefits are purchased in the Telegram Mini App using Telegram Stars, then can be used across supported access points.',
     },
     {
       q: 'Can I customize my roxyclub.ai experience?',
@@ -341,7 +340,7 @@ export function LandingPage() {
     },
     {
       q: 'Do I need to install anything to talk to my AI GF?',
-      a: 'No installation is needed. You can access your AI Girlfriend directly through roxyclub.ai on desktop or mobile, anytime, anywhere. Just sign up, choose your AI GF, and start chatting instantly.',
+      a: 'You can use supported Web and PWA features directly through roxyclub.ai. Purchases require Telegram, because subscriptions, credits, and other paid digital benefits are activated in the Telegram Mini App with Telegram Stars.',
     },
   ];
 
@@ -883,7 +882,7 @@ export function LandingPage() {
                 We also take your safety seriously.
               </p>
               <p className="text-[#A4A4A4] font-sm md:text-[16px] text-sm">
-                Every transaction is encrypted and discreet nothing flashy on your bank statements. We accept Visa, MasterCard, and crypto too, including BTC, ETH, USDC, Litecoin, and others.
+                Paid digital benefits are activated in the Telegram Mini App with Telegram Stars. After purchase, your active benefits can be used across supported access points, including Web and PWA.
               </p>
               <h3 className="text-white md:text-2xl text-lg font-bold leading-8 self-stretch">
                 RoxyClub AI Offers Global Support with Localized Experience

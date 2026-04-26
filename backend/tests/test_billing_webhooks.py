@@ -310,6 +310,32 @@ class TestTelegramStarsWebhook:
         
         assert response.status_code == 503
 
+    def test_telegram_stars_refund_webhook_marks_order_refunded(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+        from app.routers import billing
+
+        with patch.object(webhook_service, "verify_telegram_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.telegram_bot_token = "test_bot_token"
+                mock_get_settings.return_value = mock_settings
+                with patch.object(
+                    billing.billing_svc,
+                    "mark_telegram_stars_order_refunded",
+                    new_callable=AsyncMock,
+                ) as mock_refunded:
+                    mock_refunded.return_value = {"order_id": "stars_order_001", "status": "refunded"}
+                    payload = {
+                        "status": "refunded",
+                        "order_id": "stars_order_001",
+                        "auth_date": int(time.time()),
+                    }
+                    response = client.post("/api/billing/webhooks/telegram-stars", json=payload)
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        mock_refunded.assert_awaited_once()
+
 
 class TestWebhookCreditIntegration:
     @pytest.fixture(autouse=True)

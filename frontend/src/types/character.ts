@@ -61,6 +61,32 @@ export type VoiceProfile =
   | 'Seductive_Calm'
   | 'Meditative_ASMR';
 
+export const LAUNCH_VOICE_PROFILES = [
+  'ASMR_Whisperer',
+  'Sensual_Hypnotic',
+  'Soft_Husky',
+  'Mysterious_Warm',
+  'Hollywood_Actress',
+  'Lively_Girl',
+  'Seductive_Calm',
+  'Meditative_ASMR',
+] as const satisfies readonly VoiceProfile[];
+
+export const VOICE_PROVIDER_IDS: Partial<Record<VoiceProfile, string>> = {
+  ASMR_Whisperer: 'j05EIz3iI3JmBTWC3CsA',
+  Sensual_Hypnotic: 'PB6BdkFkZLbI39GHdnbQ',
+  Soft_Husky: '6z4qitu552uH4K9c5vrj',
+  Mysterious_Warm: 'rsCVCASkcJ6wDNekWF5H',
+  Hollywood_Actress: 'MftN0gvsFPPOYnV3DU0Y',
+  Lively_Girl: 'JnLbZVB3BDIX9KH4Bc1H',
+  Seductive_Calm: 'ZP7ctTmcovXNUmOj695o',
+  Meditative_ASMR: 'du9lwz8ZPYY8gsZt7QO5',
+};
+
+export function resolveVoiceProviderId(voiceProfile?: VoiceProfile | null) {
+  return voiceProfile ? (VOICE_PROVIDER_IDS[voiceProfile] ?? voiceProfile) : null;
+}
+
 export type ScenePreset =
   | 'Office'
   | 'Beach'

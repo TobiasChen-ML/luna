@@ -2,10 +2,12 @@
  * CreditPackModal - Modal for purchasing credit packs
  */
 import { useState, useEffect } from 'react';
-import { X, Coins, Sparkles, Loader2, Bitcoin, MessageCircleMore, Copy, ExternalLink, RefreshCcw } from 'lucide-react';
+import { X, Coins, Sparkles, Loader2, MessageCircleMore } from 'lucide-react';
 import { Button } from '../common/Button';
 import type { CreditPack } from '../../types';
 import { billingService } from '../../services/billingService';
+import { useTelegram } from '../../contexts/TelegramContext';
+import { openTelegramMiniApp } from '../../utils/telegram';
 
 interface CreditPackModalProps {
   isOpen: boolean;
@@ -13,14 +15,11 @@ interface CreditPackModalProps {
 }
 
 export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
+  const { isTma } = useTelegram();
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [usdtOrder, setUsdtOrder] = useState<Record<string, unknown> | null>(null);
-  const [usdtOrderId, setUsdtOrderId] = useState<string>('');
-  const [txHash, setTxHash] = useState('');
-  const [activeUsdtPack, setActiveUsdtPack] = useState<CreditPack | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -43,6 +42,11 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
   };
 
   const handleTelegramPurchase = async (pack: CreditPack) => {
+    if (!isTma) {
+      openTelegramMiniApp(`credits_${pack.id}`);
+      return;
+    }
+
     try {
       setPurchasing(`${pack.id}:telegram`);
       setError(null);
@@ -64,58 +68,6 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
       window.open(invoice.invoice_link, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start Telegram Stars payment');
-    } finally {
-      setPurchasing(null);
-    }
-  };
-
-  const handleUsdtPurchase = async (pack: CreditPack) => {
-    try {
-      setPurchasing(`${pack.id}:usdt`);
-      setError(null);
-      const order = await billingService.createUsdtOrder({
-        amount_usdt: Number((pack.price_cents / 100).toFixed(2)),
-        credits: pack.credits,
-        pack_id: pack.id,
-        metadata: {
-          source: 'billing_credit_pack_modal',
-          product: 'credit_pack',
-        },
-      });
-      setActiveUsdtPack(pack);
-      setUsdtOrder(order.raw);
-      setUsdtOrderId(order.order_id);
-      setTxHash('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create USDT order');
-    } finally {
-      setPurchasing(null);
-    }
-  };
-
-  const handleRefreshUsdt = async () => {
-    if (!usdtOrderId) return;
-    try {
-      setPurchasing('usdt:refresh');
-      setError(null);
-      const updated = await billingService.refreshUsdtOrder(usdtOrderId);
-      setUsdtOrder(updated.raw);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh USDT status');
-    } finally {
-      setPurchasing(null);
-    }
-  };
-
-  const handleSubmitTxHash = async () => {
-    if (!usdtOrderId || !txHash.trim()) return;
-    try {
-      setPurchasing('usdt:submit');
-      setError(null);
-      const updated = await billingService.submitUsdtOrderTx(usdtOrderId, txHash.trim());
-      setUsdtOrder(updated.raw);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit transaction hash');
     } finally {
       setPurchasing(null);
     }
@@ -165,7 +117,8 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-zinc-400 mb-6">
-                Purchase additional credits that never expire. Use them for messages, images, and more.
+                Purchase additional credits that never expire. Web and PWA users continue in
+                Telegram to activate credits with Stars.
               </p>
               {error && (
                 <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -206,118 +159,27 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
                       <div className="text-2xl font-bold text-white mb-3">
                         {billingService.formatPrice(pack.price_cents, pack.currency)}
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleTelegramPurchase(pack)}
-                          disabled={purchasing !== null}
-                        >
-                          {purchasing === `${pack.id}:telegram` ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <MessageCircleMore className="w-4 h-4 mr-1" />
-                              Telegram Stars
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleUsdtPurchase(pack)}
-                          disabled={purchasing !== null}
-                        >
-                          {purchasing === `${pack.id}:usdt` ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Bitcoin className="w-4 h-4 mr-1" />
-                              Pay USDT
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleTelegramPurchase(pack)}
+                        disabled={purchasing !== null}
+                      >
+                        {purchasing === `${pack.id}:telegram` ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <MessageCircleMore className="w-4 h-4 mr-1" />
+                            {isTma ? 'Telegram Stars' : 'Continue in Telegram'}
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </div>
               ))}
-
-              {usdtOrderId && (
-                <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-200">USDT Order Created</p>
-                      <p className="text-xs text-zinc-400">
-                        {activeUsdtPack?.name || 'Credit Pack'} | Order ID: {usdtOrderId}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRefreshUsdt}
-                      disabled={purchasing !== null}
-                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
-                    >
-                      {purchasing === 'usdt:refresh' ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCcw className="h-3.5 w-3.5" />
-                      )}
-                      Refresh Status
-                    </button>
-                  </div>
-
-                  {typeof usdtOrder?.payment_address === 'string' && usdtOrder.payment_address && (
-                    <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/80 p-3">
-                      <p className="text-xs text-zinc-400">Pay to address</p>
-                      <p className="mt-1 break-all text-sm text-white">{usdtOrder.payment_address}</p>
-                      <button
-                        type="button"
-                        onClick={() => navigator.clipboard.writeText(usdtOrder.payment_address as string)}
-                        className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy address
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="mt-3 text-xs text-zinc-300">
-                    Amount:{' '}
-                    {typeof usdtOrder?.amount_usdt === 'number' ? usdtOrder.amount_usdt : '-'} USDT | Status:{' '}
-                    <span className="font-semibold">
-                      {typeof usdtOrder?.status === 'string' ? usdtOrder.status : '-'}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={txHash}
-                      onChange={(e) => setTxHash(e.target.value)}
-                      placeholder="Paste tx hash after transfer"
-                      className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none ring-0 placeholder:text-zinc-500 focus:border-pink-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSubmitTxHash}
-                      disabled={!txHash.trim() || purchasing !== null}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
-                    >
-                      {purchasing === 'usdt:submit' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <ExternalLink className="h-4 w-4" />
-                      )}
-                      Submit Tx Hash
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -325,7 +187,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
         {/* Footer */}
         <div className="p-4 border-t border-zinc-700 text-center">
           <p className="text-xs text-zinc-500">
-            Purchased credits never expire. Payment methods: Telegram Stars and USDT.
+            Purchased credits never expire. Digital purchases are completed with Telegram Stars.
           </p>
         </div>
       </div>

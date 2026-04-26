@@ -52,3 +52,25 @@ class TestNovitaImageProviderTaskResult:
 
         assert result.status == "TASK_STATUS_SUCCEED"
         assert result.image_url == "https://example.com/retried.png"
+
+    @pytest.mark.asyncio
+    async def test_txt2img_async_includes_configured_webhook(self, provider):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"task_id": "task_003"}
+        mock_response.raise_for_status = MagicMock()
+
+        async def config_value(key: str, default=None):
+            if key == "NOVITA_WEBHOOK_BASE_URL":
+                return "https://api.example.com/"
+            return default
+
+        with patch("app.core.config.get_config_value", new=AsyncMock(side_effect=config_value)):
+            with patch("httpx.AsyncClient") as mock_client:
+                post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = post
+
+                task_id = await provider.txt2img_async(prompt="test prompt")
+
+        assert task_id == "task_003"
+        payload = post.call_args.kwargs["json"]
+        assert payload["extra"]["webhook"]["url"] == "https://api.example.com/api/images/callbacks/novita"

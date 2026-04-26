@@ -59,13 +59,6 @@ export function RoxyShellLayout({ children, contentClassName }: RoxyShellLayoutP
     []
   );
 
-  const categoryKey =
-    location.pathname.startsWith('/ai-anime')
-      ? 'anime'
-      : location.pathname.startsWith('/ai-boyfriend')
-        ? 'guys'
-        : 'girls';
-
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const isMobileViewport = () => window.matchMedia('(max-width: 767px)').matches;
 
@@ -115,37 +108,24 @@ export function RoxyShellLayout({ children, contentClassName }: RoxyShellLayoutP
                 to="/"
                 className={cn(
                   'h-14 flex items-center border-b-2',
-                  categoryKey === 'girls'
+                  location.pathname === '/'
                     ? 'text-pink-400 border-pink-500'
                     : 'text-zinc-300 border-transparent hover:text-white'
                 )}
               >
-                Girls
+                Home
               </Link>
-              <button
-                type="button"
-                onClick={() => setIsCommingSoonModalOpen(true)}
+              <Link
+                to="/discover"
                 className={cn(
                   'h-14 flex items-center border-b-2',
-                  categoryKey === 'anime'
+                  location.pathname.startsWith('/discover')
                     ? 'text-pink-400 border-pink-500'
                     : 'text-zinc-300 border-transparent hover:text-white'
                 )}
               >
-                Anime
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCommingSoonModalOpen(true)}
-                className={cn(
-                  'h-14 flex items-center border-b-2',
-                  categoryKey === 'guys'
-                    ? 'text-pink-400 border-pink-500'
-                    : 'text-zinc-300 border-transparent hover:text-white'
-                )}
-              >
-                Guys
-              </button>
+                Discover
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-5">

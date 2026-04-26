@@ -1,10 +1,41 @@
 import os
 import logging
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import Optional, Any
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND_DIR.parent
+
+
+def resolve_sqlite_path(database_url: str) -> str:
+    if not database_url.startswith("sqlite:///"):
+        return database_url
+
+    raw_path = database_url.replace("sqlite:///", "", 1)
+    if raw_path == ":memory:":
+        return raw_path
+
+    db_path = Path(raw_path)
+    if not db_path.is_absolute():
+        base_dir = REPO_ROOT if db_path.parts and db_path.parts[0] == "backend" else BACKEND_DIR
+        db_path = base_dir / db_path
+
+    return str(db_path.resolve())
+
+
+def normalize_database_url(database_url: str) -> str:
+    if not database_url.startswith("sqlite:///"):
+        return database_url
+
+    db_path = resolve_sqlite_path(database_url)
+    if db_path == ":memory:":
+        return "sqlite:///:memory:"
+
+    return f"sqlite:///{Path(db_path).as_posix()}"
 
 
 class Settings(BaseSettings):
@@ -30,6 +61,7 @@ class Settings(BaseSettings):
 
     novita_api_key: Optional[str] = None
     novita_base_url: str = "https://api.novita.ai/v3"
+    novita_webhook_base_url: Optional[str] = None
 
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
@@ -164,6 +196,7 @@ ENV_TO_SETTINGS_MAP = {
     "LLM_LOCAL_BASE_URL": "local_model_url",
     "NOVITA_API_KEY": "novita_api_key",
     "NOVITA_BASE_URL": "novita_base_url",
+    "NOVITA_WEBHOOK_BASE_URL": "novita_webhook_base_url",
     "ELEVENLABS_API_KEY": "elevenlabs_api_key",
     "R2_ACCESS_KEY_ID": "r2_access_key_id",
     "R2_SECRET_ACCESS_KEY": "r2_secret_access_key",

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 import httpx
 
 from app.models import BaseResponse, Task, TaskStatus
-from app.services.media import NovitaImageProvider, LoRAConfig, ControlNetConfig
+from app.services.media import NovitaImageProvider, LoRAConfig, IPAdapterConfig, ControlNetConfig
 from app.services.media_service import MediaService
 from app.services.character_service import character_service
 from app.config import get_lora_config, NEGATIVE_PROMPTS
@@ -223,8 +223,8 @@ class GenerateMatureLoRARequest(BaseModel):
     width: int = Field(default=1024, ge=128, le=2048)
     height: int = Field(default=1024, ge=128, le=2048)
     steps: int = Field(default=20, ge=1, le=100)
-    guidance_scale: float = Field(default=7.5, ge=1.0, le=30.0)
-    strength: float = Field(default=0.75, ge=0.0, le=1.0)
+    guidance_scale: float = Field(default=6.0, ge=1.0, le=30.0)
+    strength: float = Field(default=0.45, ge=0.0, le=1.0)
     negative_prompt: Optional[str] = None
 
 
@@ -232,13 +232,16 @@ class GeneratePoseMatureRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2048)
     character_id: Optional[str] = None
     session_id: Optional[str] = None
+    lora_id: Optional[str] = None
     lora_preset_id: Optional[str] = None
     pose_image_url: str = Field(..., min_length=1)
     width: int = Field(default=1024, ge=128, le=2048)
     height: int = Field(default=1024, ge=128, le=2048)
     steps: int = Field(default=20, ge=1, le=100)
-    guidance_scale: float = Field(default=7.0, ge=1.0, le=30.0)
-    controlnet_strength: float = Field(default=0.7, ge=0.0, le=1.0)
+    guidance_scale: float = Field(default=6.0, ge=1.0, le=30.0)
+    strength: float = Field(default=0.45, ge=0.0, le=1.0)
+    ip_adapter_strength: float = Field(default=0.45, ge=0.0, le=1.0)
+    controlnet_strength: float = Field(default=0.65, ge=0.0, le=1.0)
     negative_prompt: Optional[str] = None
 
 
@@ -573,6 +576,10 @@ async def generate_pose_mature(
     prompt = data.prompt
     if prompt_hints:
         prompt = _compose_prompt_with_lora(prompt, prompt_hints)
+    elif data.lora_id:
+        legacy = get_lora_config(data.lora_id)
+        if legacy:
+            prompt = f"{legacy.trigger_word}, {prompt}"
     negative_prompt = data.negative_prompt or NEGATIVE_PROMPTS["realistic"]
     if prompt_hints:
         mode = prompt_hints.get("prompt_template_mode") or "append_trigger"
@@ -583,11 +590,18 @@ async def generate_pose_mature(
             negative_prompt = f"{example_negative}, {negative_prompt}"
 
     try:
+        base_image_url: Optional[str] = None
         face_reference_url: Optional[str] = None
         if data.character_id:
             try:
                 character = await character_service.get_character_by_id(data.character_id)
                 if character:
+                    base_image_url = (
+                        character.get("mature_image_url")
+                        or character.get("avatar_url")
+                        or character.get("profile_image_url")
+                        or character.get("cover_url")
+                    )
                     face_reference_url = (
                         character.get("avatar_url")
                         or character.get("profile_image_url")
@@ -598,24 +612,37 @@ async def generate_pose_mature(
                 logger.warning("Failed to resolve face reference for %s: %s", data.character_id, e)
 
         pose_image_base64 = await provider._download_image_base64(data.pose_image_url)
+        face_base64 = None
+        if face_reference_url:
+            try:
+                face_base64 = await provider._download_image_base64(face_reference_url)
+            except Exception as e:
+                logger.warning("Failed to resolve IPAdapter reference for %s: %s", data.character_id, e)
         
         controlnet = ControlNetConfig(
-            model_name="control_v11p_sd15_openpose",
+            model_name="controlnet-openpose-sdxl-1.0",
             image_base64=pose_image_base64,
             strength=data.controlnet_strength,
-            preprocessor="openpose",
+            preprocessor="dwpose",
+            guidance_start=0.0,
+            guidance_end=0.8,
         )
+
+        ip_adapters = [
+            IPAdapterConfig(image_base64=face_base64, strength=data.ip_adapter_strength)
+        ] if face_base64 else None
         
         task_id = await provider.img2img_async(
-            init_image_url=data.pose_image_url,
+            init_image_url=base_image_url or data.pose_image_url,
             prompt=prompt,
             negative_prompt=negative_prompt,
             width=data.width,
             height=data.height,
             steps=data.steps,
             guidance_scale=data.guidance_scale,
-            strength=1.0,
+            strength=data.strength,
             controlnet=controlnet,
+            ip_adapters=ip_adapters,
             loras=lora_configs if lora_configs else None,
         )
 
@@ -1401,11 +1428,23 @@ async def voice_websocket(request: Request, session_id: str):
 
 @router.post("/callbacks/novita")
 async def novita_callback(request: Request) -> BaseResponse:
-    body = await request.json()
-    logger.info(f"Novita callback received: {body}")
+    raw_body = await request.json()
+    logger.info(f"Novita callback received: {raw_body}")
+
+    event_type = raw_body.get("event_type")
+    if event_type and event_type != "ASYNC_TASK_RESULT":
+        logger.info("Ignoring Novita callback event_type=%s", event_type)
+        return BaseResponse(success=True, message="Novita callback ignored")
+
+    body = raw_body.get("payload") if event_type == "ASYNC_TASK_RESULT" else raw_body
+    if not isinstance(body, dict):
+        logger.warning("Novita callback payload is not an object: %s", raw_body)
+        return BaseResponse(success=True, message="Novita callback received")
     
-    task_id = body.get("task_id")
     task = body.get("task", {})
+    if not isinstance(task, dict):
+        task = {}
+    task_id = body.get("task_id") or task.get("task_id")
     task_status = task.get("status")
     images = body.get("images", [])
     videos = body.get("videos", [])

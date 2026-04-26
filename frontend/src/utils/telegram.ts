@@ -163,3 +163,35 @@ export function getTelegramColorScheme(): 'light' | 'dark' {
 export function getTelegramThemeParams(): TelegramThemeParams {
   return getTelegramWebApp()?.themeParams ?? {};
 }
+
+const TELEGRAM_MINI_APP_URL = (import.meta.env.VITE_TELEGRAM_MINI_APP_URL || '').trim();
+const TELEGRAM_BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || '').trim();
+const TELEGRAM_MINI_APP_SHORT_NAME = (import.meta.env.VITE_TELEGRAM_MINI_APP_SHORT_NAME || '').trim();
+
+function normalizeStartParam(startParam: string): string {
+  return startParam.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 512);
+}
+
+export function buildTelegramMiniAppUrl(startParam = 'purchase'): string {
+  const safeStartParam = normalizeStartParam(startParam);
+
+  if (TELEGRAM_MINI_APP_URL) {
+    const url = new URL(TELEGRAM_MINI_APP_URL);
+    url.searchParams.set('startapp', safeStartParam);
+    return url.toString();
+  }
+
+  if (TELEGRAM_BOT_USERNAME) {
+    const username = TELEGRAM_BOT_USERNAME.replace(/^@/, '');
+    if (TELEGRAM_MINI_APP_SHORT_NAME) {
+      return `https://t.me/${username}/${TELEGRAM_MINI_APP_SHORT_NAME}?startapp=${encodeURIComponent(safeStartParam)}`;
+    }
+    return `https://t.me/${username}?start=${encodeURIComponent(safeStartParam)}`;
+  }
+
+  return 'https://telegram.org/apps';
+}
+
+export function openTelegramMiniApp(startParam = 'purchase'): void {
+  window.location.href = buildTelegramMiniAppUrl(startParam);
+}

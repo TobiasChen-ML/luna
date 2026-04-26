@@ -546,6 +546,40 @@ async def _build_prompt_context(
     if session_id:
         ctx.session_id = session_id
         ctx.conversation_history = await chat_history_service.get_recent_messages(session_id)
+
+        if ctx.use_script_library and ctx.script_library_full:
+            beats = ctx.script_library_full.get("narrative_beats") or []
+            if beats:
+                previous_user_turns = sum(
+                    1 for msg in ctx.conversation_history
+                    if msg.get("role") == "user"
+                )
+                current_turn = previous_user_turns + 1
+                beat_index = min(len(beats) - 1, max(0, (current_turn - 1) // 3))
+                current_beat = beats[beat_index] if isinstance(beats[beat_index], dict) else {}
+                next_beat = (
+                    beats[beat_index + 1]
+                    if beat_index + 1 < len(beats) and isinstance(beats[beat_index + 1], dict)
+                    else None
+                )
+
+                if current_beat.get("scene"):
+                    ctx.current_scene_description = current_beat["scene"]
+
+                guidance_parts = []
+                if current_beat.get("hint"):
+                    guidance_parts.append(f"Current beat guidance: {current_beat['hint']}")
+                if current_beat.get("emotion"):
+                    guidance_parts.append(f"Emotional tone: {current_beat['emotion']}")
+                if next_beat:
+                    next_scene = next_beat.get("scene")
+                    next_hint = next_beat.get("hint")
+                    if next_scene:
+                        guidance_parts.append(f"Steer naturally toward next beat: {next_scene}")
+                    if next_hint:
+                        guidance_parts.append(f"Next beat hint: {next_hint}")
+                if guidance_parts:
+                    ctx.narrative_context = "\n".join(guidance_parts)
     
     return ctx
 

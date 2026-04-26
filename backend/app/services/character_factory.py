@@ -85,6 +85,136 @@ AVATAR_BACKGROUND_SCENES = [
     "on a sandy beach at sunset",
 ]
 
+IMAGE_POSE_VARIANTS = [
+    "standing in a relaxed contrapposto pose",
+    "leaning lightly against the wall",
+    "sitting at a three-quarter angle",
+    "turning over one shoulder toward the camera",
+    "kneeling on one knee with natural posture",
+    "reclining diagonally across the frame",
+    "walking slowly toward the camera",
+    "standing with one hand at her waist",
+    "sitting on the edge of a chair with crossed legs",
+    "standing in profile with her face turned toward camera",
+    "crouching playfully with balanced posture",
+    "stepping out from a doorway mid-stride",
+    "resting on one hip with asymmetrical shoulders",
+    "perched on a windowsill at a diagonal angle",
+    "standing with arms loosely folded below the chest",
+    "sitting sideways with one knee raised",
+]
+
+IMAGE_ACTION_VARIANTS = [
+    "adjusting her hair naturally",
+    "resting one hand on a nearby surface",
+    "glancing aside before looking back",
+    "stretching with relaxed shoulders",
+    "holding a soft confident expression",
+    "shifting her weight mid-step",
+    "brushing hair away from her face",
+    "posing with subtle hand movement",
+    "tilting her chin while making direct eye contact",
+    "lifting one hand as if greeting the viewer",
+    "turning her shoulders as if caught candidly",
+    "lightly touching her necklace",
+    "looking back while taking a step forward",
+    "settling into the seat with relaxed hands",
+    "placing one hand behind her head",
+    "reaching toward the camera in a candid moment",
+]
+
+IMAGE_CAMERA_VARIANTS = [
+    "waist-level camera angle",
+    "slight high-angle portrait framing",
+    "low-angle full-body framing",
+    "three-quarter portrait composition",
+    "close portrait with shallow depth of field",
+    "wide environmental portrait framing",
+    "35mm candid photography style",
+    "50mm editorial portrait lens",
+    "full-body vertical portrait with generous negative space",
+    "dynamic diagonal composition",
+    "over-the-shoulder portrait framing",
+    "low side-angle fashion editorial framing",
+    "mirror selfie perspective with visible phone",
+    "intimate medium close-up portrait crop",
+    "floor-level upward perspective",
+    "cinematic off-center composition",
+]
+
+IMAGE_QUALITY_VARIANTS = [
+    "soft cinematic lighting, natural skin texture",
+    "crisp studio detail, balanced contrast",
+    "warm golden-hour highlights, realistic shadows",
+    "moody low-key lighting, high dynamic range",
+    "clean editorial color grading, fine detail",
+    "natural window light, subtle film grain",
+    "high-end portrait photography, sharp focus",
+    "ambient room lighting, realistic color tones",
+]
+
+MATURE_BACKGROUND_VARIANTS = [
+    "in a modern bedroom with linen sheets",
+    "beside a tall window with city lights behind her",
+    "in a minimalist studio with soft curtains",
+    "on a hotel suite sofa with warm lamps",
+    "near a bathroom vanity with marble reflections",
+    "on a balcony with night skyline bokeh",
+    "in a private lounge with cinematic shadows",
+    "against a textured wall with soft side light",
+    "in a candlelit hotel suite with warm practical lights",
+    "on a plush chaise lounge with deep shadows",
+    "in a private dressing room with silk curtains",
+    "beside a freestanding bathtub with soft steam",
+    "on a dark velvet sofa under a single key light",
+    "in a loft bedroom with rain on the window",
+    "near a low bed with dramatic side lighting",
+    "in a moody studio with colored rim light",
+]
+
+VIDEO_MOTION_VARIANTS = [
+    "slow head turn and subtle eye contact",
+    "gentle breathing motion with a relaxed posture shift",
+    "small shoulder movement and soft hand gesture",
+    "slow hair movement with a calm gaze",
+    "subtle weight shift and natural blinking",
+    "smooth torso movement with steady expression",
+    "slow camera-aware pose transition",
+    "minimal cinematic movement, no abrupt motion",
+    "slowly sits down and leans forward with controlled motion",
+    "turns from profile to face camera while one hand moves through her hair",
+    "takes two small steps toward camera with natural hip and shoulder movement",
+    "raises one hand toward the lens, then lowers it with a soft smile",
+    "shifts from seated pose to standing pose in one smooth transition",
+    "arches her back slightly, then relaxes into a new pose",
+    "rolls one shoulder and turns her torso toward the camera",
+    "slowly reclines and changes hand placement with steady eye contact",
+]
+
+VIDEO_CAMERA_VARIANTS = [
+    "slow push-in camera movement",
+    "locked-off portrait camera with shallow depth of field",
+    "gentle handheld portrait framing",
+    "slow side-to-front camera drift",
+    "medium shot with stable framing",
+    "three-quarter portrait video composition",
+    "smooth vertical pan from full body to face",
+    "slow orbit from left side to frontal portrait",
+    "gentle dolly-out revealing more of the room",
+    "handheld close portrait with controlled parallax",
+    "low-angle camera rising into eye-level framing",
+    "slow rack focus from foreground to her face",
+]
+
+VIDEO_QUALITY_VARIANTS = [
+    "cinematic lighting, clean temporal consistency",
+    "high detail, stable anatomy, natural motion",
+    "soft filmic color grading, smooth frames",
+    "realistic skin texture, stable facial identity",
+    "high quality video, coherent motion, no flicker",
+    "balanced contrast, smooth motion, sharp subject focus",
+]
+
 _SPORT_KEYWORDS = {"athlete", "fitness", "dancer", "trainer", "basketball", "swimmer", "yoga", "sports", "gymnast"}
 _LUXURY_KEYWORDS = {"model", "actress", "celebrity", "influencer", "escort", "hostess", "entertainer"}
 
@@ -149,6 +279,125 @@ class CharacterFactory:
         )
         voice_ids = [str(row.get("provider_voice_id") or "").strip() for row in (rows or [])]
         return [voice_id for voice_id in voice_ids if voice_id]
+
+    @staticmethod
+    def _sample_from_pool(pool: list[str]) -> str:
+        if not pool:
+            return ""
+        return pool[random.randrange(len(pool))]
+
+    @staticmethod
+    def _random_seed() -> int:
+        return random.randint(1, 2_147_483_647)
+
+    @classmethod
+    def _sample_image_prompt_variation(
+        cls, *, include_background: bool = False
+    ) -> dict[str, str]:
+        variation = {
+            "pose": cls._sample_from_pool(IMAGE_POSE_VARIANTS),
+            "action": cls._sample_from_pool(IMAGE_ACTION_VARIANTS),
+            "camera": cls._sample_from_pool(IMAGE_CAMERA_VARIANTS),
+            "quality": cls._sample_from_pool(IMAGE_QUALITY_VARIANTS),
+        }
+        if include_background:
+            variation["background"] = cls._sample_from_pool(MATURE_BACKGROUND_VARIANTS)
+        return variation
+
+    @classmethod
+    def _sample_video_prompt_variation(cls) -> dict[str, str]:
+        return {
+            "motion": cls._sample_from_pool(VIDEO_MOTION_VARIANTS),
+            "action": cls._sample_from_pool(IMAGE_ACTION_VARIANTS),
+            "camera": cls._sample_from_pool(VIDEO_CAMERA_VARIANTS),
+            "quality": cls._sample_from_pool(VIDEO_QUALITY_VARIANTS),
+            "background": cls._sample_from_pool(MATURE_BACKGROUND_VARIANTS),
+        }
+
+    @staticmethod
+    def _pick_unique(pool: list[str], index: int) -> str:
+        if not pool:
+            return ""
+        offset = random.randrange(len(pool))
+        return pool[(index + offset) % len(pool)]
+
+    @classmethod
+    def _build_visual_brief(cls, index: int = 0, count: int = 1) -> dict[str, object]:
+        """Build one visual brief with batch-spread choices and explicit seeds."""
+        return {
+            "batch_index": index,
+            "batch_count": count,
+            "avatar": {
+                "background": cls._pick_unique(AVATAR_BACKGROUND_SCENES, index),
+                "pose": cls._pick_unique(IMAGE_POSE_VARIANTS, index),
+                "action": cls._pick_unique(IMAGE_ACTION_VARIANTS, index * 2),
+                "camera": cls._pick_unique(IMAGE_CAMERA_VARIANTS, index * 3),
+                "quality": cls._pick_unique(IMAGE_QUALITY_VARIANTS, index),
+                "seed": cls._random_seed(),
+            },
+            "mature": {
+                "pose": cls._pick_unique(IMAGE_POSE_VARIANTS, index + count + 3),
+                "action": cls._pick_unique(IMAGE_ACTION_VARIANTS, index * 2 + count + 5),
+                "camera": cls._pick_unique(IMAGE_CAMERA_VARIANTS, index * 3 + count + 7),
+                "background": cls._pick_unique(MATURE_BACKGROUND_VARIANTS, index),
+                "quality": cls._pick_unique(IMAGE_QUALITY_VARIANTS, index + count),
+                "seed": cls._random_seed(),
+            },
+            "video": {
+                "motion": cls._pick_unique(VIDEO_MOTION_VARIANTS, index),
+                "action": cls._pick_unique(IMAGE_ACTION_VARIANTS, index * 2 + 1),
+                "camera": cls._pick_unique(VIDEO_CAMERA_VARIANTS, index * 3 + 2),
+                "background": cls._pick_unique(MATURE_BACKGROUND_VARIANTS, index + count),
+                "quality": cls._pick_unique(VIDEO_QUALITY_VARIANTS, index),
+                "seed": cls._random_seed(),
+            },
+        }
+
+    @classmethod
+    def _assign_batch_visual_briefs(cls, profiles: list[dict]) -> None:
+        count = len(profiles)
+        avatar_backgrounds = random.sample(AVATAR_BACKGROUND_SCENES, len(AVATAR_BACKGROUND_SCENES))
+        avatar_poses = random.sample(IMAGE_POSE_VARIANTS, len(IMAGE_POSE_VARIANTS))
+        avatar_actions = random.sample(IMAGE_ACTION_VARIANTS, len(IMAGE_ACTION_VARIANTS))
+        avatar_cameras = random.sample(IMAGE_CAMERA_VARIANTS, len(IMAGE_CAMERA_VARIANTS))
+        mature_poses = random.sample(IMAGE_POSE_VARIANTS, len(IMAGE_POSE_VARIANTS))
+        mature_actions = random.sample(IMAGE_ACTION_VARIANTS, len(IMAGE_ACTION_VARIANTS))
+        mature_cameras = random.sample(IMAGE_CAMERA_VARIANTS, len(IMAGE_CAMERA_VARIANTS))
+        mature_backgrounds = random.sample(MATURE_BACKGROUND_VARIANTS, len(MATURE_BACKGROUND_VARIANTS))
+        video_motions = random.sample(VIDEO_MOTION_VARIANTS, len(VIDEO_MOTION_VARIANTS))
+        video_actions = random.sample(IMAGE_ACTION_VARIANTS, len(IMAGE_ACTION_VARIANTS))
+        video_cameras = random.sample(VIDEO_CAMERA_VARIANTS, len(VIDEO_CAMERA_VARIANTS))
+        video_backgrounds = random.sample(MATURE_BACKGROUND_VARIANTS, len(MATURE_BACKGROUND_VARIANTS))
+
+        for index, profile in enumerate(profiles):
+            profile["_visual_brief"] = {
+                "batch_index": index,
+                "batch_count": count,
+                "avatar": {
+                    "background": avatar_backgrounds[index % len(avatar_backgrounds)],
+                    "pose": avatar_poses[index % len(avatar_poses)],
+                    "action": avatar_actions[index % len(avatar_actions)],
+                    "camera": avatar_cameras[index % len(avatar_cameras)],
+                    "quality": cls._pick_unique(IMAGE_QUALITY_VARIANTS, index),
+                    "seed": cls._random_seed(),
+                },
+                "mature": {
+                    "pose": mature_poses[index % len(mature_poses)],
+                    "action": mature_actions[index % len(mature_actions)],
+                    "camera": mature_cameras[index % len(mature_cameras)],
+                    "background": mature_backgrounds[index % len(mature_backgrounds)],
+                    "quality": cls._pick_unique(IMAGE_QUALITY_VARIANTS, index + count),
+                    "seed": cls._random_seed(),
+                },
+                "video": {
+                    "motion": video_motions[index % len(video_motions)],
+                    "action": video_actions[index % len(video_actions)],
+                    "camera": video_cameras[index % len(video_cameras)],
+                    "background": video_backgrounds[index % len(video_backgrounds)],
+                    "quality": cls._pick_unique(VIDEO_QUALITY_VARIANTS, index),
+                    "seed": cls._random_seed(),
+                },
+            }
 
     def _get_random_background(self, profile: dict) -> str:
         occupation = profile.get("occupation", "").lower()
@@ -248,6 +497,7 @@ class CharacterFactory:
         personality: str,
         sfw_avatar_url: str,
         loras: list[dict],
+        visual_brief: Optional[dict[str, object]] = None,
     ) -> Optional[str]:
         """Generate Mature image using IPAdapter (character consistency) + DB LoRAs."""
         from app.services.media import IPAdapterConfig, LoRAConfig as MediaLoRAConfig
@@ -258,10 +508,23 @@ class CharacterFactory:
             logger.warning(f"IPAdapter download failed for {name}: {e}")
             return None
 
+        mature_brief = (visual_brief or {}).get("mature", {}) if visual_brief else {}
+        fallback_variation = self._sample_image_prompt_variation(include_background=True)
+        image_variation = {
+            "pose": mature_brief.get("pose") or fallback_variation["pose"],
+            "action": mature_brief.get("action") or fallback_variation["action"],
+            "camera": mature_brief.get("camera") or fallback_variation["camera"],
+            "quality": mature_brief.get("quality") or fallback_variation["quality"],
+            "background": mature_brief.get("background") or fallback_variation["background"],
+        }
+        seed = int(mature_brief.get("seed") or self._random_seed())
         base_prompt = (
             f"nude full body photo of a beautiful {age}-year-old {ethnicity_style['avatar']}, "
             f"{personality} personality, completely naked, perfect body, "
-            "detailed skin, photorealistic, masterpiece photography, "
+            f"{image_variation['pose']}, {image_variation['action']}, "
+            f"{image_variation['background']}, {image_variation['camera']}, "
+            f"{image_variation['quality']}, detailed skin, photorealistic, masterpiece photography, "
+            "new pose and new composition different from the reference image, "
             "lightrays, very detailed skin, 8k focus stacking, looking at camera"
         )
         base_negative = (
@@ -272,7 +535,23 @@ class CharacterFactory:
             "extra arms, extra legs, fused fingers, too many fingers, long neck, "
             "clothing, clothes, dressed"
         )
-        selected_lora = loras[0] if loras else None
+        selected_lora = dict(loras[0]) if loras else None
+        if selected_lora:
+            mode = (selected_lora.get("prompt_template_mode") or "append_trigger").strip().lower()
+            trigger_word = (selected_lora.get("trigger_word") or "").strip()
+            if mode == "append_trigger" and trigger_word and "," in trigger_word:
+                trigger_parts = [part.strip() for part in trigger_word.split(",") if part.strip()]
+                if trigger_parts:
+                    selected_lora["trigger_word"] = random.choice(trigger_parts)
+            elif mode == "use_example":
+                example_prompt = self._pick_random_template(
+                    selected_lora.get("example_prompt") or ""
+                )
+                if example_prompt:
+                    trigger = selected_lora.get("trigger_word", "").strip()
+                    if trigger and trigger.lower() not in example_prompt.lower():
+                        example_prompt = f"{trigger}, {example_prompt}"
+                    selected_lora["example_prompt"] = example_prompt
         mature_prompt = self._compose_prompt_with_lora(base_prompt, selected_lora)
         mature_negative = self._compose_negative_with_lora(base_negative, selected_lora)
 
@@ -282,7 +561,7 @@ class CharacterFactory:
         ] or None
         ip_adapters = [IPAdapterConfig(
             image_base64=face_base64,
-            strength=0.75,
+            strength=0.45,
             model_name="ip-adapter_sdxl.bin",
         )]
 
@@ -293,11 +572,12 @@ class CharacterFactory:
                 prompt=mature_prompt,
                 negative_prompt=mature_negative,
                 model=novita.DEFAULT_MODEL,
-                strength=0.6,
+                strength=0.45,
                 width=768,
                 height=1024,
                 steps=28,
-                guidance_scale=7.0,
+                guidance_scale=6.0,
+                seed=seed,
                 loras=lora_configs,
                 ip_adapters=ip_adapters,
             )
@@ -359,11 +639,11 @@ class CharacterFactory:
                     init_image_url=source_url,
                     prompt=prompt,
                     negative_prompt=negative_prompt,
-                    strength=0.55,
+                    strength=0.45,
                     width=width,
                     height=height,
                     steps=28,
-                    guidance_scale=7.0,
+                    guidance_scale=6.0,
                 )
                 result = await novita.wait_for_task(task_id)
                 if result.image_url:
@@ -384,7 +664,7 @@ class CharacterFactory:
                 width=width,
                 height=height,
                 steps=28,
-                guidance_scale=7.0,
+                guidance_scale=6.0,
             )
             result = await novita.wait_for_task(task_id)
             if result.image_url:
@@ -423,6 +703,7 @@ class CharacterFactory:
             age_max=age_max,
             trend_context=trend_context,
         )
+        self._assign_batch_visual_briefs(profiles)
 
         voice_ids = await self._get_active_elevenlabs_voice_ids()
         if not voice_ids:
@@ -450,14 +731,18 @@ class CharacterFactory:
                 if voice_ids and not profile.get("voice_id"):
                     profile["voice_id"] = random.choice(voice_ids)
 
-                character_create = CharacterCreate(**profile)
+                character_create = CharacterCreate(
+                    **{k: v for k, v in profile.items() if not k.startswith("_")}
+                )
                 character = await character_service.create_character(character_create)
 
                 # Launch Mature video generation as a background task after character is saved
                 character_id = character.get("id")
                 if generate_video and character_id:
                     video_source = (
-                        profile.get("mature_image_url") or profile.get("avatar_url")
+                        profile.get("mature_cover_url")
+                        or profile.get("mature_image_url")
+                        or profile.get("avatar_url")
                     )
                     if video_source:
                         asyncio.create_task(
@@ -504,6 +789,7 @@ class CharacterFactory:
 
                 profile["template_id"] = template_id
                 profile["generation_mode"] = "template"
+                profile["_visual_brief"] = self._build_visual_brief(index=i, count=variations)
 
                 if generate_images:
                     images = await self._generate_character_images(profile)
@@ -513,13 +799,17 @@ class CharacterFactory:
                     seo_data = await self._generate_seo_content(profile)
                     profile.update(seo_data)
 
-                character_create = CharacterCreate(**profile)
+                character_create = CharacterCreate(
+                    **{k: v for k, v in profile.items() if not k.startswith("_")}
+                )
                 character = await character_service.create_character(character_create)
 
                 character_id = character.get("id")
                 if generate_video and character_id:
                     video_source = (
-                        profile.get("mature_image_url") or profile.get("avatar_url")
+                        profile.get("mature_cover_url")
+                        or profile.get("mature_image_url")
+                        or profile.get("avatar_url")
                     )
                     if video_source:
                         asyncio.create_task(
@@ -562,6 +852,7 @@ class CharacterFactory:
         if name:
             profile[0]["name"] = name
             profile[0]["first_name"] = name.split()[0] if " " in name else name
+        profile[0]["_visual_brief"] = self._build_visual_brief(index=0, count=1)
 
         if generate_images:
             images = await self._generate_character_images(profile[0])
@@ -571,12 +862,18 @@ class CharacterFactory:
             seo_data = await self._generate_seo_content(profile[0])
             profile[0].update(seo_data)
 
-        character_create = CharacterCreate(**profile[0])
+        character_create = CharacterCreate(
+            **{k: v for k, v in profile[0].items() if not k.startswith("_")}
+        )
         character = await character_service.create_character(character_create)
 
         if generate_video:
             character_id = character.get("id")
-            video_source = profile[0].get("mature_image_url") or profile[0].get("avatar_url")
+            video_source = (
+                profile[0].get("mature_cover_url")
+                or profile[0].get("mature_image_url")
+                or profile[0].get("avatar_url")
+            )
             if character_id and video_source:
                 asyncio.create_task(
                     self._generate_and_save_video(character_id, profile[0], video_source)
@@ -933,7 +1230,9 @@ class CharacterFactory:
         occupation_config = OCCUPATION_TEMPLATES.get(occupation, {})
         personality = " ".join(profile.get("personality_tags", [])[:2])
         occupation_style = occupation_config.get("image_style", "professional woman")
-        background = self._get_random_background(profile)
+        visual_brief = profile.get("_visual_brief") or self._build_visual_brief()
+        avatar_brief = visual_brief.get("avatar", {}) if isinstance(visual_brief, dict) else {}
+        background = avatar_brief.get("background") or self._get_random_background(profile)
 
         novita = await self._get_txt2img_provider()
         if not novita:
@@ -954,11 +1253,16 @@ class CharacterFactory:
 
         sfw_trigger = " ".join(_pick_one_trigger(l["trigger_word"]) for l in sfw_loras if l.get("trigger_word"))
         sfw_trigger_part = f"{sfw_trigger}, " if sfw_trigger else ""
+        sfw_variation = self._sample_image_prompt_variation()
+        avatar_seed = int(avatar_brief.get("seed") or self._random_seed())
         avatar_prompt = (
             f"full body selfie photo of a beautiful {age}-year-old {ethnicity_style['avatar']}, "
             f"{background}, {occupation_style}, {personality} personality, "
             f"{sfw_trigger_part}"
-            "holding phone, casual selfie angle, attractive, natural lighting, "
+            f"{avatar_brief.get('pose') or sfw_variation['pose']}, "
+            f"{avatar_brief.get('action') or sfw_variation['action']}, "
+            f"{avatar_brief.get('camera') or sfw_variation['camera']}, holding phone, "
+            f"{avatar_brief.get('quality') or sfw_variation['quality']}, attractive, natural lighting, "
             "photorealistic, high quality, 4k, detailed"
         )
 
@@ -976,6 +1280,7 @@ class CharacterFactory:
                 width=768,
                 height=1024,
                 loras=sfw_lora_configs,
+                seed=avatar_seed,
             )
             result = await novita.wait_for_task(task_id)
             if result.image_url:
@@ -1021,6 +1326,7 @@ class CharacterFactory:
                     personality=personality_variant,
                     sfw_avatar_url=sfw_avatar_url,
                     loras=loras,
+                    visual_brief=visual_brief,
                 )
                 if mature_url:
                     logger.info(
@@ -1058,6 +1364,8 @@ class CharacterFactory:
             name = profile.get("name", "Character")
             personality_tags = profile.get("personality_tags", [])
             personality = " ".join(personality_tags[:2]) if personality_tags else "sensual"
+            visual_brief = profile.get("_visual_brief") or self._build_visual_brief()
+            video_brief = visual_brief.get("video", {}) if isinstance(visual_brief, dict) else {}
 
             def _pick_one(raw: str) -> str:
                 parts = [p.strip() for p in raw.split(",") if p.strip()]
@@ -1069,10 +1377,18 @@ class CharacterFactory:
                 _pick_one(l["trigger_word"]) for l in video_loras if l.get("trigger_word")
             )
 
+            video_variation = self._sample_video_prompt_variation()
+            video_seed = int(video_brief.get("seed") or self._random_seed())
             video_prompt = (
                 f"a beautiful nude woman, {personality}, "
-                "natural body movement, subtle breathing, slight blinking, "
-                "smooth motion, high quality, cinematic"
+                f"{video_brief.get('motion') or video_variation['motion']}, "
+                f"{video_brief.get('action') or video_variation['action']}, "
+                f"{video_brief.get('camera') or video_variation['camera']}, "
+                f"{video_brief.get('background') or video_variation['background']}, "
+                f"{video_brief.get('quality') or video_variation['quality']}, "
+                "clear full-body pose transition, visible hand movement, torso movement, "
+                "natural body movement, expressive eye contact, slight blinking, "
+                "smooth motion, coherent anatomy, high quality, cinematic"
             )
             if trigger_words:
                 video_prompt = f"{trigger_words}, {video_prompt}"
@@ -1086,6 +1402,7 @@ class CharacterFactory:
                 steps=30,
                 guidance_scale=5.0,
                 flow_shift=5.0,
+                seed=video_seed,
                 enable_safety_checker=False,
                 timeout_seconds=600,
             )

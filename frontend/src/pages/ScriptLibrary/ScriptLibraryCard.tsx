@@ -82,7 +82,7 @@ const ScriptLibraryCard: React.FC<ScriptLibraryCardProps> = ({ script }) => {
         </span>
         <span className="meta-item">
           <span className="meta-icon">📝</span>
-          {t(`scriptLibrary.length.${script.length}`, script.length)}
+          {t(`scriptLibrary.length.${script.length}`, { defaultValue: script.length || '' })}
         </span>
         {script.gender_target && (
           <span className="meta-item">

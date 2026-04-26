@@ -172,7 +172,7 @@ export function CharactersPage({ initialCategory }: CharactersPageProps = {}) {
   const navigate = useNavigate();
   const { isTma } = useTelegram();
 
-  const [activeCategory, setActiveCategory] = useState<TopCategory>(initialCategory ?? 'girls');
+  const activeCategory: TopCategory = initialCategory ?? 'girls';
   const [activeFilterTag, setActiveFilterTag] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [selectedChar, setSelectedChar] = useState<DiscoverCharacter | null>(null);
@@ -227,13 +227,6 @@ export function CharactersPage({ initialCategory }: CharactersPageProps = {}) {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const onSelectCategory = (cat: TopCategory) => {
-    setActiveCategory(cat);
-    setActiveFilterTag(null);
-    setSearchInput('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const onSelectFilter = (slug: string | null) => {
     setActiveFilterTag(slug);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -263,25 +256,8 @@ export function CharactersPage({ initialCategory }: CharactersPageProps = {}) {
 
   return (
     <div>
-      {/* Category tabs + search row */}
+      {/* Search row */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex gap-1 shrink-0">
-          {(['girls', 'anime', 'guys'] as const).map((cat) => (
-            <button
-              key={cat}
-              onClick={() => onSelectCategory(cat)}
-              className={cn(
-                'px-5 py-2 rounded-full text-sm font-semibold border transition-colors capitalize',
-                activeCategory === cat
-                  ? 'bg-white/10 text-white border-white/20'
-                  : 'bg-transparent text-zinc-400 border-white/10 hover:bg-white/5 hover:text-zinc-200'
-              )}
-            >
-              {cat === 'girls' ? 'Girls' : cat === 'anime' ? 'Anime' : 'Guys'}
-            </button>
-          ))}
-        </div>
-
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
           <input

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { cn } from '@/utils/cn';
 import { startOfficialChat } from '@/utils/startOfficialChat';
+import { claimShareReward, share } from '@/utils/share';
 import type { TopCategory } from '@/types';
 
 interface DiscoverCharacter {
@@ -21,6 +22,7 @@ interface DiscoverCharacter {
   mature_video_url?: string;
   preview_video_url?: string | null;
   personality_summary?: string;
+  description?: string;
   tags?: string[];
   top_category?: TopCategory;
 }
@@ -50,9 +52,8 @@ function pseudoCount(seed: string, base: number, mod: number) {
 
 export function DiscoverVideoFeedPage() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshUser } = useAuth();
 
-  const [activeCategory, setActiveCategory] = useState<TopCategory>('girls');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({});
   const [showComments, setShowComments] = useState(false);
@@ -67,11 +68,10 @@ export function DiscoverVideoFeedPage() {
     isFetchingNextPage,
     fetchNextPage,
   } = useInfiniteQuery<DiscoverCharacter[]>({
-    queryKey: ['discover-video-feed', activeCategory],
+    queryKey: ['discover-video-feed'],
     queryFn: async ({ pageParam }) => {
       const offset = typeof pageParam === 'number' ? pageParam : 0;
       const params = new URLSearchParams({
-        top_category: activeCategory,
         limit: String(PAGE_SIZE),
         offset: String(offset),
         personalized: 'true',
@@ -145,43 +145,20 @@ export function DiscoverVideoFeedPage() {
   const handleShare = useCallback(async (char: DiscoverCharacter) => {
     const shareUrl = `${window.location.origin}/discover/profile/${char.id}`;
     const title = `${getName(char)} on RoxyClub`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, url: shareUrl });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
-      }
-    } catch {
-      // user canceled or not permitted
+    const didShare = await share({ title, url: shareUrl });
+    if (!didShare || !isAuthenticated) return;
+
+    const reward = await claimShareReward(`discover:${char.id}`, 'discover_profile', {
+      character_id: char.id,
+      top_category: char.top_category ?? null,
+    });
+    if (reward?.granted) {
+      await refreshUser();
     }
-  }, []);
+  }, [isAuthenticated, refreshUser]);
 
   return (
     <div className="h-[100dvh] bg-black text-white">
-      <div className="fixed top-0 left-0 right-0 z-30 px-4 pt-[calc(var(--app-safe-area-top)+10px)] pb-3 bg-gradient-to-b from-black/85 to-transparent">
-        <div className="mx-auto max-w-xl">
-          <div className="inline-flex items-center rounded-full bg-white/10 border border-white/15 p-1">
-            {(['girls', 'anime', 'guys'] as const).map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={cn(
-                  'px-4 py-1.5 rounded-full text-sm capitalize transition-colors',
-                  activeCategory === cat ? 'bg-white text-black font-semibold' : 'text-zinc-200 hover:text-white'
-                )}
-                onClick={() => {
-                  setActiveCategory(cat);
-                  setCurrentIndex(0);
-                  setLikedIds({});
-                }}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div ref={containerRef} className="h-full overflow-y-auto snap-y snap-mandatory">
         {visibleCharacters.map((char, index) => {
           const { poster, video } = getDisplayMedia(char);
@@ -189,18 +166,19 @@ export function DiscoverVideoFeedPage() {
           const likes = pseudoCount(char.id, 1200, 50000) + (liked ? 1 : 0);
           const comments = pseudoCount(`${char.id}-comment`, 80, 3000);
           const shares = pseudoCount(`${char.id}-share`, 40, 1500);
+          const storyBackground = char.description?.trim();
 
           return (
             <section
               key={char.id}
               ref={(el) => { sectionRefs.current[index] = el; }}
               data-index={index}
-              className="relative h-[100dvh] snap-start"
+              className="relative h-[100dvh] snap-start overflow-hidden"
             >
               {video ? (
                 <video
                   src={video}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="absolute top-0 left-1/2 h-full w-auto max-w-none -translate-x-1/2 object-cover"
                   autoPlay
                   loop
                   muted
@@ -244,20 +222,23 @@ export function DiscoverVideoFeedPage() {
                 </button>
               </div>
 
-              <div className="absolute left-4 right-20 bottom-[calc(var(--app-safe-area-bottom)+24px)] z-20">
+              <div className="absolute left-4 right-20 bottom-[calc(var(--app-safe-area-bottom)+108px)] z-20">
                 <button
                   type="button"
                   className="text-left"
                   onClick={() => navigate(`/discover/profile/${char.id}`)}
                 >
                   <div className="text-xl font-heading font-bold leading-tight">{getName(char)}</div>
-                  {char.personality_summary && (
-                    <p className="mt-1 text-sm text-zinc-200 line-clamp-2">{char.personality_summary}</p>
+                  {storyBackground && (
+                    <p className="mt-2 text-sm text-zinc-200 line-clamp-3">{storyBackground}</p>
                   )}
                 </button>
+              </div>
+
+              <div className="absolute left-4 right-4 bottom-[calc(var(--app-safe-area-bottom)+24px)] z-20 flex justify-center">
                 <button
                   type="button"
-                  className="mt-3 px-5 py-2 rounded-full bg-pink-500 hover:bg-pink-400 text-white font-semibold text-sm transition-colors"
+                  className="h-12 w-full max-w-sm rounded-full bg-pink-500 hover:bg-pink-400 text-white font-semibold text-base transition-colors shadow-[0_10px_30px_rgba(236,72,153,0.35)]"
                   onClick={() => handlePlayWithMe(char)}
                 >
                   Play with me

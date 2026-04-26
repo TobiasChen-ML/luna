@@ -299,8 +299,12 @@ User's likely emotional state: {{user_emotion_hint}}
 {{narrative_context}}
 {% endif %}
 
+{% if use_script_library %}
+## Active Story Guide
+Use this as the controlling story spine for the roleplay. Do not ignore it.
+
 {% if script_progression %}
-### Story Progression
+### Story Arc
 - Opening: {{script_progression.start}}
 - Development: {{script_progression.build}}
 - Climax: {{script_progression.climax}}
@@ -308,16 +312,10 @@ User's likely emotional state: {{user_emotion_hint}}
 {% endif %}
 
 {% if script_narrative_beats %}
-### Narrative Beats
+### Beat Order
 {% for beat in script_narrative_beats %}
 {{loop.index}}. {{beat.scene}} ({{beat.emotion}}) - Hint: {{beat.hint}}
 {% endfor %}
-{% endif %}
-
-{% if script_endings %}
-### Possible Endings
-- Good: {{script_endings.good}}
-- Secret: {{script_endings.secret}}
 {% endif %}
 
 {% if script_dialogue_hints %}
@@ -327,6 +325,26 @@ Key phrases to use naturally:
 {% for phrase in script_dialogue_hints.key_phrases %}
 - {{phrase}}
 {% endfor %}
+{% endif %}
+
+{% if script_endings %}
+### Ending Targets
+{% if script_endings.good %}- Good: {{script_endings.good}}{% endif %}
+{% if script_endings.neutral %}- Neutral: {{script_endings.neutral}}{% endif %}
+{% if script_endings.bad %}- Bad: {{script_endings.bad}}{% endif %}
+{% if script_endings.secret %}- Secret: {{script_endings.secret}}{% endif %}
+{% endif %}
+
+### Progression Rules
+- Guide the user toward the current beat or the next beat through character action, tension, and choices.
+- If the user gives a compatible response, advance the story instead of looping on the opening setup.
+- Keep the character in role while making the next meaningful story direction clear.
+- Do not spoil future plot points before the user reaches them.
+
+### Story Completion Protocol
+When this story reaches a definitive ending, append EXACTLY one marker at the very end:
+[[STORY_COMPLETED:good]] or [[STORY_COMPLETED:neutral]] or [[STORY_COMPLETED:bad]] or [[STORY_COMPLETED:secret]].
+Do not use this marker unless the ending has actually been reached.
 {% endif %}
 
 ### Available Choices
@@ -345,6 +363,8 @@ The user can choose:
         "description": "Current plot and scene context",
         "description_zh": "剧情与场景上下文：包含当前场景描述、叙事背景、故事进展、剧情节点、可能的结局和可选分支",
         "variables": {
+            "use_script_library": False,
+            "current_scene_description": "",
             "narrative_context": "",
             "choices_available": [],
             "plot_hint": "",

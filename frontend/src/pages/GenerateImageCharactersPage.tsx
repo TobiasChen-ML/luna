@@ -30,6 +30,10 @@ interface CharacterCardItem {
   source: 'official' | 'user';
 }
 
+interface PaginatedCharactersResponse {
+  items?: Character[];
+}
+
 function getCharacterName(character: CharacterLike): string {
   return character.first_name || character.name || 'Character';
 }
@@ -56,14 +60,18 @@ export function GenerateImageCharactersPage() {
       try {
         const [officialResult, myResult] = await Promise.allSettled([
           api.get<CharacterLike[]>('/characters/official'),
-          api.get<Character[]>('/characters'),
+          api.get<PaginatedCharactersResponse | Character[]>('/characters/my'),
         ]);
 
         const officialRows = officialResult.status === 'fulfilled' && Array.isArray(officialResult.value.data)
           ? officialResult.value.data
           : [];
-        const myRows = myResult.status === 'fulfilled' && Array.isArray(myResult.value.data)
-          ? myResult.value.data
+        const myRows = myResult.status === 'fulfilled'
+          ? (
+            Array.isArray(myResult.value.data)
+              ? myResult.value.data
+              : (Array.isArray(myResult.value.data?.items) ? myResult.value.data.items : [])
+          )
           : [];
 
         const normalizedOfficial = officialRows

@@ -2,6 +2,7 @@
  * BillingPage - Main billing and subscription management page
  */
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CreditCard, History, Loader2, RefreshCw } from 'lucide-react';
 import { Container } from '../components/layout/Container';
 import { Card } from '../components/common/Card';
@@ -13,10 +14,12 @@ import { CreditPackModal } from '../components/billing/CreditPackModal';
 import { billingService, type CurrentSubscription, type CreditBalance, type PaymentHistoryItem } from '../services/billingService';
 import { TelegramStarsPayment } from '../components/billing/TelegramStarsPayment';
 import { useTelegram } from '../contexts/TelegramContext';
+import { openTelegramMiniApp } from '../utils/telegram';
 import type { SubscriptionTier, BillingPeriod, BillingPricingConfig } from '../types';
 
 export default function BillingPage() {
   const { isTma } = useTelegram();
+  const navigate = useNavigate();
   const [subscription, setSubscription] = useState<CurrentSubscription | null>(null);
   const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
@@ -64,12 +67,12 @@ export default function BillingPage() {
   };
 
   const handleSelectPlan = async (tier: SubscriptionTier, period: BillingPeriod) => {
-    try {
-      const { checkout_url } = await billingService.createSubscriptionCheckout(tier, period);
-      billingService.redirectToCheckout(checkout_url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout');
+    if (!isTma) {
+      openTelegramMiniApp(`subscription_${tier}_${period}`);
+      return;
     }
+
+    navigate('/subscriptions');
   };
 
   if (loading) {
@@ -102,10 +105,23 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Telegram Stars Payment — shown instead of CCBill in TMA */}
+        {/* Telegram Stars Payment for Telegram Mini App users */}
         {isTma && (
           <div className="mb-8 p-5 rounded-2xl border border-zinc-700 bg-zinc-900/60">
             <TelegramStarsPayment onSuccess={() => loadBillingData()} />
+          </div>
+        )}
+
+        {!isTma && (
+          <div className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-5">
+            <h2 className="text-lg font-semibold text-sky-100">Purchases happen in Telegram</h2>
+            <p className="mt-1 text-sm text-sky-200/90">
+              Web and PWA access can use your active benefits. To upgrade or buy credits,
+              continue in the Telegram Mini App and pay with Telegram Stars.
+            </p>
+            <Button className="mt-4" onClick={() => openTelegramMiniApp('billing')}>
+              Continue in Telegram
+            </Button>
           </div>
         )}
 
@@ -156,7 +172,7 @@ export default function BillingPage() {
                   Ready to unlock more?
                 </h3>
                 <p className="text-zinc-400">
-                  Upgrade your subscription for more features, and buy extra credit packs anytime.
+                  Upgrade in Telegram to unlock more features here and across supported access points.
                 </p>
               </div>
               <Button onClick={() => setShowPlanSelector(true)}>

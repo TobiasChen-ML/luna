@@ -50,6 +50,29 @@ class TestNovitaVideoProvider:
             assert task_id == "task_t2v_001"
 
     @pytest.mark.asyncio
+    async def test_generate_video_async_includes_configured_webhook(self, provider):
+        """Async video requests should send Novita webhook configuration when available."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"task_id": "task_t2v_002"}
+        mock_response.raise_for_status = MagicMock()
+
+        async def config_value(key: str, default=None):
+            if key == "NOVITA_WEBHOOK_BASE_URL":
+                return "https://api.example.com/"
+            return default
+
+        with patch("app.core.config.get_config_value", new=AsyncMock(side_effect=config_value)):
+            with patch("httpx.AsyncClient") as mock_client:
+                post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = post
+
+                task_id = await provider.generate_video_async(prompt="A cat playing piano")
+
+        assert task_id == "task_t2v_002"
+        payload = post.call_args.kwargs["json"]
+        assert payload["extra"]["webhook"]["url"] == "https://api.example.com/api/images/callbacks/novita"
+
+    @pytest.mark.asyncio
     async def test_get_task_result_succeed(self, provider):
         """Should parse successful video task result."""
         mock_response = MagicMock()
@@ -282,6 +305,23 @@ class TestVideoCallback:
                 }
             })
             assert response.status_code == 200
+
+    def test_novita_callback_accepts_async_task_result_event(self, client: TestClient):
+        """Should unwrap Novita official ASYNC_TASK_RESULT webhook payload."""
+        with patch("app.core.redis_client.redis_client.publish", new_callable=AsyncMock) as mock_publish:
+            response = client.post("/api/images/callbacks/novita", json={
+                "event_type": "ASYNC_TASK_RESULT",
+                "payload": {
+                    "task": {
+                        "task_id": "task_video_002",
+                        "status": "TASK_STATUS_SUCCEED",
+                    },
+                    "videos": [{"video_url": "https://example.com/video-2.mp4"}],
+                },
+            })
+            assert response.status_code == 200
+            assert response.json()["success"] is True
+            mock_publish.assert_awaited()
 
     def test_callbacks_health(self, client: TestClient):
         """Should return healthy status."""

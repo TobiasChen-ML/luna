@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import aiosqlite
 import logging
 
@@ -16,9 +16,11 @@ AppliesTo = Literal["txt2img", "img2img", "video", "all"]
 
 
 class LoRAPresetCreate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     name: str = Field(..., min_length=1, max_length=100)
     model_name: str = Field(..., min_length=1, max_length=255)
-    strength: float = Field(default=0.8, ge=0.0, le=2.0)
+    strength: float = Field(default=0.6, ge=0.0, le=2.0)
     trigger_word: str = Field(default="", max_length=500)
     description: str = Field(default="", max_length=1000)
     example_prompt: str = Field(default="", max_length=4000)
@@ -30,6 +32,8 @@ class LoRAPresetCreate(BaseModel):
 
 
 class LoRAPresetUpdate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     model_name: Optional[str] = Field(None, min_length=1, max_length=255)
     strength: Optional[float] = Field(None, ge=0.0, le=2.0)

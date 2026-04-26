@@ -3,6 +3,8 @@ import ReactFlow, {
   Node,
   Edge,
   Connection,
+  NodeChange,
+  EdgeChange,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -14,7 +16,7 @@ import ReactFlow, {
   NodeTypes,
   MarkerType,
 } from 'reactflow';
-import { AlertTriangle, ZoomIn, ZoomOut, Maximize2, Download } from 'lucide-react';
+import { AlertTriangle, Maximize2, Download } from 'lucide-react';
 import { SceneNode } from './SceneNode';
 import { EndingNode } from './EndingNode';
 import { NodePalette } from './NodePalette';
@@ -98,11 +100,11 @@ export const DagEditor: React.FC<DagEditorProps> = ({
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   
-  const { hasCycle, cyclePath } = useCycleDetection(nodes, edges);
-  const { syncNode, syncEdge, isLoading } = useDagSync(scriptId);
+  const { hasCycle } = useCycleDetection(nodes, edges);
+  const { isLoading } = useDagSync(scriptId);
 
   const onNodesChangeHandler = useCallback(
-    async (changes) => {
+    async (changes: NodeChange[]) => {
       if (readOnly) return;
       
       onNodesChangeBase(changes);
@@ -120,7 +122,7 @@ export const DagEditor: React.FC<DagEditorProps> = ({
   );
 
   const onEdgesChangeHandler = useCallback(
-    async (changes) => {
+    async (changes: EdgeChange[]) => {
       if (readOnly) return;
       onEdgesChangeBase(changes);
     },
@@ -130,23 +132,29 @@ export const DagEditor: React.FC<DagEditorProps> = ({
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (readOnly) return;
+      if (!connection.source || !connection.target) return;
+      const source = connection.source;
+      const target = connection.target;
       
-      const newEdge = {
-        ...connection,
-        id: `${connection.source}-${connection.target}`,
+      const newEdge: Edge = {
+        id: `${source}-${target}`,
+        source,
+        target,
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle,
         markerEnd: { type: MarkerType.ArrowClosed },
       };
       
       setEdges((eds) => addEdge(newEdge, eds));
       
-      if (onNodeUpdate && connection.source) {
-        const sourceNode = nodes.find(n => n.id === connection.source);
+      if (onNodeUpdate) {
+        const sourceNode = nodes.find(n => n.id === source);
         if (sourceNode) {
-          const currentChoices = sourceNode.data.choices || [];
-          await onNodeUpdate(connection.source, {
+          const currentChoices = ((sourceNode.data as { choices?: ScriptNode['choices'] }).choices) || [];
+          await onNodeUpdate(source, {
             choices: [
               ...currentChoices,
-              { id: `choice_${Date.now()}`, text: 'New Choice', next_node_id: connection.target }
+              { id: `choice_${Date.now()}`, text: 'New Choice', next_node_id: target }
             ]
           });
         }
@@ -289,16 +297,18 @@ export const DagEditor: React.FC<DagEditorProps> = ({
         
         <Panel position="top-right" className="flex gap-2">
           <button
-            onClick={handleFitView}
-            className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white"
-            title="Fit View"
-          >
+          onClick={handleFitView}
+          className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white"
+          title="Fit View"
+          disabled={isLoading}
+        >
             <Maximize2 size={16} />
           </button>
           <button
             onClick={handleExportImage}
             className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white"
             title="Export as Image"
+            disabled={isLoading}
           >
             <Download size={16} />
           </button>

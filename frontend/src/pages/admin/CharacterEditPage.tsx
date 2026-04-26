@@ -595,7 +595,7 @@ export default function CharacterEditPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">鎬ф牸鏍囩</label>
+                  <label className="block text-sm text-zinc-400 mb-2">性格标签</label>
                   <div className="flex flex-wrap gap-2">
                     {PERSONALITY_OPTIONS.map((trait) => (
                       <button
@@ -624,7 +624,7 @@ export default function CharacterEditPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">寮€场白</label>
+                  <label className="block text-sm text-zinc-400 mb-2">开场白</label>
                   <textarea
                     value={formData.greeting || ''}
                     onChange={(e) => setFormData({ ...formData, greeting: e.target.value })}
@@ -650,13 +650,13 @@ export default function CharacterEditPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">SEO鏍囬</label>
+                  <label className="block text-sm text-zinc-400 mb-2">SEO 标题</label>
                   <input
                     type="text"
                     value={formData.meta_title || ''}
                     onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    placeholder="SEO鏍囬"
+                    placeholder="SEO 标题"
                   />
                 </div>
                 
@@ -713,7 +713,7 @@ export default function CharacterEditPage() {
 
             <div className="bg-zinc-900 border border-red-900/40 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-red-400">Mature 鍐呭</h2>
+                <h2 className="text-lg font-semibold text-red-400">Mature 资源</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={handleRegenerateMatureImage}
@@ -721,14 +721,14 @@ export default function CharacterEditPage() {
                     className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg text-xs text-red-300 flex items-center gap-1 disabled:opacity-50"
                   >
                     {regenerating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    閲嶇敓鎴愬浘鐗?                  </button>
+                    重新生成图片                  </button>
                   <button
                     onClick={handleRegenerateMatureVideo}
                     disabled={regenerating}
                     className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg text-xs text-red-300 flex items-center gap-1 disabled:opacity-50"
                   >
                     {regenerating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    閲嶇敓鎴愯棰?                  </button>
+                    重新生成视频                  </button>
                 </div>
               </div>
 
@@ -807,7 +807,7 @@ export default function CharacterEditPage() {
                     onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
                     className="rounded border-zinc-600"
                   />
-                  <span className="text-sm text-zinc-300">鍏紑鍙</span>
+                  <span className="text-sm text-zinc-300">公开显示</span>
                 </label>
               </div>
             </div>

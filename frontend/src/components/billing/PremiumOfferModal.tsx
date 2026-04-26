@@ -78,7 +78,7 @@ export function PremiumOfferModal({
         </div>
 
         <p className="text-xs text-zinc-500">
-          Secure checkout powered by Stripe. Cancel anytime.
+          Purchases are completed in Telegram with Stars. Active benefits work across supported access points.
         </p>
       </div>
     </Modal>

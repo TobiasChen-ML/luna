@@ -7,6 +7,37 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+NOVITA_CALLBACK_PATH = "/api/images/callbacks/novita"
+
+
+async def _get_novita_webhook_url() -> Optional[str]:
+    try:
+        from app.core.config import get_config_value
+
+        settings = get_settings()
+        base_url = await get_config_value(
+            "NOVITA_WEBHOOK_BASE_URL",
+            getattr(settings, "novita_webhook_base_url", None),
+        )
+    except Exception as e:
+        logger.warning("Failed to resolve Novita webhook URL: %s", e)
+        return None
+
+    if not base_url:
+        return None
+
+    normalized = str(base_url).strip().rstrip("/")
+    if not normalized:
+        return None
+    return f"{normalized}{NOVITA_CALLBACK_PATH}"
+
+
+async def _apply_novita_webhook(extra: dict[str, Any]) -> dict[str, Any]:
+    webhook_url = await _get_novita_webhook_url()
+    if webhook_url:
+        extra["webhook"] = {"url": webhook_url}
+    return extra
+
 
 @dataclass
 class ImageGenerationResult:
@@ -52,7 +83,7 @@ class LoRAConfig:
 @dataclass
 class IPAdapterConfig:
     image_base64: str
-    strength: float = 0.8
+    strength: float = 0.45
     model_name: str = "ip-adapter_sdxl.bin"
 
 
@@ -60,8 +91,10 @@ class IPAdapterConfig:
 class ControlNetConfig:
     model_name: str
     image_base64: str
-    strength: float = 1.0
+    strength: float = 0.65
     preprocessor: Optional[str] = None
+    guidance_start: float = 0.0
+    guidance_end: float = 0.8
 
 
 class BaseMediaProvider:
@@ -138,7 +171,31 @@ class NovitaImageProvider(BaseMediaProvider):
                 return float(val)
         except Exception:
             pass
-        return 0.7
+        return 0.45
+
+    async def _get_ip_adapter_strength(self, strength: Optional[float] = None) -> float:
+        if strength is not None:
+            return strength
+        try:
+            from app.core.config import get_config_value
+            val = await get_config_value("IP_ADAPTER_STRENGTH")
+            if val:
+                return float(val)
+        except Exception:
+            pass
+        return 0.45
+
+    async def _get_openpose_strength(self, strength: Optional[float] = None) -> float:
+        if strength is not None:
+            return strength
+        try:
+            from app.core.config import get_config_value
+            val = await get_config_value("OPENPOSE_CONTROLNET_STRENGTH")
+            if val:
+                return float(val)
+        except Exception:
+            pass
+        return 0.65
     
     async def _get_img2img_sampler(self, sampler_name: Optional[str] = None) -> str:
         if sampler_name:
@@ -237,7 +294,7 @@ class NovitaImageProvider(BaseMediaProvider):
         resolved_cfg = await self._get_image_cfg(guidance_scale)
         
         payload = {
-            "extra": {"response_image_type": "jpeg"},
+            "extra": await _apply_novita_webhook({"response_image_type": "jpeg"}),
             "request": {
                 "model_name": resolved_model,
                 "prompt": prompt,
@@ -306,7 +363,7 @@ class NovitaImageProvider(BaseMediaProvider):
         resolved_cfg = await self._get_image_cfg(guidance_scale)
         
         payload = {
-            "extra": {"response_image_type": "jpeg"},
+            "extra": await _apply_novita_webhook({"response_image_type": "jpeg"}),
             "request": {
                 "model_name": resolved_model,
                 "image_base64": image_base64,
@@ -332,22 +389,33 @@ class NovitaImageProvider(BaseMediaProvider):
             ]
 
         if ip_adapters:
+            resolved_ip_adapters = [
+                IPAdapterConfig(
+                    image_base64=ip.image_base64,
+                    model_name=ip.model_name,
+                    strength=await self._get_ip_adapter_strength(ip.strength),
+                )
+                for ip in ip_adapters
+            ]
             payload["request"]["ip_adapters"] = [
                 {
                     "model_name": ip.model_name,
                     "image_base64": ip.image_base64,
                     "strength": ip.strength
                 }
-                for ip in ip_adapters
+                for ip in resolved_ip_adapters
             ]
         
         if controlnet:
+            resolved_controlnet_strength = await self._get_openpose_strength(controlnet.strength)
             payload["request"]["controlnet"] = {
                 "units": [{
                     "model_name": controlnet.model_name,
                     "image_base64": controlnet.image_base64,
-                    "strength": controlnet.strength,
-                    "preprocessor": controlnet.preprocessor or "openpose",
+                    "strength": resolved_controlnet_strength,
+                    "preprocessor": controlnet.preprocessor or "dwpose",
+                    "guidance_start": controlnet.guidance_start,
+                    "guidance_end": controlnet.guidance_end,
                 }]
             }
         
@@ -708,6 +776,7 @@ class ZImageTurboLoraProvider(NovitaImageProvider):
         resolved_height = await self._get_image_height(height)
 
         payload: dict[str, Any] = {
+            "extra": await _apply_novita_webhook({}),
             "prompt": prompt,
             "seed": seed,
             "size": f"{resolved_width}*{resolved_height}",
@@ -756,6 +825,7 @@ class NovitaVideoProvider(BaseMediaProvider):
         endpoint = "/async/wan-i2v" if init_image else "/async/wan-t2v"
 
         payload: dict[str, Any] = {
+            "extra": await _apply_novita_webhook({}),
             "prompt": prompt,
             "width": width,
             "height": height,

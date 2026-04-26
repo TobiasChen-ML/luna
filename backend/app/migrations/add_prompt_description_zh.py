@@ -30,9 +30,9 @@ DEFAULT_DESCRIPTIONS_ZH = {
 
 
 async def migrate():
-    from app.core.config import settings
+    from app.core.config import resolve_sqlite_path, settings
 
-    db_path = Path(settings.database_url.replace("sqlite:///", ""))
+    db_path = Path(resolve_sqlite_path(settings.database_url))
     logger.info(f"Starting prompt description_zh migration on {db_path}...")
 
     async with aiosqlite.connect(db_path) as db:

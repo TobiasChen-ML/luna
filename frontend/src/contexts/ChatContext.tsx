@@ -105,6 +105,7 @@ export function useChatContext() {
 // Message batching configuration
 const BATCH_DELAY_MS = 300;
 const DELTA_RENDER_THROTTLE_MS = 75;
+const VIDEO_TASK_POLL_INITIAL_DELAY_MS = 30_000;
 const VIDEO_TASK_POLL_INTERVAL_MS = 5000;
 const VIDEO_TASK_POLL_MAX_ATTEMPTS = 120; // ~10 minutes
 const CHAT_PENDING_VIDEO_TASKS_KEY = 'roxy_chat_pending_video_tasks';
@@ -563,8 +564,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      // First poll immediately, then continue by setTimeout.
-      void pollOnce();
+      videoPollTimersRef.current[task.taskId] = setTimeout(
+        pollOnce,
+        VIDEO_TASK_POLL_INITIAL_DELAY_MS
+      );
     },
     [refreshSessionMessages, refreshUser, stopVideoTaskPolling]
   );

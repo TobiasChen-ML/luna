@@ -76,12 +76,11 @@ export const useCycleDetection = (nodes: Node[], edges: Edge[]): CycleResult => 
     }
 
     const cyclePath: string[] = [cycleStart];
-    let current = cycleEnd;
-    
-    while (current !== cycleStart) {
+    let current: string | null = cycleEnd;
+
+    while (current && current !== cycleStart) {
       cyclePath.unshift(current);
-      current = parent.get(current) || '';
-      if (!current) break;
+      current = parent.get(current) ?? null;
     }
     cyclePath.unshift(cycleStart);
 

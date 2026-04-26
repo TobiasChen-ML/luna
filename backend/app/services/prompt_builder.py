@@ -136,15 +136,6 @@ class PromptBuilder:
                 logger.warning(f"Failed to render template {template_name}: {e}")
                 continue
 
-        if ctx.use_script_library:
-            parts.append(
-                "## Story Completion Protocol\n"
-                "When this story reaches a definitive ending, append EXACTLY one marker at the very end:\n"
-                "[[STORY_COMPLETED:good]] or [[STORY_COMPLETED:neutral]] or "
-                "[[STORY_COMPLETED:bad]] or [[STORY_COMPLETED:secret]].\n"
-                "Do not use this marker unless the ending has actually been reached."
-            )
-        
         return "\n\n".join(parts)
     
     def _extract_variables(self, ctx: PromptContext, section: PromptSection) -> dict[str, Any]:
@@ -218,6 +209,7 @@ class PromptBuilder:
         
         elif section == PromptSection.PLOT_CONTEXT:
             base_vars = {
+                "use_script_library": ctx.use_script_library,
                 "current_scene_description": ctx.current_scene_description or "",
                 "narrative_context": ctx.narrative_context or "",
                 "choices_available": ctx.choices_available or [],

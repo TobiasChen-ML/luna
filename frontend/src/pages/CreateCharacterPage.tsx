@@ -18,6 +18,7 @@ import {
 import { Shuffle, RotateCcw } from 'lucide-react';
 import { api } from '@/services/api';
 import { toChatUrl } from '@/utils/chatUrl';
+import { resolveVoiceProviderId } from '@/types/character';
 
 const FREE_CHARACTER_LIMIT = 2;
 const OFFER_DURATION_MS = 30 * 60 * 1000;
@@ -107,6 +108,7 @@ function CreateCharacterContent() {
       const characterPayload = {
         name: characterData.identity.firstName,
         gender: 'female',
+        voice_id: resolveVoiceProviderId(characterData.voiceProfile),
         style: characterData.style,
         base_info: {
           age: characterData.identity.age,

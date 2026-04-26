@@ -4,8 +4,8 @@ import { MessageCircle, Loader2 } from 'lucide-react';
 import { Button } from './Button';
 import { CharacterImage } from './CharacterImage';
 import { useAuth } from '../../contexts/AuthContext';
-import { api } from '../../services/api';
 import { toChatUrl } from '@/utils/chatUrl';
+import { startOfficialChat } from '@/utils/startOfficialChat';
 
 export interface Character {
   id?: string;
@@ -117,14 +117,10 @@ export function CharacterCarousel({ characters }: CharacterCarouselProps) {
     // Authenticated: Copy official character and navigate
     try {
       setLoadingId(char.id);
-      const response = await api.post(`/chat/chat_now_official/${char.id}`);
-      const userCharacterId = response.data?.character_id;
-
-      if (!userCharacterId) {
-        throw new Error('Failed to get character ID from response');
-      }
-
-      navigate(`/chat?character=${userCharacterId}&ready=1`);
+      await startOfficialChat(navigate, {
+        isAuthenticated,
+        characterId: char.id,
+      });
     } catch (error) {
       console.error('Failed to start chat:', error);
       // Show error to user instead of silently failing

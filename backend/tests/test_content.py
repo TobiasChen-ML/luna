@@ -232,53 +232,37 @@ class TestContentRouter:
         response = client.post("/api/v1/collections", json={
             "name": "My Collection"
         })
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert response.status_code == 410
     
     def test_get_collections(self, client: TestClient):
         response = client.get("/api/v1/collections")
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
+        assert response.status_code == 410
     
     def test_get_collection(self, client: TestClient):
         response = client.get("/api/v1/collections/col_001")
-        assert response.status_code == 200
-        data = response.json()
-        assert "id" in data
+        assert response.status_code == 410
     
     def test_update_collection(self, client: TestClient):
         response = client.put("/api/v1/collections/col_001", json={
             "name": "Updated Collection"
         })
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert response.status_code == 410
     
     def test_delete_collection(self, client: TestClient):
         response = client.delete("/api/v1/collections/col_001")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert response.status_code == 410
     
     def test_get_collection_characters(self, client: TestClient):
         response = client.get("/api/v1/collections/col_001/characters")
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
+        assert response.status_code == 410
     
     def test_add_to_collection(self, client: TestClient):
         response = client.post("/api/v1/collections/col_001/characters/char_001")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert response.status_code == 410
     
     def test_remove_from_collection(self, client: TestClient):
         response = client.delete("/api/v1/collections/col_001/characters/char_001")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert response.status_code == 410
     
     def test_get_task(self, client: TestClient, mock_task_id: str):
         response = client.get(f"/api/v1/tasks/{mock_task_id}")

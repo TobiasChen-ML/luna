@@ -25,11 +25,19 @@ export function FAQPage() {
         },
         {
           q: 'Is roxyclub.ai legitimate and safe to use?',
-          a: 'Yes, roxyclub.ai is a legitimate service. It employs encrypted transactions, adheres to GDPR-compliant data privacy standards, and uses discreet billing methods to ensure user safety and confidentiality.',
+          a: 'Yes, roxyclub.ai is a legitimate service. It uses secure account systems, GDPR-conscious data privacy practices, and Telegram Stars for paid digital benefit activation in the Telegram Mini App.',
         },
         {
-          q: 'How will roxyclub.ai appear on my bank statements?',
-          a: 'Transactions are processed securely and appear under a neutral merchant name. There is no direct reference to roxyclub.ai or its services on your bank statement, ensuring user privacy.',
+          q: 'How do purchases work on Web or PWA?',
+          a: 'Web and PWA access are for using supported features and existing account benefits. To buy subscriptions, credits, or other digital benefits, continue in the Telegram Mini App and pay with Telegram Stars.',
+        },
+        {
+          q: 'Can I use paid benefits on Web after buying in Telegram?',
+          a: 'Yes. Once your purchase is activated on your account, supported paid benefits can be used across Telegram Mini App, Web, and PWA.',
+        },
+        {
+          q: 'What if I do not have Telegram installed?',
+          a: 'Purchase links open Telegram or Telegram Web when available, and may show Telegram installation options. You can continue using supported free or already activated features on Web/PWA without purchasing.',
         },
         {
           q: 'Who uses roxyclub.ai and for what purpose?',

@@ -8,6 +8,7 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import DashboardTab from './tabs/DashboardTab';
 import CharactersTab from './tabs/CharactersTab';
+import UserCharactersTab from './tabs/UserCharactersTab';
 import StoriesTab from './tabs/StoriesTab';
 import VoicesTab from './tabs/VoicesTab';
 import UsersTab from './tabs/UsersTab';
@@ -31,6 +32,7 @@ interface Tab {
 const tabs: Tab[] = [
   { id: 'dashboard', label: '仪表盘', icon: LayoutDashboard, component: DashboardTab },
   { id: 'characters', label: '角色管理', icon: Users, component: CharactersTab },
+  { id: 'user-characters', label: '角色用户管理', icon: Users, component: UserCharactersTab },
   { id: 'stories', label: '剧本管理', icon: BookOpen, component: StoriesTab },
   { id: 'tags', label: '标签管理', icon: Tags, component: TagsTab },
   { id: 'script-library-mature', label: '劇本庫 Mature', icon: ShieldAlert, component: ScriptLibraryMatureTab },

@@ -2,6 +2,8 @@ import type { NavigateFunction } from 'react-router-dom';
 
 import { api } from '@/services/api';
 
+export const CHAT_LIST_REFRESH_EVENT = 'roxy:chat-list-refresh';
+
 export async function startOfficialChat(
   navigate: NavigateFunction,
   options: {
@@ -21,6 +23,12 @@ export async function startOfficialChat(
   if (!userCharacterId) {
     throw new Error('Missing character_id in chat_now_official response');
   }
+
+  window.dispatchEvent(
+    new CustomEvent(CHAT_LIST_REFRESH_EVENT, {
+      detail: { characterId: userCharacterId },
+    })
+  );
 
   navigate(`/chat?character=${userCharacterId}&ready=1`);
 }

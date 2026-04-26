@@ -14,44 +14,182 @@ from app.core.dependencies import get_current_user_required, get_admin_user
 from app.core.config import get_settings
 from app.core.auth_cookies import set_auth_cookies, clear_auth_cookies
 from app.services.auth_service import jwt_service
+from app.services.database_service import DatabaseService
+from app.services.redis_service import RedisService
+from app.services.credit_service import credit_service
+from app.services.firebase_service import FirebaseService
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
+db_svc = DatabaseService()
+redis_svc = RedisService()
+
+DAILY_CHECKIN_CREDITS = 2
 
 
-@router.post("/register/initiate", response_model=BaseResponse)
+def _normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def _serialize_user(user: Any) -> dict[str, Any]:
+    now = datetime.utcnow().isoformat()
+    return {
+        "id": user.id,
+        "email": user.email,
+        "firebase_uid": user.id,
+        "display_name": user.display_name or "",
+        "subscription_tier": user.tier or "free",
+        "credits": float(user.credits or 0),
+        "is_adult": True,
+        "created_at": user.created_at.isoformat() if getattr(user, "created_at", None) else now,
+        "updated_at": user.updated_at.isoformat() if getattr(user, "updated_at", None) else now,
+    }
+
+
+async def _get_user_by_email(email: str):
+    return await db_svc.get_user_by_email(email)
+
+
+@router.post("/register/initiate")
 async def register_initiate(
-    request: Request, 
-    data: RegisterRequest
-) -> BaseResponse:
-    return BaseResponse(success=True, message="Verification email sent")
+    request: Request,
+    data: dict[str, Any]
+) -> dict[str, Any]:
+    email = _normalize_email(str(data.get("email") or ""))
+    password = str(data.get("password") or "")
+    if not email:
+        raise HTTPException(status_code=400, detail="email required")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+
+    token = secrets.token_urlsafe(24)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    pending_data = {
+        "email": email,
+        "password_hash": hashlib.sha256(password.encode("utf-8")).hexdigest(),
+        "phone_number": data.get("phone_number"),
+        "age_consent_given": bool(data.get("age_consent_given", False)),
+        "created_at": datetime.utcnow().isoformat(),
+        "status": "pending",
+    }
+    await redis_svc.set_json(f"auth:verify_token:{token_hash}", pending_data, ex=86400)
+    await redis_svc.set_json(f"auth:verify_email:{email}", {"token_hash": token_hash}, ex=86400)
+
+    return {
+        "success": True,
+        "email": email,
+        "message": "Verification initiated",
+    }
 
 
-@router.post("/verify-email", response_model=BaseResponse)
-async def verify_email(request: Request, data: dict[str, Any]) -> BaseResponse:
-    code = data.get("code")
-    if not code:
-        raise HTTPException(status_code=400, detail="Verification code required")
-    return BaseResponse(success=True, message="Email verified")
+@router.post("/verify-email")
+async def verify_email(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    token = str(data.get("token") or "").strip()
+    code = str(data.get("code") or "").strip()
+    lookup = token or code
+    if not lookup:
+        raise HTTPException(status_code=400, detail="token required")
+
+    token_hash = hashlib.sha256(lookup.encode("utf-8")).hexdigest()
+    pending = await redis_svc.get_json(f"auth:verify_token:{token_hash}")
+    if not pending:
+        raise HTTPException(status_code=400, detail="Verification token expired or invalid")
+
+    email = _normalize_email(str(pending.get("email") or ""))
+    await redis_svc.set_json(
+        f"auth:verified_email:{email}",
+        {
+            "verified": True,
+            "verified_at": datetime.utcnow().isoformat(),
+            "token_hash": token_hash,
+        },
+        ex=86400,
+    )
+    await redis_svc.delete(f"auth:verify_token:{token_hash}")
+
+    user = await _get_user_by_email(email)
+    firebase = FirebaseService()
+    custom_token = ""
+    if firebase._initialized:
+        uid = user.id if user else f"verified_{hashlib.sha256(email.encode('utf-8')).hexdigest()[:16]}"
+        generated = firebase.create_custom_token(uid)
+        custom_token = generated or ""
+
+    return {
+        "success": True,
+        "message": "Email verified",
+        "customToken": custom_token,
+        "user": _serialize_user(user) if user else {
+            "id": "",
+            "email": email,
+            "firebase_uid": "",
+            "display_name": "",
+            "subscription_tier": "free",
+            "credits": 0,
+            "is_adult": True,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        },
+    }
 
 
 @router.post("/resend-verification", response_model=BaseResponse)
 async def resend_verification(
-    request: Request, 
+    request: Request,
     data: dict[str, Any]
 ) -> BaseResponse:
-    email = data.get("email")
+    email = _normalize_email(str(data.get("email") or ""))
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
+    pending = await redis_svc.get_json(f"auth:verify_email:{email}")
+    if pending and pending.get("token_hash"):
+        await redis_svc.delete(f"auth:verify_token:{pending.get('token_hash')}")
+
+    token = secrets.token_urlsafe(24)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    await redis_svc.set_json(
+        f"auth:verify_token:{token_hash}",
+        {"email": email, "created_at": datetime.utcnow().isoformat(), "status": "pending"},
+        ex=86400,
+    )
+    await redis_svc.set_json(f"auth:verify_email:{email}", {"token_hash": token_hash}, ex=86400)
     return BaseResponse(success=True, message="Verification email resent")
 
 
 @router.post("/register")
-async def register(request: Request, data: RegisterRequest) -> dict[str, Any]:
-    raise HTTPException(
-        status_code=400,
-        detail="Use Firebase client SDK for registration. Send Firebase ID token in Authorization header."
-    )
+async def register(request: Request, response: Response, data: dict[str, Any]) -> dict[str, Any]:
+    email = _normalize_email(str(data.get("email") or ""))
+    if not email:
+        raise HTTPException(status_code=400, detail="email required")
+
+    firebase_uid = str(data.get("firebase_uid") or "").strip()
+    user_id = firebase_uid or f"usr_{hashlib.sha256(email.encode('utf-8')).hexdigest()[:20]}"
+    display_name = str(data.get("display_name") or "").strip() or email.split("@")[0]
+    is_admin = email in get_settings().admin_emails
+
+    user = await _get_user_by_email(email)
+    is_new_user = False
+    if not user:
+        user = await db_svc.create_user(user_id=user_id, email=email, display_name=display_name)
+        is_new_user = True
+        try:
+            await credit_service.grant_signup_bonus(user.id)
+        except Exception as exc:
+            logger.warning(f"Failed to grant signup bonus for {user.id}: {exc}")
+
+    access_token = jwt_service.create_access_token(user.id, email, is_admin=is_admin)
+    refresh_token = jwt_service.create_refresh_token(user.id)
+    set_auth_cookies(response, access_token, refresh_token)
+
+    return {
+        "success": True,
+        "message": "Registration completed",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": _serialize_user(user),
+        "is_new_user": is_new_user,
+    }
 
 
 @router.get("/me", response_model=User)
@@ -106,12 +244,39 @@ async def get_preferences(
     return {"theme": "dark", "notifications": True}
 
 
-@router.post("/checkin", response_model=BaseResponse)
+@router.post("/checkin")
 async def daily_checkin(
     request: Request,
     user = Depends(get_current_user_required)
-) -> BaseResponse:
-    return BaseResponse(success=True, message="Daily check-in completed")
+) -> dict[str, Any]:
+    user_id = str(user.id)
+    today_key = datetime.utcnow().strftime("%Y%m%d")
+    lock_key = f"auth:checkin:{user_id}:{today_key}"
+    if await redis_svc.exists(lock_key):
+        raise HTTPException(status_code=429, detail="Already checked in today")
+
+    await redis_svc.set(lock_key, "1", ex=86400)
+    try:
+        await credit_service.add_credits(
+            user_id=user_id,
+            amount=float(DAILY_CHECKIN_CREDITS),
+            transaction_type="daily_checkin",
+            credit_source="purchased",
+            order_id=f"checkin:{today_key}",
+            description=f"Daily check-in reward ({DAILY_CHECKIN_CREDITS} credits)",
+        )
+    except Exception as exc:
+        logger.error(f"daily_checkin failed for user {user_id}: {exc}")
+        await redis_svc.delete(lock_key)
+        raise HTTPException(status_code=500, detail="Failed to grant daily check-in credits")
+
+    balance = await credit_service.get_balance(user_id)
+    return {
+        "success": True,
+        "credits_granted": DAILY_CHECKIN_CREDITS,
+        "new_balance": float(balance.get("total", 0)),
+        "message": "Daily check-in completed",
+    }
 
 
 @router.get("/refill-status")
@@ -165,10 +330,22 @@ async def age_verification_webhook(request: Request) -> BaseResponse:
 
 @router.post("/login")
 async def login(request: Request, data: LoginRequest) -> dict[str, Any]:
-    raise HTTPException(
-        status_code=400,
-        detail="Use Firebase client SDK for authentication. Send Firebase ID token in Authorization header."
-    )
+    email = _normalize_email(data.email)
+    user = await _get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    is_admin = email in get_settings().admin_emails
+    access_token = jwt_service.create_access_token(user.id, email, is_admin=is_admin)
+    refresh_token = jwt_service.create_refresh_token(user.id)
+
+    return {
+        "success": True,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": _serialize_user(user),
+    }
 
 
 @router.post("/refresh")

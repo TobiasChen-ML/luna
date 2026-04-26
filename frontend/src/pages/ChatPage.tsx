@@ -44,7 +44,6 @@ import {
 import { api } from '@/services/api';
 import { notificationService } from '@/services/notificationService';
 import type { Character } from '@/types';
-import type { VoiceMode } from '@/types/chat';
 import type { VideoLoraAction } from '@/services/videoLoraService';
 import { getSafeAvatarUrl } from '@/utils/avatarUrlGuard';
 import { getErrorMessage, getInsufficientCreditsInfo } from '@/utils/apiError';
@@ -54,13 +53,11 @@ import { AudioFocusProvider } from '@/contexts/AudioFocusContext';
 interface CharacterMediaItem {
   type: 'image' | 'video';
   url: string;
-  label: string;
 }
 
-const CHAT_VOICE_MODE_STORAGE_KEY = 'chat_voice_mode';
-
 function formatCharacterDescription(character: Character) {
-  return character.life_history?.trim() || character.background?.backstory?.trim() || '';
+  const characterWithBackstory = character as Character & { backstory?: string };
+  return characterWithBackstory.backstory?.trim() || character.background?.backstory?.trim() || '';
 }
 
 function ChatContent() {
@@ -114,7 +111,6 @@ function ChatContent() {
   const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState(false);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [isCommingSoonModalOpen, setIsCommingSoonModalOpen] = useState(false);
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>('auto');
   const [isAdultMode, setIsAdultMode] = useState(true);
   const [isRealtimeCallOpen, setIsRealtimeCallOpen] = useState(false);
   const desktopLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -170,24 +166,17 @@ function ChatContent() {
     }
   }, []);
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(CHAT_VOICE_MODE_STORAGE_KEY);
-    if (stored === 'on' || stored === 'off' || stored === 'auto') {
-      setVoiceMode(stored);
-    }
-  }, []);
-
   const mediaItems = useMemo<CharacterMediaItem[]>(() => {
     if (!currentCharacter) return [];
 
     const media: CharacterMediaItem[] = [];
     const seen = new Set<string>();
-    const pushUnique = (type: 'image' | 'video', label: string, url?: string | null) => {
+    const pushUnique = (type: 'image' | 'video', url?: string | null) => {
       if (!url) return;
       const cleaned = url.trim();
       if (!cleaned || seen.has(cleaned)) return;
       seen.add(cleaned);
-      media.push({ type, url: cleaned, label });
+      media.push({ type, url: cleaned });
     };
 
     const currentCharacterWithMature = currentCharacter as Character & {
@@ -197,15 +186,14 @@ function ChatContent() {
     };
 
     // Guests: only SFW avatar. Authenticated users: SFW + Mature image + Mature video.
-    pushUnique('image', 'SFW Avatar', currentCharacter.profile_image_url || currentCharacter.media_urls?.avatar);
+    pushUnique('image', currentCharacter.profile_image_url || currentCharacter.media_urls?.avatar);
 
     if (isAuthenticated) {
       pushUnique(
         'image',
-        'NSFW Avatar',
         currentCharacterWithMature.mature_image_url || currentCharacterWithMature.mature_cover_url
       );
-      pushUnique('video', 'NSFW Video', currentCharacterWithMature.mature_video_url);
+      pushUnique('video', currentCharacterWithMature.mature_video_url);
     }
 
     return media;
@@ -353,7 +341,7 @@ function ChatContent() {
     }
 
     try {
-      await sendMessage(content, { ...options, voiceMode, isAdultMode });
+      await sendMessage(content, { ...options, voiceMode: 'auto', isAdultMode });
     } catch (err: any) {
       console.error('Failed to send message:', err);
       setError('Failed to send message. Please try again.');
@@ -440,6 +428,7 @@ function ChatContent() {
               character_id: currentCharacter.id,
               pose_image_url: poseImageUrl,
               session_id: sessionId,
+              lora_id: loraId ?? null,
             }
           : {
               prompt: normalized,
@@ -452,15 +441,20 @@ function ChatContent() {
 
       const { task_id } = response.data;
 
-      // Primary: SSE notification. Backup: HTTP polling every 5 s. Timeout: 6 min.
+      // Primary: SSE notification. Backup: delayed HTTP polling. Timeout: 6 min.
       const TIMEOUT_MS = 360_000;
+      const FALLBACK_POLL_DELAY_MS = 30_000;
+      const FALLBACK_POLL_INTERVAL_MS = 5_000;
       let resolved = false;
+      let pollFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+      let pollInterval: ReturnType<typeof setInterval> | null = null;
 
       const cleanup = () => {
         resolved = true;
         unsubDone();
         unsubFailed();
-        clearInterval(pollInterval);
+        if (pollFallbackTimer) clearTimeout(pollFallbackTimer);
+        if (pollInterval) clearInterval(pollInterval);
         clearTimeout(timeoutId);
       };
 
@@ -480,7 +474,7 @@ function ChatContent() {
         updateLocalMessage(tempId, { content: data.error || 'Image generation failed.' });
       });
 
-      const pollInterval = setInterval(async () => {
+      const pollOnce = async () => {
         if (resolved) return;
         try {
           const res = await api.get<{ status: string; result?: { data?: string } }>(
@@ -502,7 +496,13 @@ function ChatContent() {
         } catch {
           // Ignore poll errors — SSE remains active
         }
-      }, 5000);
+      };
+
+      pollFallbackTimer = setTimeout(() => {
+        if (resolved) return;
+        void pollOnce();
+        pollInterval = setInterval(pollOnce, FALLBACK_POLL_INTERVAL_MS);
+      }, FALLBACK_POLL_DELAY_MS);
 
       const timeoutId = setTimeout(() => {
         if (!resolved) {
@@ -568,13 +568,18 @@ function ChatContent() {
 
       const { task_id } = response.data;
       const TIMEOUT_MS = 360_000;
+      const FALLBACK_POLL_DELAY_MS = 30_000;
+      const FALLBACK_POLL_INTERVAL_MS = 5_000;
       let resolved = false;
+      let pollFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+      let pollInterval: ReturnType<typeof setInterval> | null = null;
 
       const cleanup = () => {
         resolved = true;
         unsubDone();
         unsubFailed();
-        clearInterval(pollInterval);
+        if (pollFallbackTimer) clearTimeout(pollFallbackTimer);
+        if (pollInterval) clearInterval(pollInterval);
         clearTimeout(timeoutId);
       };
 
@@ -594,7 +599,7 @@ function ChatContent() {
         updateLocalMessage(tempId, { content: data.error || 'Video generation failed.' });
       });
 
-      const pollInterval = setInterval(async () => {
+      const pollOnce = async () => {
         if (resolved) return;
         try {
           const res = await api.get<{ status: string; result?: { data?: string; video_url?: string } }>(
@@ -620,7 +625,13 @@ function ChatContent() {
         } catch {
           // keep polling
         }
-      }, 5000);
+      };
+
+      pollFallbackTimer = setTimeout(() => {
+        if (resolved) return;
+        void pollOnce();
+        pollInterval = setInterval(pollOnce, FALLBACK_POLL_INTERVAL_MS);
+      }, FALLBACK_POLL_DELAY_MS);
 
       const timeoutId = setTimeout(() => {
         if (resolved) return;
@@ -671,7 +682,7 @@ function ChatContent() {
 
         // Send pending message
         if (pendingMessage) {
-          await sendMessage(pendingMessage, { voiceMode, isAdultMode });
+          await sendMessage(pendingMessage, { voiceMode: 'auto', isAdultMode });
           setPendingMessage(null);
         }
       }
@@ -830,30 +841,6 @@ function ChatContent() {
 
           {currentCharacter && (
             <>
-              <div className="flex items-center rounded-full border border-white/15 bg-zinc-900/80 p-0.5">
-                {([
-                  { value: 'on', label: '开启语音' },
-                  { value: 'off', label: '关闭语音' },
-                  { value: 'auto', label: '自动' },
-                ] as { value: VoiceMode; label: string }[]).map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      setVoiceMode(item.value);
-                      window.localStorage.setItem(CHAT_VOICE_MODE_STORAGE_KEY, item.value);
-                    }}
-                    className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
-                      voiceMode === item.value
-                        ? 'bg-primary-500 text-white'
-                        : 'text-zinc-300 hover:text-white'
-                    }`}
-                    title={item.label}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
               {/* Mature / Safe Toggle */}
               <button
                 type="button"
@@ -965,6 +952,7 @@ function ChatContent() {
         <div className="hidden lg:block shrink-0" style={{ width: `${leftPanelWidth}px` }}>
           <CharacterSelector
             currentCharacterId={currentCharacter?.id}
+            currentCharacter={currentCharacter}
             onSelectCharacter={handleSelectCharacter}
             isMobileOpen={isMobileSidebarOpen}
             onMobileClose={() => setIsMobileSidebarOpen(false)}
@@ -974,6 +962,7 @@ function ChatContent() {
         </div>
         <CharacterSelector
           currentCharacterId={currentCharacter?.id}
+          currentCharacter={currentCharacter}
           onSelectCharacter={handleSelectCharacter}
           isMobileOpen={isMobileSidebarOpen}
           onMobileClose={() => setIsMobileSidebarOpen(false)}
@@ -1179,16 +1168,16 @@ function ChatContent() {
             {activeMedia && (
               <div className="text-xs text-zinc-400 flex items-center gap-2">
                 {activeMedia.type === 'video' ? <Video size={14} /> : <Image size={14} />}
-                <span>
-                  {activeMedia.label} {mediaIndex + 1}/{mediaItems.length || 1}
-                </span>
+                <span>{mediaIndex + 1}/{mediaItems.length || 1}</span>
               </div>
             )}
 
             <div className="rounded-xl border border-white/10 bg-zinc-900/70 p-4">
               <h4 className="text-sm font-semibold text-white mb-2">Description</h4>
               <p className="text-sm text-zinc-300 whitespace-pre-line">
-                {currentCharacter ? formatCharacterDescription(currentCharacter) : ''}
+                {currentCharacter
+                  ? formatCharacterDescription(currentCharacter) || 'No background story available.'
+                  : ''}
               </p>
             </div>
 
@@ -1198,7 +1187,6 @@ function ChatContent() {
               trust={relationshipDashboard.trust}
               desire={relationshipDashboard.desire}
               dependency={relationshipDashboard.dependency}
-              gmNode={relationshipDashboard.gmNode}
             />
           </div>
         </aside>

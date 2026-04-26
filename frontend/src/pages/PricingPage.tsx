@@ -5,6 +5,7 @@ import { Button } from '@/components/common';
 import { Check, Loader2, Crown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { billingService } from '@/services/billingService';
+import { openTelegramMiniApp } from '@/utils/telegram';
 import type { SubscriptionTier, BillingPeriod, CreditPack, BillingPricingConfig } from '@/types';
 
 interface Plan {
@@ -21,7 +22,7 @@ export function PricingPage() {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('month');
-  const [loading, setLoading] = useState<SubscriptionTier | null>(null);
+  const [loading] = useState<SubscriptionTier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
   const [pricingConfig, setPricingConfig] = useState<BillingPricingConfig | null>(null);
@@ -116,21 +117,13 @@ export function PricingPage() {
       return;
     }
 
-    // Start checkout
-    try {
-      setLoading(tier);
-      const { checkout_url } = await billingService.createSubscriptionCheckout(tier, billingPeriod);
-      billingService.redirectToCheckout(checkout_url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout');
-      setLoading(null);
-    }
+    openTelegramMiniApp(`subscription_${tier}_${billingPeriod}`);
   };
 
   const getButtonText = (tier: SubscriptionTier) => {
     if (tier === 'free') return 'Get Started';
     if (tier === currentTier) return 'Current Plan';
-    return 'Upgrade to Premium';
+    return 'Continue in Telegram';
   };
 
   return (
@@ -144,7 +137,12 @@ export function PricingPage() {
           </h1>
           <p className="text-xl text-zinc-400 max-w-3xl mx-auto mb-8">
             Choose how fast you want to progress through scenes and relationship levels.
-            Upgrade anytime, cancel anytime. Need more usage? Buy extra credit packs anytime.
+            Purchases are completed in Telegram with Stars. Once activated, your benefits work
+            across Telegram Mini App, Web, and PWA.
+          </p>
+          <p className="mx-auto mb-8 max-w-2xl rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+            Web and PWA access are for using existing benefits. Upgrade or buy credits by
+            continuing in Telegram.
           </p>
 
           {/* Billing Period Toggle */}
@@ -261,7 +259,7 @@ export function PricingPage() {
                   {loading === plan.tier ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
+                      Opening Telegram...
                     </>
                   ) : (
                     getButtonText(plan.tier)
@@ -298,7 +296,8 @@ export function PricingPage() {
             Token Packs
           </h2>
           <p className="text-center text-zinc-400 mb-8">
-            Need more usage? Buy additional tokens anytime. Purchased tokens never expire.
+            Need more usage? Buy additional tokens in Telegram. Purchased tokens never expire
+            and can be used here after activation.
           </p>
 
           {creditPacks.length > 0 ? (
@@ -326,9 +325,15 @@ export function PricingPage() {
                   </p>
                   <Button
                     className="w-full mt-4"
-                    onClick={() => navigate(isAuthenticated ? '/billing' : '/register')}
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        navigate('/register');
+                        return;
+                      }
+                      openTelegramMiniApp(`credits_${pack.id}`);
+                    }}
                   >
-                    Buy Tokens
+                    Buy in Telegram
                   </Button>
                 </div>
               ))}
@@ -353,7 +358,7 @@ export function PricingPage() {
             },
             {
               q: 'What payment methods do you accept?',
-              a: 'We accept all major credit cards (Visa, MasterCard, American Express) through Stripe.',
+              a: 'Digital purchases are completed in the Telegram Mini App using Telegram Stars. Web and PWA users are redirected to Telegram to activate paid benefits.',
             },
             {
               q: 'Do unused credits roll over?',
@@ -361,7 +366,7 @@ export function PricingPage() {
             },
             {
               q: 'Can I buy extra credits?',
-              a: 'Yes! You can purchase additional credit packs anytime from the Billing page. These credits never expire.',
+              a: 'Yes. Extra credit packs are purchased in Telegram with Stars, then the credits can be used across Telegram Mini App, Web, and PWA.',
             },
             {
               q: 'Can I cancel my subscription?',

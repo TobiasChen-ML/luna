@@ -163,10 +163,10 @@ async def _fetch_target_characters(db: aiosqlite.Connection) -> list[dict[str, A
 
 
 async def migrate(dry_run: bool = False) -> None:
-    from app.core.config import settings
+    from app.core.config import resolve_sqlite_path, settings
     from app.core.database import db as db_service
 
-    db_path = Path(settings.database_url.replace("sqlite:///", ""))
+    db_path = Path(resolve_sqlite_path(settings.database_url))
     logger.info(f"Starting greeting backfill on {db_path} (dry_run={dry_run})")
 
     targets = await _fetch_target_characters(db_service)

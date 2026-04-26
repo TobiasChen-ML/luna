@@ -5,8 +5,8 @@ import logging
 import time
 
 from app.models import (
-    BaseResponse, SubscriptionTier, SubscriptionCheckoutRequest,
-    CreditPackCheckoutRequest, USDTOrderCreate, TelegramStarsOrderCreate,
+    BaseResponse, SubscriptionTier,
+    USDTOrderCreate, TelegramStarsOrderCreate,
     OrderStatus
 )
 from app.services.auth_service import webhook_service
@@ -47,40 +47,81 @@ async def get_pricing(request: Request) -> dict[str, Any]:
 
 @router.post("/subscriptions/checkout")
 async def subscription_checkout(
-    request: Request, 
-    data: SubscriptionCheckoutRequest
+    request: Request,
+    data: dict[str, Any],
+    user = Depends(get_current_user_required),
 ) -> dict[str, Any]:
-    return {
-        "checkout_url": "https://checkout.example.com/session_xyz",
-        "session_id": "checkout_session_001",
-    }
+    tier = str(data.get("tier") or "").lower()
+    if tier not in {SubscriptionTier.PREMIUM.value, SubscriptionTier.PRO.value}:
+        raise HTTPException(status_code=400, detail="tier must be premium or pro")
+
+    billing_period = str(data.get("billing_period") or "month").lower()
+    success_url = data.get("success_url")
+    cancel_url = data.get("cancel_url")
+
+    try:
+        return await billing_svc.create_subscription_checkout(
+            user_id=user.id,
+            tier=tier,
+            billing_period=billing_period,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/subscriptions/portal")
-async def subscription_portal(request: Request) -> dict[str, Any]:
+async def subscription_portal(
+    request: Request,
+    data: Optional[dict[str, Any]] = None,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    return_url = data.get("return_url") if isinstance(data, dict) else None
+    portal_url = await billing_svc.get_subscription_portal_url(user.id, return_url=return_url)
     return {
-        "portal_url": "https://portal.example.com/manage",
+        "portal_url": portal_url,
     }
 
 
 @router.get("/subscriptions/current")
-async def get_current_subscription(request: Request) -> dict[str, Any]:
+async def get_current_subscription(
+    request: Request,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    return await billing_svc.get_current_subscription(user.id)
+
+
+@router.post("/subscriptions/cancel")
+async def cancel_subscription(
+    request: Request,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    result = await billing_svc.cancel_subscription(user.id)
+    status = result.get("status")
+    if status == "scheduled":
+        return {
+            "success": True,
+            "cancel_at": result.get("cancel_at"),
+            "message": "Subscription cancellation scheduled",
+        }
     return {
-        "tier": "premium",
-        "status": "active",
-        "current_period_end": datetime.now().isoformat(),
-        "cancel_at_period_end": False,
+        "success": True,
+        "cancel_at": None,
+        "message": "No active subscription to cancel",
     }
 
 
-@router.post("/subscriptions/cancel", response_model=BaseResponse)
-async def cancel_subscription(request: Request) -> BaseResponse:
-    return BaseResponse(success=True, message="Subscription cancellation scheduled")
-
-
-@router.post("/subscriptions/reactivate", response_model=BaseResponse)
-async def reactivate_subscription(request: Request) -> BaseResponse:
-    return BaseResponse(success=True, message="Subscription reactivated")
+@router.post("/subscriptions/reactivate")
+async def reactivate_subscription(
+    request: Request,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    result = await billing_svc.reactivate_subscription(user.id)
+    status = result.get("status")
+    if status == "reactivated":
+        return {"success": True, "message": "Subscription reactivated"}
+    return {"success": True, "message": "No active subscription to reactivate"}
 
 
 @router.get("/credit-packs")
@@ -93,13 +134,25 @@ async def get_credit_packs(request: Request) -> dict[str, Any]:
 
 @router.post("/credit-packs/checkout")
 async def credit_pack_checkout(
-    request: Request, 
-    data: CreditPackCheckoutRequest
+    request: Request,
+    data: dict[str, Any],
+    user = Depends(get_current_user_required),
 ) -> dict[str, Any]:
-    return {
-        "checkout_url": "https://checkout.example.com/pack_xyz",
-        "session_id": "pack_session_001",
-    }
+    pack_id = str(data.get("pack_id") or "").strip()
+    if not pack_id:
+        raise HTTPException(status_code=400, detail="pack_id is required")
+    success_url = data.get("success_url")
+    cancel_url = data.get("cancel_url")
+
+    try:
+        return await billing_svc.create_credit_pack_checkout(
+            user_id=user.id,
+            pack_id=pack_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/credits/balance")
@@ -137,17 +190,17 @@ async def get_credits_transactions(
 
 
 @router.get("/history")
-async def get_billing_history(request: Request) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": "txn_001",
-            "type": "subscription",
-            "amount": 9.99,
-            "currency": "USD",
-            "status": "paid",
-            "created_at": datetime.now().isoformat(),
-        }
-    ]
+async def get_billing_history(
+    request: Request,
+    user = Depends(get_current_user_required),
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    return await billing_svc.get_billing_history(
+        user_id=user.id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/usdt/orders")
@@ -544,6 +597,8 @@ async def telegram_stars_webhook(
             await billing_svc.mark_telegram_stars_order_failed(order_id=order_id, webhook_payload=payload)
         elif status in ["cancelled", "canceled"]:
             await billing_svc.mark_telegram_stars_order_cancelled(order_id=order_id, webhook_payload=payload)
+        elif status in ["refunded", "refund", "chargeback", "reversed"]:
+            await billing_svc.mark_telegram_stars_order_refunded(order_id=order_id, webhook_payload=payload)
 
         logger.info(f"Telegram Stars webhook processed: order_id={order_id}, status={status}")
         return BaseResponse(success=True, message=f"Telegram Stars webhook processed: {status or 'unknown'}")

@@ -49,6 +49,7 @@ from app.routers import (
     memory_router,
     inference_router,
     voices_router,
+    rewards_router,
 )
 from app.routers.script_library import router as script_library_router
 from app.routers.admin.prompts import router as admin_prompts_router
@@ -57,6 +58,10 @@ from app.routers.admin.credits import router as admin_credits_router
 from app.routers.admin.audit import router as admin_audit_router
 from app.routers.admin.loras import router as admin_loras_router
 from app.routers.admin.script_library import router as admin_script_library_router
+from app.routers.openpose_presets import (
+    admin_router as admin_openpose_presets_router,
+    public_router as openpose_presets_router,
+)
 
 
 @asynccontextmanager
@@ -214,9 +219,12 @@ app.include_router(admin_credits_router)
 app.include_router(admin_audit_router)
 app.include_router(admin_loras_router)
 app.include_router(admin_script_library_router)
+app.include_router(openpose_presets_router)
+app.include_router(admin_openpose_presets_router)
 app.include_router(memory_router)
 app.include_router(inference_router)
 app.include_router(voices_router)
+app.include_router(rewards_router)
 
 
 @app.get("/health")

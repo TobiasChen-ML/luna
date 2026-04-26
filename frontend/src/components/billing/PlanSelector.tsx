@@ -131,7 +131,7 @@ export function PlanSelector({ currentTier, pricingConfig, onSelectPlan }: PlanS
         </button>
       </div>
       <p className="text-center text-xs text-zinc-500">
-        Need more usage? You can always purchase extra credit packs from Billing.
+        Need more usage? Extra credit packs are activated in Telegram with Stars.
       </p>
 
       {/* Plans Grid */}
@@ -226,7 +226,7 @@ export function PlanSelector({ currentTier, pricingConfig, onSelectPlan }: PlanS
                       Processing...
                     </>
                   ) : (
-                    `Upgrade to ${plan.name}`
+                    `Continue with ${plan.name}`
                   )}
                 </Button>
               ) : isCurrentPlan ? (

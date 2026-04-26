@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BadgeCheck, Bitcoin, Copy, ExternalLink, Loader2, MessageCircleMore, RefreshCcw } from 'lucide-react';
+import { BadgeCheck, Loader2, MessageCircleMore } from 'lucide-react';
 import { Container } from '@/components/layout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTelegram } from '@/contexts/TelegramContext';
 import { billingService, type BillingPricingConfig } from '@/services/billingService';
+import { openTelegramMiniApp } from '@/utils/telegram';
 import type { SubscriptionTier } from '@/types';
 
 interface Plan {
@@ -59,15 +61,13 @@ const cycleConfig: Record<SubscriptionCycle, CycleConfig> = {
 export function SubscriptionsPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { isTma } = useTelegram();
 
   const [selectedTier] = useState<Plan['tier']>('premium');
   const [billingCycle, setBillingCycle] = useState<SubscriptionCycle>('12m');
-  const [loadingMethod, setLoadingMethod] = useState<'usdt' | 'telegram' | null>(null);
+  const [loadingMethod, setLoadingMethod] = useState<'telegram' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [usdtOrder, setUsdtOrder] = useState<Record<string, unknown> | null>(null);
-  const [usdtOrderId, setUsdtOrderId] = useState<string>('');
-  const [txHash, setTxHash] = useState('');
   const [pricingConfig, setPricingConfig] = useState<BillingPricingConfig | null>(null);
 
   const selectedPlan = useMemo(
@@ -105,61 +105,14 @@ export function SubscriptionsPage() {
     return true;
   };
 
-  const handleUsdtCheckout = async () => {
-    setError(null);
-    if (!ensureAuth()) return;
-
-    try {
-      setLoadingMethod('usdt');
-      const order = await billingService.createUsdtOrder({
-        amount_usdt: Number((selectedPrice / 100).toFixed(2)),
-        credits: selectedCycle.monthlyCredits,
-        pack_id: `subscription_${selectedTier}_${billingCycle}`,
-        metadata: {
-          source: 'subscriptions_page',
-          tier: selectedTier,
-          billing_period: selectedCycle.metadataPeriod,
-        },
-      });
-      setUsdtOrder(order.raw);
-      setUsdtOrderId(order.order_id);
-      setTxHash('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create USDT order');
-    } finally {
-      setLoadingMethod(null);
-    }
-  };
-
-  const handleSubmitTxHash = async () => {
-    if (!usdtOrderId || !txHash.trim()) return;
-    try {
-      setLoadingMethod('usdt');
-      const updated = await billingService.submitUsdtOrderTx(usdtOrderId, txHash.trim());
-      setUsdtOrder(updated.raw);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit transaction hash');
-    } finally {
-      setLoadingMethod(null);
-    }
-  };
-
-  const handleRefreshUsdt = async () => {
-    if (!usdtOrderId) return;
-    try {
-      setLoadingMethod('usdt');
-      const updated = await billingService.refreshUsdtOrder(usdtOrderId);
-      setUsdtOrder(updated.raw);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh USDT order status');
-    } finally {
-      setLoadingMethod(null);
-    }
-  };
-
   const handleTelegramCheckout = async () => {
     setError(null);
     if (!ensureAuth()) return;
+
+    if (!isTma) {
+      openTelegramMiniApp(`subscription_${selectedTier}_${billingCycle}`);
+      return;
+    }
 
     try {
       setLoadingMethod('telegram');
@@ -190,10 +143,6 @@ export function SubscriptionsPage() {
     }
   };
 
-  const usdtAddress = typeof usdtOrder?.payment_address === 'string' ? usdtOrder.payment_address : '';
-  const usdtAmount = typeof usdtOrder?.amount_usdt === 'number' ? usdtOrder.amount_usdt : null;
-  const usdtStatus = typeof usdtOrder?.status === 'string' ? usdtOrder.status : null;
-
   return (
     <div className="min-h-screen pb-16 bg-zinc-950">
       <Container>
@@ -206,7 +155,7 @@ export function SubscriptionsPage() {
         <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-gradient-to-br from-[#14161f] to-[#101219] p-5 md:p-8 overflow-hidden relative">
           <h1 className="text-center text-4xl font-heading font-bold text-white">Choose your Plan</h1>
           <p className="mt-2 text-center text-sm text-zinc-400">
-            100% anonymous. You can cancel anytime.
+            Purchases use Telegram Stars. Active benefits work across Telegram Mini App, Web, and PWA.
           </p>
 
           {error && (
@@ -258,8 +207,8 @@ export function SubscriptionsPage() {
               </div>
 
               <div className="mt-4 space-y-2 text-xs text-zinc-400">
-                <p className="flex items-center gap-2"><BadgeCheck className="h-3.5 w-3.5 text-lime-400" /> Charge shown as &apos;EverAI&apos; on your bank statement</p>
-                <p className="flex items-center gap-2"><BadgeCheck className="h-3.5 w-3.5 text-lime-400" /> No hidden fees �?Cancel subscription at any time</p>
+                <p className="flex items-center gap-2"><BadgeCheck className="h-3.5 w-3.5 text-lime-400" /> Paid digital benefits are activated in Telegram with Stars</p>
+                <p className="flex items-center gap-2"><BadgeCheck className="h-3.5 w-3.5 text-lime-400" /> Use activated benefits from Telegram Mini App, Web, or PWA</p>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -270,27 +219,23 @@ export function SubscriptionsPage() {
                 >
                   <span className="flex items-center gap-2">
                     {loadingMethod === 'telegram' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircleMore className="h-4 w-4" />}
-                    <span className="font-semibold">Pay via Telegram Stars (VISA/MASTER)</span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="inline-flex h-5 items-center rounded bg-white px-1.5 text-[10px] font-bold tracking-wide text-[#1434CB]">
-                      VISA
-                    </span>
-                    <span className="inline-flex h-5 items-center rounded bg-white px-1.5 text-[10px] font-semibold text-zinc-900">
-                      <span className="mr-0.5 inline-block h-2.5 w-2.5 rounded-full bg-[#EB001B]" />
-                      <span className="-ml-1 inline-block h-2.5 w-2.5 rounded-full bg-[#F79E1B]" />
+                    <span className="font-semibold">
+                      {isTma ? 'Pay with Telegram Stars' : 'Continue in Telegram'}
                     </span>
                   </span>
+                  {isTma && (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex h-5 items-center rounded bg-white px-1.5 text-[10px] font-bold tracking-wide text-[#1434CB]">
+                        VISA
+                      </span>
+                      <span className="inline-flex h-5 items-center rounded bg-white px-1.5 text-[10px] font-semibold text-zinc-900">
+                        <span className="mr-0.5 inline-block h-2.5 w-2.5 rounded-full bg-[#EB001B]" />
+                        <span className="-ml-1 inline-block h-2.5 w-2.5 rounded-full bg-[#F79E1B]" />
+                      </span>
+                    </span>
+                  )}
                 </button>
 
-                <button
-                  onClick={handleUsdtCheckout}
-                  disabled={loadingMethod !== null}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/90 px-4 py-3 font-semibold text-white transition hover:bg-zinc-700 disabled:opacity-60"
-                >
-                  {loadingMethod === 'usdt' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bitcoin className="h-4 w-4" />}
-                  Pay with USDT
-                </button>
               </div>
 
               <p className="mt-4 text-xs text-zinc-500 relative z-10">
@@ -358,62 +303,6 @@ export function SubscriptionsPage() {
             </div>
           </div>
 
-          {usdtOrderId && (
-            <div className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-emerald-200">USDT Order Created</p>
-                  <p className="text-xs text-zinc-400">Order ID: {usdtOrderId}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRefreshUsdt}
-                  disabled={loadingMethod !== null}
-                  className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
-                >
-                  <RefreshCcw className="h-3.5 w-3.5" />
-                  Refresh Status
-                </button>
-              </div>
-
-              {usdtAddress && (
-                <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/80 p-3">
-                  <p className="text-xs text-zinc-400">Pay to address</p>
-                  <p className="mt-1 break-all text-sm text-white">{usdtAddress}</p>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(usdtAddress)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy address
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-3 text-xs text-zinc-300">
-                Amount: {usdtAmount ?? '-'} USDT | Status: <span className="font-semibold">{usdtStatus ?? '-'}</span>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  value={txHash}
-                  onChange={(e) => setTxHash(e.target.value)}
-                  placeholder="Paste tx hash after transfer"
-                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none ring-0 placeholder:text-zinc-500 focus:border-pink-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleSubmitTxHash}
-                  disabled={!txHash.trim() || loadingMethod !== null}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Submit Tx Hash
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </Container>
     </div>

@@ -2,7 +2,8 @@
 import asyncio
 import logging
 import aiosqlite
-from pathlib import Path
+
+from app.core.config import resolve_sqlite_path, settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +14,9 @@ NEW_COLUMNS = [
 ]
 
 
-async def run_migration(db_path: str = "roxy.db") -> None:
-    async with aiosqlite.connect(db_path) as conn:
+async def run_migration(db_path: str | None = None) -> None:
+    resolved_db_path = db_path or resolve_sqlite_path(settings.database_url)
+    async with aiosqlite.connect(resolved_db_path) as conn:
         cursor = await conn.execute("PRAGMA table_info(characters)")
         existing = {row[1] async for row in cursor}
 
@@ -33,5 +35,4 @@ async def run_migration(db_path: str = "roxy.db") -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    db_path = Path(__file__).parent.parent.parent / "roxy.db"
-    asyncio.run(run_migration(str(db_path)))
+    asyncio.run(run_migration())

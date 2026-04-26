@@ -6,7 +6,6 @@ interface RelationshipDashboardCardProps {
   trust: number;
   desire: number;
   dependency: number;
-  gmNode: string;
 }
 
 function MetricRow({ label, value, color }: { label: string; value: number; color: string }) {
@@ -33,7 +32,6 @@ export const RelationshipDashboardCard: FC<RelationshipDashboardCardProps> = ({
   trust,
   desire,
   dependency,
-  gmNode,
 }) => {
   return (
     <div className="rounded-xl border border-white/10 bg-zinc-900/70 p-4 space-y-3">
@@ -45,10 +43,6 @@ export const RelationshipDashboardCard: FC<RelationshipDashboardCardProps> = ({
       <MetricRow label="Trust" value={trust} color="bg-emerald-500" />
       <MetricRow label="Desire" value={desire} color="bg-rose-500" />
       <MetricRow label="Dependency" value={dependency} color="bg-amber-500" />
-      <div className="pt-1 text-[11px] text-zinc-400">
-        GM Node: <span className="text-zinc-200">{gmNode}</span>
-      </div>
     </div>
   );
 };
-

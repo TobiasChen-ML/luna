@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, select, update, delete
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
-from ..core.config import get_settings
+from ..core.config import get_settings, normalize_database_url
 from ..models.user import User as UserModel
 
 logger = logging.getLogger(__name__)
@@ -21,10 +21,11 @@ class DatabaseService:
     
     def _init_db(self):
         if DatabaseService._engine is None:
+            database_url = normalize_database_url(self.settings.database_url)
             DatabaseService._engine = create_engine(
-                self.settings.database_url,
-                connect_args={"check_same_thread": False} if "sqlite" in self.settings.database_url else {},
-                poolclass=StaticPool if "sqlite" in self.settings.database_url else None,
+                database_url,
+                connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
+                poolclass=StaticPool if "sqlite" in database_url else None,
                 echo=self.settings.debug
             )
             DatabaseService._session_local = sessionmaker(

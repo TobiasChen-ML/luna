@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, Save, Eye, EyeOff, RefreshCw, Check, X, Plus, Trash2, Edit2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
+import {
+  createOpenPosePreset,
+  deleteOpenPosePreset,
+  fetchAdminOpenPosePresets,
+  type OpenPosePreset,
+  updateOpenPosePreset,
+  uploadOpenPoseImage,
+} from '@/services/openposePresetService';
 
 interface ModelInfo {
   id: string;
@@ -78,7 +86,7 @@ interface LoRAPreset {
 const EMPTY_LORA: Omit<LoRAPreset, 'id'> = {
   name: '',
   model_name: '',
-  strength: 0.8,
+  strength: 0.6,
   trigger_word: '',
   example_prompt: '',
   example_negative_prompt: '',
@@ -88,18 +96,24 @@ const EMPTY_LORA: Omit<LoRAPreset, 'id'> = {
   is_active: true,
 };
 
+const EMPTY_OPENPOSE = {
+  name: '',
+  image_url: '',
+  is_active: true,
+};
+
 const FIELD_CONDITIONS: Record<string, (provider: string) => boolean> = {
   LLM_LOCAL_BASE_URL: (p) => p === 'ollama',
 };
 
 const TXT2IMG_PROVIDER_KEYS: Record<string, string[]> = {
-  novita: ['NOVITA_API_KEY', 'NOVITA_BASE_URL'],
-  z_image_turbo_lora: ['NOVITA_API_KEY', 'NOVITA_BASE_URL'],
+  novita: ['NOVITA_API_KEY', 'NOVITA_BASE_URL', 'NOVITA_WEBHOOK_BASE_URL'],
+  z_image_turbo_lora: ['NOVITA_API_KEY', 'NOVITA_BASE_URL', 'NOVITA_WEBHOOK_BASE_URL'],
   fal: ['FAL_API_KEY', 'FAL_BASE_URL'],
 };
 
 const IMG2VIDEO_PROVIDER_KEYS: Record<string, string[]> = {
-  novita: ['NOVITA_API_KEY', 'NOVITA_BASE_URL'],
+  novita: ['NOVITA_API_KEY', 'NOVITA_BASE_URL', 'NOVITA_WEBHOOK_BASE_URL'],
   sora: ['SORA_API_KEY', 'SORA_BASE_URL'],
 };
 
@@ -112,6 +126,8 @@ const TXT2IMG_PARAM_KEYS = new Set([
 const IMG2IMG_PARAM_KEYS = new Set([
   'IMAGE_IMG2IMG_MODEL',
   'IMG2IMG_STRENGTH',
+  'IP_ADAPTER_STRENGTH',
+  'OPENPOSE_CONTROLNET_STRENGTH',
   'IMG2IMG_SAMPLER',
 ]);
 
@@ -123,7 +139,7 @@ const IMAGE_PRESET_KEYS = [
   'IMAGE_PROVIDER', 'IMAGE_TXT2IMG_MODEL', 'IMAGE_IMG2IMG_MODEL',
   'IMAGE_DEFAULT_WIDTH', 'IMAGE_DEFAULT_HEIGHT',
   'IMAGE_DEFAULT_STEPS', 'IMAGE_DEFAULT_CFG',
-  'IMG2IMG_STRENGTH', 'IMG2IMG_SAMPLER',
+  'IMG2IMG_STRENGTH', 'IP_ADAPTER_STRENGTH', 'OPENPOSE_CONTROLNET_STRENGTH', 'IMG2IMG_SAMPLER',
 ];
 
 const VIDEO_PRESET_KEYS = [
@@ -157,6 +173,12 @@ export default function AdminSettingsPage() {
   const [showLoraForm, setShowLoraForm] = useState(false);
   const [loraSaving, setLoraSaving] = useState(false);
   const [loraFormatType, setLoraFormatType] = useState<LoRAFormatType>('sdxl');
+  const [openPosePresets, setOpenPosePresets] = useState<OpenPosePreset[]>([]);
+  const [openPoseLoading, setOpenPoseLoading] = useState(false);
+  const [openPoseSaving, setOpenPoseSaving] = useState(false);
+  const [openPoseUploading, setOpenPoseUploading] = useState(false);
+  const [openPoseForm, setOpenPoseForm] = useState(EMPTY_OPENPOSE);
+  const [editingOpenPoseId, setEditingOpenPoseId] = useState<string | null>(null);
 
   const currentProvider = useMemo(() => {
     if (editValues.LLM_PROVIDER !== undefined) return editValues.LLM_PROVIDER;
@@ -196,6 +218,7 @@ export default function AdminSettingsPage() {
     if (activeGroup === 'media') {
       fetchPresets();
       fetchLoraPresets();
+      fetchOpenPosePresets();
       fetchModelsForProvider('novita_image');
     }
   }, [activeGroup]);
@@ -256,6 +279,75 @@ export default function AdminSettingsPage() {
       setLoraLoading(false);
     }
   }, []);
+
+  const fetchOpenPosePresets = useCallback(async () => {
+    setOpenPoseLoading(true);
+    try {
+      setOpenPosePresets(await fetchAdminOpenPosePresets());
+    } catch (error) {
+      console.error('Failed to fetch OpenPose presets:', error);
+    } finally {
+      setOpenPoseLoading(false);
+    }
+  }, []);
+
+  const resetOpenPoseForm = () => {
+    setOpenPoseForm(EMPTY_OPENPOSE);
+    setEditingOpenPoseId(null);
+  };
+
+  const handleOpenPoseUpload = async (file: File | null) => {
+    if (!file) return;
+    setOpenPoseUploading(true);
+    try {
+      const imageUrl = await uploadOpenPoseImage(file);
+      setOpenPoseForm((form) => ({ ...form, image_url: imageUrl }));
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to upload pose image' });
+    } finally {
+      setOpenPoseUploading(false);
+    }
+  };
+
+  const handleOpenPoseSubmit = async () => {
+    if (!openPoseForm.name.trim() || !openPoseForm.image_url.trim()) return;
+    setOpenPoseSaving(true);
+    try {
+      if (editingOpenPoseId) {
+        await updateOpenPosePreset(editingOpenPoseId, openPoseForm);
+        setMessage({ type: 'success', text: 'OpenPose updated' });
+      } else {
+        await createOpenPosePreset(openPoseForm);
+        setMessage({ type: 'success', text: 'OpenPose created' });
+      }
+      resetOpenPoseForm();
+      await fetchOpenPosePresets();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save OpenPose' });
+    } finally {
+      setOpenPoseSaving(false);
+    }
+  };
+
+  const handleOpenPoseEdit = (pose: OpenPosePreset) => {
+    setEditingOpenPoseId(pose.id);
+    setOpenPoseForm({
+      name: pose.name,
+      image_url: pose.image_url,
+      is_active: Boolean(pose.is_active),
+    });
+  };
+
+  const handleOpenPoseDelete = async (id: string) => {
+    if (!window.confirm('Delete this OpenPose preset?')) return;
+    try {
+      await deleteOpenPosePreset(id);
+      setMessage({ type: 'success', text: 'OpenPose deleted' });
+      await fetchOpenPosePresets();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to delete OpenPose' });
+    }
+  };
 
   const closeLoraForm = () => {
     setShowLoraForm(false);
@@ -899,6 +991,108 @@ export default function AdminSettingsPage() {
     );
   };
 
+  const renderOpenPoseSection = () => {
+    return (
+      <div className="mt-6 rounded-lg border border-zinc-700/60 bg-zinc-800/30 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-200">OpenPose / DWPose presets</h4>
+            <p className="mt-1 text-xs text-zinc-500">
+              Upload pose reference images. Users see the pose name; generation sends the image through ControlNet.
+            </p>
+          </div>
+          {openPoseLoading && <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />}
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1.4fr_auto]">
+          <input
+            value={openPoseForm.name}
+            onChange={(e) => setOpenPoseForm((form) => ({ ...form, name: e.target.value }))}
+            placeholder="Pose name"
+            className="rounded bg-zinc-900 border border-zinc-600 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
+          />
+          <div className="flex gap-2">
+            <input
+              value={openPoseForm.image_url}
+              onChange={(e) => setOpenPoseForm((form) => ({ ...form, image_url: e.target.value }))}
+              placeholder="Image URL or upload"
+              className="min-w-0 flex-1 rounded bg-zinc-900 border border-zinc-600 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-pink-500 outline-none"
+            />
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded bg-zinc-700 px-3 py-2 text-xs hover:bg-zinc-600">
+              {openPoseUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              Upload
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  void handleOpenPoseUpload(e.target.files?.[0] || null);
+                  e.currentTarget.value = '';
+                }}
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-zinc-400">
+              <input
+                type="checkbox"
+                checked={openPoseForm.is_active}
+                onChange={(e) => setOpenPoseForm((form) => ({ ...form, is_active: e.target.checked }))}
+                className="accent-pink-500"
+              />
+              Active
+            </label>
+            {editingOpenPoseId && (
+              <button onClick={resetOpenPoseForm} className="rounded bg-zinc-700 px-2 py-2 text-xs hover:bg-zinc-600">
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={handleOpenPoseSubmit}
+              disabled={openPoseSaving || !openPoseForm.name.trim() || !openPoseForm.image_url.trim()}
+              className="inline-flex items-center gap-1 rounded bg-pink-600 px-3 py-2 text-xs font-medium hover:bg-pink-500 disabled:opacity-50"
+            >
+              {openPoseSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+              {editingOpenPoseId ? 'Update' : 'Add'}
+            </button>
+          </div>
+        </div>
+
+        {openPosePresets.length === 0 ? (
+          <div className="rounded border border-dashed border-zinc-700 px-3 py-4 text-center text-xs text-zinc-500">
+            No OpenPose presets yet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {openPosePresets.map((pose) => (
+              <div key={pose.id} className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                <div className="aspect-[3/4] bg-zinc-800">
+                  <img src={pose.image_url} alt={pose.name} className="h-full w-full object-cover" loading="lazy" />
+                </div>
+                <div className="space-y-2 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-zinc-200">{pose.name}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${pose.is_active ? 'bg-green-900/50 text-green-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                      {pose.is_active ? 'Active' : 'Off'}
+                    </span>
+                  </div>
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => handleOpenPoseEdit(pose)} className="rounded p-1 text-zinc-500 hover:text-pink-400" title="Edit">
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => void handleOpenPoseDelete(pose.id)} className="rounded p-1 text-zinc-500 hover:text-red-400" title="Delete">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderMediaGroup = () => {
     const mediaGroup = groups.find(g => g.group === 'media');
     if (!mediaGroup) return null;
@@ -974,6 +1168,7 @@ export default function AdminSettingsPage() {
           <div className="space-y-4">
             {img2imgFields.map(f => renderField(f, imageProvider === 'fal' ? 'fal' : 'novita_image'))}
           </div>
+          {renderOpenPoseSection()}
           {renderLoraSection('img2img', '图生图')}
         </div>
 

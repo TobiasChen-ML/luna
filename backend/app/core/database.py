@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import aiosqlite
 
-from app.core.config import settings
+from app.core.config import resolve_sqlite_path, settings
 
 
 class Database:
@@ -15,7 +15,7 @@ class Database:
     def __new__(cls) -> "Database":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._db_path = Path(settings.database_url.replace("sqlite:///", ""))
+            cls._instance._db_path = Path(resolve_sqlite_path(settings.database_url))
         return cls._instance
 
     async def connect(self) -> None:
@@ -558,6 +558,16 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS openpose_presets (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                image_url TEXT NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_openpose_presets_active ON openpose_presets(is_active);
         """)
         await db.commit()
 

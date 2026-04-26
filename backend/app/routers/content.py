@@ -299,19 +299,26 @@ async def get_categories(request: Request) -> list[dict[str, Any]]:
     ]
 
 
+def _collections_deprecated() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy /api/v1/collections endpoints are deprecated. Use the v2 collection APIs.",
+    )
+
+
 @router.post("/collections", response_model=BaseResponse)
 async def create_collection(request: Request, data: dict[str, Any]) -> BaseResponse:
-    return BaseResponse(success=True, message="Collection created")
+    _collections_deprecated()
 
 
 @router.get("/collections")
 async def get_collections(request: Request) -> list[dict[str, Any]]:
-    return [{"id": "col_001", "name": "My Collection"}]
+    _collections_deprecated()
 
 
 @router.get("/collections/{collection_id}")
 async def get_collection(request: Request, collection_id: str) -> dict[str, Any]:
-    return {"id": collection_id, "name": "Collection"}
+    _collections_deprecated()
 
 
 @router.put("/collections/{collection_id}", response_model=BaseResponse)
@@ -320,12 +327,12 @@ async def update_collection(
     collection_id: str, 
     data: dict[str, Any]
 ) -> BaseResponse:
-    return BaseResponse(success=True, message="Collection updated")
+    _collections_deprecated()
 
 
 @router.delete("/collections/{collection_id}", response_model=BaseResponse)
 async def delete_collection(request: Request, collection_id: str) -> BaseResponse:
-    return BaseResponse(success=True, message="Collection deleted")
+    _collections_deprecated()
 
 
 @router.get("/collections/{collection_id}/characters")
@@ -333,14 +340,7 @@ async def get_collection_characters(
     request: Request, 
     collection_id: str
 ) -> list[Character]:
-    return [
-        Character(
-            id="char_001",
-            name="Collection Character",
-            slug="collection-character",
-            created_at=datetime.now(),
-        )
-    ]
+    _collections_deprecated()
 
 
 @router.post("/collections/{collection_id}/characters/{char_id}", response_model=BaseResponse)
@@ -349,7 +349,7 @@ async def add_to_collection(
     collection_id: str, 
     char_id: str
 ) -> BaseResponse:
-    return BaseResponse(success=True, message="Character added to collection")
+    _collections_deprecated()
 
 
 @router.delete("/collections/{collection_id}/characters/{char_id}", response_model=BaseResponse)
@@ -358,7 +358,7 @@ async def remove_from_collection(
     collection_id: str, 
     char_id: str
 ) -> BaseResponse:
-    return BaseResponse(success=True, message="Character removed from collection")
+    _collections_deprecated()
 
 
 @router.get("/tasks/{task_id}", response_model=Task)

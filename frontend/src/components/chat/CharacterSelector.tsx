@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Character } from '@/types';
 import { MessageSquare, X, Search } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { api } from '@/services/api';
 import { Button } from '@/components/common';
+import { CHAT_LIST_REFRESH_EVENT } from '@/utils/startOfficialChat';
 
 interface CharacterSelectorProps {
   currentCharacterId?: string;
+  currentCharacter?: Character | null;
   onSelectCharacter: (character: Character) => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
@@ -15,8 +17,13 @@ interface CharacterSelectorProps {
   className?: string;
 }
 
+interface CharacterListResponse {
+  items?: Character[];
+}
+
 export function CharacterSelector({
   currentCharacterId,
+  currentCharacter,
   onSelectCharacter,
   isMobileOpen = false,
   onMobileClose,
@@ -28,30 +35,73 @@ export function CharacterSelector({
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const isMountedRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadCharacters = useCallback((options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
+    setError('');
 
-    api.get<Character[]>('/characters')
+    return api.get<CharacterListResponse | Character[]>('/characters/my')
       .then((charsRes) => {
-        if (cancelled) return;
-        setCharacters(charsRes.data);
+        if (!isMountedRef.current) return;
+        const payload = charsRes.data;
+        if (Array.isArray(payload)) {
+          setCharacters(payload);
+          return;
+        }
+        setCharacters(Array.isArray(payload?.items) ? payload.items : []);
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (!isMountedRef.current) return;
         console.error('Failed to load characters:', error);
         setError('Failed to load characters.');
       })
       .finally(() => {
-        if (cancelled) return;
+        if (!isMountedRef.current) return;
         setLoading(false);
       });
-
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    loadCharacters();
+
+    const handleRefresh = () => {
+      if (isMountedRef.current) {
+        loadCharacters({ silent: true });
+      }
+    };
+
+    window.addEventListener(CHAT_LIST_REFRESH_EVENT, handleRefresh);
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener(CHAT_LIST_REFRESH_EVENT, handleRefresh);
+    };
+  }, [loadCharacters]);
 
   const normalizeName = (character: { name?: string; first_name?: string }) =>
     character.first_name || character.name || 'Unknown';
+
+  const getAvatarUrl = (character: Character) => {
+    const characterWithAvatar = character as Character & { avatar_url?: string };
+    return character.profile_image_url || character.media_urls?.avatar || characterWithAvatar.avatar_url;
+  };
+
+  const displayedCharacters = useMemo(() => {
+    if (!currentCharacter) return characters;
+
+    const exists = characters.some((character) => character.id === currentCharacter.id);
+    if (exists) {
+      return characters.map((character) =>
+        character.id === currentCharacter.id ? { ...character, ...currentCharacter } : character
+      );
+    }
+
+    return [currentCharacter, ...characters];
+  }, [characters, currentCharacter]);
 
   const filterBySearch = <T extends { name?: string; first_name?: string }>(items: T[]) => {
     if (!searchTerm.trim()) return items;
@@ -59,7 +109,7 @@ export function CharacterSelector({
     return items.filter((item) => normalizeName(item).toLowerCase().includes(query));
   };
 
-  const filteredCharacters = filterBySearch(characters);
+  const filteredCharacters = filterBySearch(displayedCharacters);
 
   return (
     <div
@@ -117,7 +167,7 @@ export function CharacterSelector({
               <MessageSquare size={24} className="text-zinc-500" />
             </div>
             <p className="text-zinc-400 text-sm">
-              {characters.length === 0 ? 'No characters yet' : 'No matches found'}
+              {displayedCharacters.length === 0 ? 'No characters yet' : 'No matches found'}
             </p>
           </div>
         ) : (
@@ -145,9 +195,9 @@ export function CharacterSelector({
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
-                {character.profile_image_url || character.media_urls?.avatar ? (
+                {getAvatarUrl(character) ? (
                   <img 
-                    src={character.profile_image_url || character.media_urls?.avatar} 
+                    src={getAvatarUrl(character)}
                     alt={displayName}
                     className="w-12 h-12 rounded-full object-cover flex-shrink-0 border border-white/10"
                   />

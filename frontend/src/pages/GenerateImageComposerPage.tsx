@@ -17,6 +17,7 @@ import { VideoLoraSelector } from '@/components/video/VideoLoraSelector';
 import { ImageLoraSelector } from '@/components/image/ImageLoraSelector';
 import { type ImageGenerationLoRA } from '@/config/imageGenerationLoras';
 import { fetchVideoLoraActions, type VideoLoraAction } from '@/services/videoLoraService';
+import { fetchOpenPosePresets, type OpenPosePreset } from '@/services/openposePresetService';
 import { getErrorMessage, getInsufficientCreditsInfo } from '@/utils/apiError';
 import { normalizeTaskStatus } from '@/utils/taskStatus';
 import { RoxyShellLayout } from '@/components/layout';
@@ -165,24 +166,8 @@ interface PersistedAnimateTask {
 
 const DEFAULT_ANIMATE_PROMPT = 'smiling gently, hair flowing in breeze, smooth natural motion';
 
-interface PosePreset {
-  id: string;
-  label: string;
-  thumbnailUrl: string;
-}
-
-// TODO: Replace thumbnailUrl values with your actual pose reference image URLs
-const POSE_PRESETS: PosePreset[] = [
-  { id: 'standing', label: 'Standing', thumbnailUrl: '' },
-  { id: 'sitting', label: 'Sitting', thumbnailUrl: '' },
-  { id: 'kneeling', label: 'Kneeling', thumbnailUrl: '' },
-  { id: 'lying_side', label: 'Lying Side', thumbnailUrl: '' },
-  { id: 'lean_back', label: 'Lean Back', thumbnailUrl: '' },
-  { id: 'bend_forward', label: 'Bend Forward', thumbnailUrl: '' },
-  { id: 'on_all_fours', label: 'On All Fours', thumbnailUrl: '' },
-  { id: 'seated_spread', label: 'Seated Spread', thumbnailUrl: '' },
-];
-const POLL_INTERVAL_MS = 4000;
+const POLL_INITIAL_DELAY_MS = 30_000;
+const POLL_INTERVAL_MS = 5000;
 const POLL_MAX_ATTEMPTS = 120;
 const STORAGE_KEY = 'roxy_pending_animate_tasks';
 const HUNYUAN_STORAGE_KEY = 'roxy_pending_hunyuan_tasks';
@@ -257,8 +242,9 @@ export function GenerateImageComposerPage() {
     available?: number;
   }>({ isOpen: false });
   const [selectedPoseId, setSelectedPoseId] = useState<string | null>(null);
+  const [posePresets, setPosePresets] = useState<OpenPosePreset[]>([]);
   const [animateStates, setAnimateStates] = useState<Record<string, AnimateState>>({});
-  const pollTimers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Image LoRA selection
   const [selectedImageLora, setSelectedImageLora] = useState<ImageGenerationLoRA | null>(null);
@@ -272,7 +258,7 @@ export function GenerateImageComposerPage() {
     videoUrl: null,
     error: null,
   });
-  const hunyuanPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hunyuanPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCategory = useMemo(
     () => SUGGESTION_CATEGORIES.find((category) => category.id === selectedCategoryId) || SUGGESTION_CATEGORIES[0],
@@ -338,14 +324,14 @@ export function GenerateImageComposerPage() {
     const timers = pollTimers.current;
     const hunyuanTimer = hunyuanPollTimer;
     return () => {
-      Object.values(timers).forEach(clearInterval);
-      if (hunyuanTimer.current) clearInterval(hunyuanTimer.current);
+      Object.values(timers).forEach(clearTimeout);
+      if (hunyuanTimer.current) clearTimeout(hunyuanTimer.current);
     };
   }, []);
 
   const stopPolling = useCallback((imageUrl: string) => {
     if (pollTimers.current[imageUrl]) {
-      clearInterval(pollTimers.current[imageUrl]);
+      clearTimeout(pollTimers.current[imageUrl]);
       delete pollTimers.current[imageUrl];
     }
   }, []);
@@ -367,6 +353,18 @@ export function GenerateImageComposerPage() {
     }));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchOpenPosePresets()
+      .then((poses) => {
+        if (!cancelled) setPosePresets(poses);
+      })
+      .catch((err) => console.error('Failed to fetch OpenPose presets:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const saveMediaToCollection = useCallback(async (payload: {
     image_urls?: string[];
     video_url?: string;
@@ -384,7 +382,7 @@ export function GenerateImageComposerPage() {
 
   const startPolling = useCallback((imageUrl: string, taskId: string, animPrompt?: string) => {
     let attempts = 0;
-    pollTimers.current[imageUrl] = setInterval(async () => {
+    const pollOnce = async () => {
       attempts += 1;
       if (attempts > POLL_MAX_ATTEMPTS) {
         stopPolling(imageUrl);
@@ -418,7 +416,11 @@ export function GenerateImageComposerPage() {
       } catch (pollErr) {
         console.error('Polling error:', pollErr);
       }
-    }, POLL_INTERVAL_MS);
+      if (pollTimers.current[imageUrl]) {
+        pollTimers.current[imageUrl] = setTimeout(pollOnce, POLL_INTERVAL_MS);
+      }
+    };
+    pollTimers.current[imageUrl] = setTimeout(pollOnce, POLL_INITIAL_DELAY_MS);
   }, [characterId, characterName, saveMediaToCollection, setAnimateState, stopPolling]);
 
   // Resume polling for any tasks that were pending before a page refresh
@@ -441,10 +443,11 @@ export function GenerateImageComposerPage() {
 
   const startHunyuanPolling = useCallback((taskId: string, taskPrompt?: string) => {
     let attempts = 0;
-    hunyuanPollTimer.current = setInterval(async () => {
+    const pollOnce = async () => {
       attempts += 1;
       if (attempts > POLL_MAX_ATTEMPTS) {
-        if (hunyuanPollTimer.current) clearInterval(hunyuanPollTimer.current);
+        if (hunyuanPollTimer.current) clearTimeout(hunyuanPollTimer.current);
+        hunyuanPollTimer.current = null;
         setHunyuanState((prev) => ({ ...prev, isGenerating: false, error: 'Video generation timed out.' }));
         removePersistedHunyuanTask(taskId);
         return;
@@ -454,7 +457,8 @@ export function GenerateImageComposerPage() {
         const data = res.data as { status?: string; result?: { data?: string; video_url?: string } };
         const status = normalizeTaskStatus(data.status);
         if (status === 'succeeded') {
-          if (hunyuanPollTimer.current) clearInterval(hunyuanPollTimer.current);
+          if (hunyuanPollTimer.current) clearTimeout(hunyuanPollTimer.current);
+          hunyuanPollTimer.current = null;
           const url = data.result?.video_url || data.result?.data || null;
           setHunyuanState({ isGenerating: false, taskId, videoUrl: url, error: null });
           if (url) {
@@ -468,14 +472,19 @@ export function GenerateImageComposerPage() {
           }
           removePersistedHunyuanTask(taskId);
         } else if (status === 'failed') {
-          if (hunyuanPollTimer.current) clearInterval(hunyuanPollTimer.current);
+          if (hunyuanPollTimer.current) clearTimeout(hunyuanPollTimer.current);
+          hunyuanPollTimer.current = null;
           setHunyuanState((prev) => ({ ...prev, isGenerating: false, error: 'Video generation failed.' }));
           removePersistedHunyuanTask(taskId);
         }
       } catch {
         // Network hiccup 鈥?keep polling
       }
-    }, POLL_INTERVAL_MS);
+      if (hunyuanPollTimer.current) {
+        hunyuanPollTimer.current = setTimeout(pollOnce, POLL_INTERVAL_MS);
+      }
+    };
+    hunyuanPollTimer.current = setTimeout(pollOnce, POLL_INITIAL_DELAY_MS);
   }, [characterId, characterName, hunyuanPrompt, saveMediaToCollection]);
 
   // Resume Hunyuan task after page refresh (鏂偣杞)
@@ -536,14 +545,15 @@ export function GenerateImageComposerPage() {
 
       // Submit all tasks and collect task_ids immediately (no blocking wait).
       // Priority: pose preset 鈫?OpenPose+InstantID; otherwise 鈫?Novita img2img+LoRA.
-      const selectedPose = POSE_PRESETS.find((p) => p.id === selectedPoseId);
+      const selectedPose = posePresets.find((p) => p.id === selectedPoseId);
       const taskResponses = await Promise.all(
         Array.from({ length: numImages }, () => {
-          if (selectedPose?.thumbnailUrl) {
+          if (selectedPose?.image_url) {
             return api.post<{ task_id: string; status: string }>('/images/generate-pose-mature', {
               prompt,
               character_id: characterId,
-              pose_image_url: selectedPose.thumbnailUrl,
+              pose_image_url: selectedPose.image_url,
+              lora_id: selectedImageLora?.id ?? null,
             });
           }
           return api.post<{ task_id: string; status: string }>('/images/generate-mature-lora', {
@@ -555,17 +565,20 @@ export function GenerateImageComposerPage() {
       );
       const taskIds = taskResponses.map((r) => r.data.task_id);
 
-      // Primary: SSE notification. Backup: HTTP polling every 5 s. Timeout: 6 min.
+      // Primary: SSE notification. Backup: delayed HTTP polling. Timeout: 6 min.
       const TIMEOUT_MS = 360_000;
       const waitForImage = (taskId: string): Promise<string> =>
         new Promise((resolve, reject) => {
           let settled = false;
+          let pollDelayTimer: ReturnType<typeof setTimeout> | null = null;
+          let pollInterval: ReturnType<typeof setInterval> | null = null;
 
           const cleanup = () => {
             settled = true;
             unsubDone();
             unsubFailed();
-            clearInterval(pollInterval);
+            if (pollDelayTimer) clearTimeout(pollDelayTimer);
+            if (pollInterval) clearInterval(pollInterval);
             clearTimeout(timer);
           };
 
@@ -588,7 +601,7 @@ export function GenerateImageComposerPage() {
             reject(new Error(data.error || 'Image generation failed'));
           });
 
-          const pollInterval = setInterval(async () => {
+          const pollOnce = async () => {
             if (settled) return;
             try {
               const res = await api.get<{ status: string; result?: { data?: string } }>(
@@ -606,7 +619,13 @@ export function GenerateImageComposerPage() {
             } catch {
               // Ignore poll errors
             }
-          }, 5000);
+          };
+
+          pollDelayTimer = setTimeout(() => {
+            if (settled) return;
+            void pollOnce();
+            pollInterval = setInterval(pollOnce, POLL_INTERVAL_MS);
+          }, POLL_INITIAL_DELAY_MS);
         });
 
       const settled = await Promise.allSettled(taskIds.map(waitForImage));
@@ -689,7 +708,7 @@ export function GenerateImageComposerPage() {
       }
 
       if (hunyuanPollTimer.current) {
-        clearInterval(hunyuanPollTimer.current);
+        clearTimeout(hunyuanPollTimer.current);
         hunyuanPollTimer.current = null;
       }
 
@@ -702,7 +721,7 @@ export function GenerateImageComposerPage() {
           unsubDone();
           unsubFailed();
           if (hunyuanPollTimer.current) {
-            clearInterval(hunyuanPollTimer.current);
+            clearTimeout(hunyuanPollTimer.current);
             hunyuanPollTimer.current = null;
           }
           clearTimeout(timeoutId);
@@ -743,7 +762,7 @@ export function GenerateImageComposerPage() {
           fail(data.error || 'Video generation failed.');
         });
 
-        hunyuanPollTimer.current = setInterval(async () => {
+        const pollOnce = async () => {
           if (settled) return;
           try {
             const res = await api.get<{ status?: string; result?: { data?: string; video_url?: string } }>(
@@ -763,7 +782,12 @@ export function GenerateImageComposerPage() {
           } catch {
             // Keep polling when network is unstable.
           }
-        }, 5000);
+          if (!settled && hunyuanPollTimer.current) {
+            hunyuanPollTimer.current = setTimeout(pollOnce, POLL_INTERVAL_MS);
+          }
+        };
+
+        hunyuanPollTimer.current = setTimeout(pollOnce, POLL_INITIAL_DELAY_MS);
 
         const timeoutId = setTimeout(() => {
           if (settled) return;
@@ -932,36 +956,37 @@ export function GenerateImageComposerPage() {
               )}
             </div>
             <p className="mb-3 text-xs text-zinc-500">
-              Select a pose to generate with InstantID face lock (MATURE). Leave unselected for standard generation.
+              Select a pose to generate with OpenPose ControlNet. Leave unselected for standard generation.
             </p>
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10">
-              {POSE_PRESETS.map((pose) => (
-                <button
-                  key={pose.id}
-                  onClick={() => setSelectedPoseId((prev) => (prev === pose.id ? null : pose.id))}
-                  className={`flex-shrink-0 flex flex-col items-center gap-1.5 rounded-xl border p-1.5 transition-colors ${
-                    selectedPoseId === pose.id
-                      ? 'border-pink-400/70 bg-pink-500/15'
-                      : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="h-20 w-16 overflow-hidden rounded-lg bg-zinc-800">
-                    {pose.thumbnailUrl ? (
+            {posePresets.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-4 text-xs text-zinc-500">
+                No pose presets configured.
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10">
+                {posePresets.map((pose) => (
+                  <button
+                    key={pose.id}
+                    onClick={() => setSelectedPoseId((prev) => (prev === pose.id ? null : pose.id))}
+                    className={`flex-shrink-0 flex flex-col items-center gap-1.5 rounded-xl border p-1.5 transition-colors ${
+                      selectedPoseId === pose.id
+                        ? 'border-pink-400/70 bg-pink-500/15'
+                        : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="h-20 w-16 overflow-hidden rounded-lg bg-zinc-800">
                       <img
-                        src={pose.thumbnailUrl}
-                        alt={pose.label}
+                        src={pose.image_url}
+                        alt={pose.name}
                         className="h-full w-full object-cover"
+                        loading="lazy"
                       />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-600">
-                        No image
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-zinc-300">{pose.label}</span>
-                </button>
-              ))}
-            </div>
+                    </div>
+                    <span className="max-w-20 truncate text-[11px] text-zinc-300">{pose.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* LoRA selector */}

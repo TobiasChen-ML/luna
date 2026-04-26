@@ -68,6 +68,36 @@ export interface Script {
   likes: number;
   created_at: string;
   updated_at: string;
+  nodes?: ScriptNode[];
+}
+
+export interface ScriptNodeChoice {
+  id: string;
+  text: string;
+  next_node_id?: string;
+}
+
+export interface ScriptNode {
+  id: string;
+  script_id: string;
+  node_type: 'scene' | 'choice' | 'ending';
+  title?: string;
+  description?: string;
+  narrative?: string;
+  choices?: ScriptNodeChoice[];
+  position_x?: number;
+  position_y?: number;
+}
+
+export interface ScriptNodeCreate {
+  script_id: string;
+  node_type: 'scene' | 'choice' | 'ending';
+  title?: string;
+  description?: string;
+  narrative?: string;
+  choices?: ScriptNodeChoice[];
+  position_x?: number;
+  position_y?: number;
 }
 
 export interface ScriptCreateData {
@@ -287,6 +317,29 @@ export const scriptService = {
   }>> {
     const response = await api.get(`/admin/scripts/${scriptId}/reviews`);
     return response.data;
+  },
+
+  async createNode(data: ScriptNodeCreate): Promise<ScriptNode> {
+    const response = await api.post(`/admin/scripts/${data.script_id}/nodes`, data);
+    return response.data;
+  },
+
+  async updateNode(nodeId: string, data: Partial<ScriptNode> & { script_id?: string }): Promise<ScriptNode> {
+    const scriptId = data.script_id;
+    if (!scriptId) {
+      throw new Error('script_id is required for node update');
+    }
+    const payload = { ...data };
+    delete payload.script_id;
+    const response = await api.put(`/admin/scripts/${scriptId}/nodes/${nodeId}`, payload);
+    return response.data;
+  },
+
+  async deleteNode(nodeId: string, scriptId?: string): Promise<void> {
+    if (!scriptId) {
+      throw new Error('script_id is required for node deletion');
+    }
+    await api.delete(`/admin/scripts/${scriptId}/nodes/${nodeId}`);
   },
 
   // Replay APIs

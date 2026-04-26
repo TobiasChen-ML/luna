@@ -22,6 +22,10 @@ export function Footer() {
               <p className="text-sm text-zinc-400">
                 {t('footer.description')}
               </p>
+              <p className="text-xs leading-relaxed text-zinc-500">
+                Telegram-first access. Web and PWA support usage; paid digital benefits are
+                activated in Telegram with Stars.
+              </p>
             </div>
 
             <div>

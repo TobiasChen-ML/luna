@@ -209,7 +209,48 @@ class TestCharacterFactoryMatureFallbacks:
     """Test Mature fallback paths in character_factory.py"""
 
     @pytest.mark.asyncio
-    async def test_generate_character_images_mature_falls_back_to_txt2img_when_sfw_fails(self):
+    async def test_generate_mature_with_ipadapter_samples_single_trigger_word(self):
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+
+        novita = MagicMock()
+        novita.DEFAULT_MODEL = "mock-model"
+        novita._download_image_base64 = AsyncMock(return_value="base64")
+        novita.img2img_async = AsyncMock(return_value="task_1")
+        novita.wait_for_task = AsyncMock(return_value=MagicMock(image_url="https://novita.example/mature.png"))
+
+        loras = [{
+            "name": "NsfwPovAllInOneLoraSdxl",
+            "model_name": "NsfwPovAllInOneLoraSdxl",
+            "strength": 0.8,
+            "trigger_word": "reverse gang bang,sidefuck,undressing",
+            "prompt_template_mode": "append_trigger",
+        }]
+
+        with patch("app.services.character_factory.random.choice", return_value="sidefuck"):
+            with patch("app.services.character_factory.storage_service") as mock_storage:
+                mock_storage.upload_from_url = AsyncMock(return_value="https://r2.example.com/mature.png")
+
+                result = await factory._generate_mature_with_ipadapter(
+                    novita,
+                    name="Test",
+                    age=25,
+                    ethnicity_style={"avatar": "woman"},
+                    personality="playful",
+                    sfw_avatar_url="https://r2.example.com/avatar.png",
+                    loras=loras,
+                )
+
+        assert result == "https://r2.example.com/mature.png"
+        prompt = novita.img2img_async.await_args.kwargs["prompt"]
+        assert prompt.startswith("sidefuck, ")
+        assert "reverse gang bang,sidefuck,undressing" not in prompt
+        assert novita.img2img_async.await_args.kwargs["strength"] == 0.72
+        assert novita.img2img_async.await_args.kwargs["seed"] > 0
+
+    @pytest.mark.asyncio
+    async def test_generate_character_images_skips_mature_when_sfw_fails(self):
         from app.services.character_factory import CharacterFactory
 
         factory = CharacterFactory()
@@ -223,19 +264,10 @@ class TestCharacterFactoryMatureFallbacks:
 
         novita_provider = MagicMock()
         novita_provider.img2img_async = AsyncMock()
-        # SFW avatar + cover fail; Mature avatar + cover txt2img succeed
-        novita_provider.txt2img_async = AsyncMock(side_effect=[
-            Exception("sfw avatar failed"),
-            Exception("sfw cover failed"),
-            "task_mature_avatar",
-            "task_mature_cover",
-        ])
-        novita_provider.wait_for_task = AsyncMock(side_effect=[
-            MagicMock(image_url="https://novita.example/mature-avatar.png"),
-            MagicMock(image_url="https://novita.example/mature-cover.png"),
-        ])
+        novita_provider.txt2img_async = AsyncMock(side_effect=Exception("sfw avatar failed"))
+        novita_provider.wait_for_task = AsyncMock()
 
-        with patch.object(factory, '_get_novita_image_provider', return_value=novita_provider):
+        with patch.object(factory, '_get_txt2img_provider', return_value=novita_provider):
             with patch('app.services.character_factory.storage_service') as mock_storage:
                 mock_storage.upload_from_url = AsyncMock(
                     side_effect=lambda url, folder=None: (
@@ -245,11 +277,34 @@ class TestCharacterFactoryMatureFallbacks:
 
                 images = await factory._generate_character_images(profile)
 
-        assert images["mature_image_url"] == "https://r2.example.com/mature-avatar.png"
-        assert images["mature_cover_url"] == "https://r2.example.com/mature-cover.png"
-        # No source images → img2img skipped, txt2img called 4 times total (2 SFW fail + 2 Mature)
+        assert images == {}
         assert novita_provider.img2img_async.await_count == 0
-        assert novita_provider.txt2img_async.await_count == 4
+        assert novita_provider.txt2img_async.await_count == 1
+
+    def test_assign_batch_visual_briefs_spreads_choices_and_seeds(self):
+        from app.services.character_factory import CharacterFactory
+
+        profiles = [{"name": f"Character {i}"} for i in range(5)]
+
+        CharacterFactory._assign_batch_visual_briefs(profiles)
+
+        briefs = [profile["_visual_brief"] for profile in profiles]
+        avatar_backgrounds = [brief["avatar"]["background"] for brief in briefs]
+        avatar_poses = [brief["avatar"]["pose"] for brief in briefs]
+        mature_backgrounds = [brief["mature"]["background"] for brief in briefs]
+        video_motions = [brief["video"]["motion"] for brief in briefs]
+        seeds = [
+            brief[section]["seed"]
+            for brief in briefs
+            for section in ("avatar", "mature", "video")
+        ]
+
+        assert len(set(avatar_backgrounds)) == len(avatar_backgrounds)
+        assert len(set(avatar_poses)) == len(avatar_poses)
+        assert len(set(mature_backgrounds)) == len(mature_backgrounds)
+        assert len(set(video_motions)) == len(video_motions)
+        assert all(isinstance(seed, int) and seed > 0 for seed in seeds)
+        assert len(set(seeds)) == len(seeds)
 
     @pytest.mark.asyncio
     async def test_generate_batch_uses_mature_cover_for_video(self):

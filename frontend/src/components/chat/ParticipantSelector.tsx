@@ -36,7 +36,23 @@ export function ParticipantSelector({
       setLoading(true);
       const response = await characterService.getDiscoverCharacters({ limit: 50 });
       const chars = response.characters || [];
-      setCharacters(chars);
+      const normalized: Participant[] = chars.map((char) => {
+        const raw = char as unknown as Record<string, unknown>;
+        const name =
+          (typeof raw.name === 'string' && raw.name) ||
+          (typeof raw.first_name === 'string' && raw.first_name) ||
+          'Unknown';
+        const avatarUrl =
+          (typeof raw.avatar_url === 'string' && raw.avatar_url) ||
+          (typeof raw.profile_image_url === 'string' && raw.profile_image_url) ||
+          undefined;
+        return {
+          id: String(raw.id || ''),
+          name,
+          avatar_url: avatarUrl,
+        };
+      }).filter((item) => item.id);
+      setCharacters(normalized);
     } catch (error) {
       console.error('Failed to load characters:', error);
     } finally {

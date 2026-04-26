@@ -342,6 +342,34 @@ async def list_characters_api(
     }
 
 
+@admin_api_router.get("/user-characters")
+async def list_user_characters_api(
+    request: Request,
+    page: int = 1,
+    page_size: int = 20,
+    search: str = "",
+    top_category: str = "",
+    admin: User = Depends(get_admin_user)
+) -> dict[str, Any]:
+    from app.services.character_service import character_service
+
+    characters, total = await character_service.list_characters(
+        page=page,
+        page_size=page_size,
+        top_category=top_category if top_category else None,
+        is_official=False,
+        search=search if search else None,
+        order_by="created_at DESC",
+    )
+
+    return {
+        "items": characters,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
 @admin_api_router.post("/characters")
 async def create_character_api(
     request: Request,

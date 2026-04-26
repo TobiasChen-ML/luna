@@ -306,11 +306,15 @@ async def list_characters(
 
 
 @router.post("", response_model=dict[str, Any])
-async def create_character(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+async def create_character(
+    request: Request,
+    data: dict[str, Any],
+    user: User = Depends(get_current_user_required),
+) -> dict[str, Any]:
     from app.models.character import CharacterCreate
     
     character_create = CharacterCreate(**data)
-    character = await character_service.create_character(character_create)
+    character = await character_service.create_ugc_character(character_create, user.id)
     
     return character
 

@@ -8,24 +8,7 @@ import { VideoLoraSelector } from '@/components/video/VideoLoraSelector';
 import { ImageLoraSelector } from '@/components/image/ImageLoraSelector';
 import type { ImageGenerationLoRA } from '@/config/imageGenerationLoras';
 import type { VideoLoraAction } from '@/services/videoLoraService';
-
-interface PoseOption {
-  id: string;
-  label: string;
-  thumbnailUrl: string;
-}
-
-// TODO: Replace thumbnailUrl values with your actual pose reference image URLs
-const CHAT_POSE_PRESETS: PoseOption[] = [
-  { id: 'standing', label: 'Standing', thumbnailUrl: '' },
-  { id: 'sitting', label: 'Sitting', thumbnailUrl: '' },
-  { id: 'kneeling', label: 'Kneeling', thumbnailUrl: '' },
-  { id: 'lying_side', label: 'Lying Side', thumbnailUrl: '' },
-  { id: 'lean_back', label: 'Lean Back', thumbnailUrl: '' },
-  { id: 'bend_forward', label: 'Bend Forward', thumbnailUrl: '' },
-  { id: 'on_all_fours', label: 'On All Fours', thumbnailUrl: '' },
-  { id: 'seated_spread', label: 'Seated Spread', thumbnailUrl: '' },
-];
+import { fetchOpenPosePresets, type OpenPosePreset } from '@/services/openposePresetService';
 
 interface ChatInputProps {
   onSend: (message: string, options?: { immediate?: boolean }) => void;
@@ -58,6 +41,7 @@ export function ChatInput({
   const [showImagePrompt, setShowImagePrompt] = useState(false);
   const [showVideoPrompt, setShowVideoPrompt] = useState(false);
   const [selectedPoseId, setSelectedPoseId] = useState<string | null>(null);
+  const [posePresets, setPosePresets] = useState<OpenPosePreset[]>([]);
   const [selectedImageLora, setSelectedImageLora] = useState<ImageGenerationLoRA | null>(null);
   const [selectedLora, setSelectedLora] = useState<VideoLoraAction | null>(null);
   const [selectedVideoBaseImage, setSelectedVideoBaseImage] = useState<string | null>(null);
@@ -150,6 +134,19 @@ export function ChatInput({
     setShowImagePrompt(true);
   }, [disabled, onGenerateImage, showImagePrompt, pickRandomTemplate]);
 
+  useEffect(() => {
+    if (!showImagePrompt || posePresets.length > 0) return;
+    let cancelled = false;
+    void fetchOpenPosePresets()
+      .then((poses) => {
+        if (!cancelled) setPosePresets(poses);
+      })
+      .catch((err) => console.error('Failed to fetch OpenPose presets:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [showImagePrompt, posePresets.length]);
+
   const toggleVideoPrompt = () => {
     if (disabled || !onGenerateVideo) return;
     setShowEmojiPicker(false);
@@ -178,10 +175,10 @@ export function ChatInput({
 
   const handleSendImagePrompt = async () => {
     if (!imagePrompt.trim() || disabled || !onGenerateImage) return;
-    const selectedPose = CHAT_POSE_PRESETS.find((p) => p.id === selectedPoseId);
+    const selectedPose = posePresets.find((p) => p.id === selectedPoseId);
     await onGenerateImage(
       imagePrompt.trim(),
-      selectedPose?.thumbnailUrl || undefined,
+      selectedPose?.image_url || undefined,
       selectedImageLora?.id,
     );
     setImagePrompt('');
@@ -312,6 +309,45 @@ export function ChatInput({
                       variant="compact"
                     />
                   </div>
+
+                  {posePresets.length > 0 && (
+                    <div className="mb-2">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <p className="text-xs text-zinc-400">OpenPose (optional)</p>
+                        {selectedPoseId && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPoseId(null)}
+                            className="text-[11px] text-zinc-500 hover:text-white transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
+                        {posePresets.map((pose) => {
+                          const isSelected = selectedPoseId === pose.id;
+                          return (
+                            <button
+                              key={pose.id}
+                              type="button"
+                              onClick={() => setSelectedPoseId(isSelected ? null : pose.id)}
+                              title={pose.name}
+                              className={cn(
+                                'flex h-20 w-16 flex-shrink-0 flex-col overflow-hidden rounded-lg border bg-white/5 text-left',
+                                isSelected
+                                  ? 'border-primary-300 ring-2 ring-primary-400/50'
+                                  : 'border-white/10 hover:border-white/30'
+                              )}
+                            >
+                              <img src={pose.image_url} alt={pose.name} className="h-14 w-full object-cover" loading="lazy" />
+                              <span className="truncate px-1 py-1 text-[10px] text-zinc-300">{pose.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <textarea
                     value={imagePrompt}

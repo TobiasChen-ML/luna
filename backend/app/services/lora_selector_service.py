@@ -7,9 +7,9 @@ scene description.  Falls back to random selection if the LLM call fails or
 returns an invalid choice.
 """
 
-import json
 import logging
 import random
+import re
 from typing import Optional
 
 from app.core.database import db
@@ -32,6 +32,26 @@ _SELECTION_SCHEMA = {
 }
 
 
+def _normalize_name(value: str) -> str:
+    text = (value or "").strip().lower()
+    if not text:
+        return ""
+    text = text.replace('"', "").replace("'", "").replace("`", "")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _summarize_lora(lora: dict) -> str:
+    desc = (lora.get("description") or "").strip()
+    if desc:
+        return desc
+    example_prompt = (lora.get("example_prompt") or "").strip()
+    if example_prompt:
+        first = example_prompt.splitlines()[0].strip()
+        return first[:180]
+    return f"name-only preset: {lora.get('name', '')}"
+
+
 async def _fetch_loras(applies_to: str) -> list[dict]:
     try:
         rows = await db.execute(
@@ -50,7 +70,7 @@ async def _fetch_loras(applies_to: str) -> list[dict]:
 
 def _build_system_prompt(loras: list[dict]) -> str:
     options = "\n".join(
-        f"  - \"{l['name']}\": {l['description'] or '(no description)'}"
+        f"  - \"{l['name']}\": {_summarize_lora(l)}"
         for l in loras
     )
     return (
@@ -58,7 +78,7 @@ def _build_system_prompt(loras: list[dict]) -> str:
         "single LoRA preset that best matches it from the list below.\n\n"
         f"Available LoRAs:\n{options}\n\n"
         'Return JSON with key "lora_name" set to the EXACT name string from the list above. '
-        "Do not invent names."
+        "Do not invent names. Never return empty/false/null."
     )
 
 
@@ -79,6 +99,11 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         return loras[0]
 
     lora_map = {l["name"]: l for l in loras}
+    normalized_lora_map = {
+        _normalize_name(str(l["name"])): l
+        for l in loras
+        if _normalize_name(str(l["name"]))
+    }
 
     try:
         from app.services.llm.providers import NovitaLLMProvider
@@ -115,14 +140,23 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         if chosen_name.lower() in {"false", "null", "none", "0"}:
             chosen_name = ""
 
+        chosen_exact = lora_map.get(chosen_name)
+        chosen_normalized = normalized_lora_map.get(_normalize_name(chosen_name))
+
         if not chosen_name:
             logger.warning("[LoraSelector] LLM returned empty lora_name, falling back to random.")
-        elif chosen_name in lora_map:
+        elif chosen_exact:
             logger.info(
                 f"[LoraSelector] LLM chose '{chosen_name}' for applies_to={applies_to}. "
                 f"Reason: {reasoning}"
             )
-            return lora_map[chosen_name]
+            return chosen_exact
+        elif chosen_normalized:
+            logger.info(
+                f"[LoraSelector] LLM fuzzy-matched '{chosen_name}' for applies_to={applies_to}. "
+                f"Reason: {reasoning}"
+            )
+            return chosen_normalized
         else:
             logger.warning(
                 f"[LoraSelector] LLM returned unknown name '{chosen_name}', falling back to random."

@@ -72,11 +72,20 @@ export function GroupChatPage() {
   const loadCharacterData = async (characterId: string) => {
     try {
       const char = await characterService.getCharacterById(characterId);
+      const raw = char as unknown as Record<string, unknown>;
+      const name =
+        (typeof raw.name === 'string' && raw.name) ||
+        (typeof raw.first_name === 'string' && raw.first_name) ||
+        'Unknown';
+      const avatarUrl =
+        (typeof raw.avatar_url === 'string' && raw.avatar_url) ||
+        (typeof raw.profile_image_url === 'string' && raw.profile_image_url) ||
+        undefined;
       setCharacterData((prev) => ({
         ...prev,
         [characterId]: {
-          name: char.name,
-          avatar_url: char.avatar_url,
+          name,
+          avatar_url: avatarUrl,
         },
       }));
     } catch (error) {

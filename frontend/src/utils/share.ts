@@ -8,11 +8,20 @@
 
 import { isTelegramMiniApp, getTelegramWebApp } from '@/utils/telegram'
 import { copyToClipboard } from './externalLink'
+import { rewardsService } from '@/services/rewardsService'
 
 export interface ShareOptions {
   title?: string
   text?: string
   url?: string
+}
+
+export interface ShareRewardClaimResult {
+  success: boolean
+  granted: boolean
+  reason: string
+  reward_amount: number
+  new_balance: number
 }
 
 export async function share(options: ShareOptions): Promise<boolean> {
@@ -61,4 +70,21 @@ export function shareChat(characterName: string, sessionId: string): Promise<boo
     title: `Chat with ${characterName}`,
     text: `Join my conversation with ${characterName} on RoxyClub`,
   })
+}
+
+export async function claimShareReward(
+  shareKey: string,
+  channel: string,
+  metadata?: Record<string, unknown>
+): Promise<ShareRewardClaimResult | null> {
+  try {
+    return await rewardsService.claimShareReward({
+      share_key: shareKey,
+      channel,
+      metadata,
+    })
+  } catch (error) {
+    console.error('Failed to claim share reward:', error)
+    return null
+  }
 }

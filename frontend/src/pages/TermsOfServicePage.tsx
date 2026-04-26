@@ -8,7 +8,7 @@ export function TermsOfServicePage() {
           <h1 className="text-4xl md:text-5xl font-heading font-bold mb-4 gradient-text">
             Terms of Service
           </h1>
-          <p className="text-zinc-400 mb-8">Last updated: February 5, 2026</p>
+          <p className="text-zinc-400 mb-8">Last updated: April 26, 2026</p>
 
           <div className="prose prose-invert prose-zinc max-w-none space-y-8">
             <section>
@@ -176,16 +176,26 @@ export function TermsOfServicePage() {
             <section>
               <h2 className="text-2xl font-heading font-bold text-white mb-4">7. Payment and Subscription</h2>
               <p className="text-zinc-300 leading-relaxed mb-3">
-                If you purchase a subscription or paid services:
+                RoxyClub is currently a Telegram-first service. Web and PWA access are provided
+                for using supported features and active account benefits. Purchases of digital
+                services, subscriptions, credits, virtual items, and other paid benefits are
+                completed in the Telegram Mini App using Telegram Stars.
               </p>
               <ul className="list-disc pl-6 text-zinc-300 space-y-2">
                 <li>You agree to pay all fees associated with your selected plan</li>
-                <li>Payments are processed through third-party payment processors</li>
-                <li>Subscriptions auto-renew unless canceled before the renewal date</li>
+                <li>Telegram Stars purchases are processed by Telegram or its third-party payment processors</li>
+                <li>Web and PWA interfaces do not currently support direct payment for digital benefits</li>
+                <li>Active paid benefits may be used across supported access points after activation</li>
+                <li>Subscriptions and paid benefits are linked to your account and Telegram purchase records where applicable</li>
                 <li>Fees are non-refundable except as required by law</li>
                 <li>We may change pricing with 30 days' notice to existing subscribers</li>
                 <li>Failure to pay may result in service suspension or termination</li>
               </ul>
+              <p className="text-zinc-300 leading-relaxed mt-4">
+                If you access RoxyClub from Web or PWA and choose to purchase paid digital
+                benefits, you will be directed to the Telegram Mini App. If you do not have
+                Telegram installed, Telegram may open its web experience or installation page.
+              </p>
             </section>
 
             <section>

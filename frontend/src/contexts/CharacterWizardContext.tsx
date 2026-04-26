@@ -1,6 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { CharacterWizardData, ScenePreset, VoiceProfile } from '@/types/character';
-import { initialCharacterData, wizardSteps, generateRandomAppearance } from '@/types/character';
+import {
+  LAUNCH_VOICE_PROFILES,
+  initialCharacterData,
+  wizardSteps,
+  generateRandomAppearance,
+} from '@/types/character';
 
 interface CharacterWizardContextType {
   // State
@@ -154,20 +159,7 @@ export function CharacterWizardProvider({ children }: { children: React.ReactNod
       { character_role: 'neighbor', user_role: 'neighbor', relationship_tone: 'friendly' },
       { character_role: 'mentor', user_role: 'student', relationship_tone: 'supportive' },
     ];
-    const voiceProfiles: VoiceProfile[] = [
-      'Inspirational_girl',
-      'Cute_girl',
-      'Lovely_Girl',
-      'Sweet_Girl_2',
-      'Lively_Girl',
-      'Exuberant_Girl',
-      'Calm_Woman',
-      'Wise_Woman',
-      'Decent_Boy',
-      'Magnetic_boy',
-      'Friendly_Person',
-      'Abbess',
-    ];
+    const voiceProfiles: readonly VoiceProfile[] = LAUNCH_VOICE_PROFILES;
     const scenePresets: ScenePreset[] = ['Office', 'Beach', 'Fantasy', 'NightCity', 'CozyHome', 'RainCafe'];
 
     const randomData: CharacterWizardData = {
@@ -236,20 +228,7 @@ export function CharacterWizardProvider({ children }: { children: React.ReactNod
       { character_role: 'neighbor', user_role: 'neighbor', relationship_tone: 'friendly' },
       { character_role: 'mentor', user_role: 'student', relationship_tone: 'supportive' },
     ];
-    const voiceProfiles: VoiceProfile[] = [
-      'Inspirational_girl',
-      'Cute_girl',
-      'Lovely_Girl',
-      'Sweet_Girl_2',
-      'Lively_Girl',
-      'Exuberant_Girl',
-      'Calm_Woman',
-      'Wise_Woman',
-      'Decent_Boy',
-      'Magnetic_boy',
-      'Friendly_Person',
-      'Abbess',
-    ];
+    const voiceProfiles: readonly VoiceProfile[] = LAUNCH_VOICE_PROFILES;
     const scenePresets: ScenePreset[] = ['Office', 'Beach', 'Fantasy', 'NightCity', 'CozyHome', 'RainCafe'];
 
     switch (currentStep) {

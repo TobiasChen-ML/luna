@@ -50,6 +50,7 @@ interface ScriptTrigger {
 
 interface ScriptData {
   [key: string]: unknown;
+  id?: string;
   title: string;
   description: string;
   genre: string;
@@ -68,7 +69,7 @@ interface ScriptData {
 interface ScriptEditorProps {
   characterId: string;
   initialData?: Partial<ScriptData>;
-  onSave: (data: ScriptData) => Promise<void>;
+  onSave: (data: ScriptData) => Promise<{ id?: string } | void>;
   onCancel: () => void;
 }
 
@@ -90,7 +91,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   onCancel,
 }) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'scenes' | 'npcs' | 'triggers' | 'dag'>('basic');
-  const [scriptId, setScriptId] = useState<string | null>(initialData?.id || null);
+  const [scriptId, setScriptId] = useState<string | null>(
+    typeof initialData?.id === 'string' ? initialData.id : null
+  );
   const [dagNodes, setDagNodes] = useState<ScriptNode[]>([]);
   
   const [scriptData, setScriptData] = useState<ScriptData>({
@@ -121,8 +124,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const loadDagNodes = async () => {
     if (!scriptId) return;
     try {
-      const nodes = await scriptService.getScript(scriptId);
-      setDagNodes(nodes.nodes || []);
+      const script = await scriptService.getScript(scriptId);
+      setDagNodes(script.nodes || []);
     } catch (err) {
       console.error('Failed to load DAG nodes:', err);
     }
@@ -234,19 +237,21 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     if (!scriptId) {
       throw new Error('Script must be saved first');
     }
-    const created = await scriptService.createNode({ ...node, script_id: scriptId } as never);
+    const created = await scriptService.createNode({ ...node, script_id: scriptId });
     loadDagNodes();
     return created;
   }, [scriptId]);
   
   const handleNodeUpdate = useCallback(async (nodeId: string, data: Partial<ScriptNode>) => {
-    await scriptService.updateNode(nodeId, data as never);
-  }, []);
+    if (!scriptId) return;
+    await scriptService.updateNode(nodeId, { ...data, script_id: scriptId });
+  }, [scriptId]);
   
   const handleNodeDelete = useCallback(async (nodeId: string) => {
-    await scriptService.deleteNode(nodeId);
+    if (!scriptId) return;
+    await scriptService.deleteNode(nodeId, scriptId);
     loadDagNodes();
-  }, []);
+  }, [scriptId]);
   
   return (
     <div className="script-editor max-w-4xl mx-auto p-4">
@@ -407,7 +412,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         
         {/* DAG Editor */}
         {activeTab === 'dag' && (
-          <Card className="p-0 bg-gray-800/50 overflow-hidden" style={{ height: '600px' }}>
+          <Card className="p-0 bg-gray-800/50 overflow-hidden h-[600px]">
             {scriptId ? (
               <DagEditor
                 scriptId={scriptId}

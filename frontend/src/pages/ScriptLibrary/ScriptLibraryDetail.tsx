@@ -207,7 +207,7 @@ const ScriptLibraryDetail: React.FC = () => {
         <p>
           <span>👁️ {script.popularity} {t('scriptLibrary.views', '次浏览')}</span>
           <span> | </span>
-          <span>{t(`scriptLibrary.length.${script.length}`, script.length)}</span>
+          <span>{t(`scriptLibrary.length.${script.length}`, { defaultValue: script.length || '' })}</span>
           {script.gender_target && (
             <>
               <span> | </span>

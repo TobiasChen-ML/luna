@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.voice_management_service import voice_management_service
 from app.core.dependencies import get_current_user_required
@@ -10,6 +10,8 @@ router = APIRouter(prefix="/api/voices", tags=["voices"])
 
 
 class VoiceCreate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: Optional[str] = None
     name: str = Field(..., min_length=1)
     display_name: Optional[str] = None
@@ -26,6 +28,8 @@ class VoiceCreate(BaseModel):
 
 
 class VoiceUpdate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     name: Optional[str] = None
     display_name: Optional[str] = None
     description: Optional[str] = None

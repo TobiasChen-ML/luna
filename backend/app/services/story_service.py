@@ -139,7 +139,7 @@ class StoryService:
             fetch=True
         )
         if not progress:
-            return None
+            return {}
 
         updates = ["last_played_at = ?"]
         params = [datetime.utcnow().isoformat()]
@@ -284,6 +284,81 @@ class StoryService:
             endings.append(ending)
 
         return endings
+
+    async def get_play_history(self, user_id: str, story_id: str) -> list[dict]:
+        rows = await db.execute(
+            """
+            SELECT id AS play_id, play_index, status, ending_type, completion_time_minutes,
+                   started_at, completed_at, choices_made
+            FROM story_progress
+            WHERE user_id = ? AND story_id = ?
+            ORDER BY play_index DESC, started_at DESC
+            """,
+            (user_id, story_id),
+            fetch_all=True,
+        )
+        history: list[dict] = []
+        import json
+        for row in rows:
+            item = dict(row)
+            choices = item.get("choices_made")
+            if isinstance(choices, str):
+                try:
+                    choices = json.loads(choices)
+                except json.JSONDecodeError:
+                    choices = []
+            if not isinstance(choices, list):
+                choices = []
+            item["choices_count"] = len(choices)
+            item.pop("choices_made", None)
+            history.append(item)
+        return history
+
+    async def get_next_play_index(self, user_id: str, story_id: str) -> int:
+        row = await db.execute(
+            "SELECT MAX(play_index) AS max_index FROM story_progress WHERE user_id = ? AND story_id = ?",
+            (user_id, story_id),
+            fetch=True,
+        )
+        max_index = int(
+            (row or {}).get("max_index")
+            or (row or {}).get("max_idx")
+            or 0
+        )
+        return max_index + 1
+
+    async def increment_play_count(self, story_id: str) -> None:
+        await db.execute(
+            "UPDATE stories SET play_count = COALESCE(play_count, 0) + 1, updated_at = ? WHERE id = ?",
+            (datetime.utcnow().isoformat(), story_id),
+        )
+
+    async def get_all_user_play_history(
+        self,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        total_row = await db.execute(
+            "SELECT COUNT(1) AS c FROM story_progress WHERE user_id = ?",
+            (user_id,),
+            fetch=True,
+        )
+        total = int((total_row or {}).get("c") or (total_row or {}).get("cnt") or 0)
+        rows = await db.execute(
+            """
+            SELECT sp.id AS play_id, sp.story_id, sp.play_index, sp.status, sp.ending_type,
+                   sp.completion_time_minutes, sp.started_at, sp.completed_at, s.title AS story_title
+            FROM story_progress sp
+            LEFT JOIN stories s ON s.id = sp.story_id
+            WHERE sp.user_id = ?
+            ORDER BY sp.started_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, max(1, limit), max(0, offset)),
+            fetch_all=True,
+        )
+        return [dict(row) for row in rows], total
 
 
 story_service = StoryService()
