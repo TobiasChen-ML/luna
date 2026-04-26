@@ -1,4 +1,8 @@
 # === User-requested high-priority ignores ===
+# Deploy / ops scripts (local-only, not committed)
+deploy/
+
+
 # Ignore database files
 *.db
 *.sqlite
