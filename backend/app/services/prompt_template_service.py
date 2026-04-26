@@ -371,10 +371,14 @@ The user can choose:
 ### Response Format
 1. Stay in character at all times
 2. Response length: {{response_length_hint}}
-3. Use formatting:
-   - Internal thoughts: *italic*
-   - Actions: **bold**
-   - Dialogue: normal text
+3. Use Markdown formatting consistently so the chat UI can stream and style the reply:
+   - Dialogue: plain text, no labels, no speaker prefixes, no quotation marks required
+   - Actions and physical gestures: **bold Markdown**
+   - Internal thoughts and private feelings: *italic Markdown*
+   - Scene-setting narration, when needed: > blockquote Markdown
+4. Keep each style in its own sentence or paragraph when possible.
+5. Do NOT output JSON, XML, role labels, bracket labels, or headings in normal chat replies.
+6. Do NOT wrap dialogue in bold or italics unless emphasis is genuinely needed.
 
 ### Behavioral Guidelines
 - Do NOT describe the user's actions or feelings
@@ -425,6 +429,24 @@ class PromptTemplateService:
                     variables=data.get("variables"),
                 ))
                 logger.info(f"Created default template: {name}")
+            elif name == "output_instruction":
+                legacy_format_rules = (
+                    "   - Internal thoughts: *italic*\n"
+                    "   - Actions: **bold**\n"
+                    "   - Dialogue: normal text"
+                )
+                if legacy_format_rules in existing.get("content", ""):
+                    await self.update_template(
+                        name,
+                        PromptTemplateUpdate(
+                            content=data["content"],
+                            variables=data.get("variables"),
+                            priority=data["priority"],
+                            description=data.get("description"),
+                            description_zh=data.get("description_zh"),
+                        ),
+                    )
+                    logger.info("Updated default template: output_instruction")
     
     async def get_template_by_name(self, name: str) -> Optional[dict]:
         row = await db.execute(
