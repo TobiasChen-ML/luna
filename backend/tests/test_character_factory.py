@@ -185,6 +185,40 @@ class TestCharacterFactoryProfileGeneration:
                 assert 25 <= profiles[0]["age"] <= 35
 
     @pytest.mark.asyncio
+    async def test_llm_age_is_randomized_per_profile(self):
+        """LLM tends to return 25; batch generation should still spread ages."""
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+
+        fixed_profile = {
+            "name": "Test",
+            "first_name": "Test",
+            "age": 25,
+            "gender": "female",
+            "ethnicity": "asian",
+            "nationality": "japan",
+            "occupation": "designer",
+            "top_category": "girls",
+            "personality_tags": ["playful"],
+            "description": "Test",
+            "personality_summary": "Test",
+            "backstory": "Test",
+            "greeting": "Hi",
+            "generation_mode": "batch",
+        }
+
+        with patch.object(
+            factory,
+            '_generate_single_profile_with_llm',
+            new=AsyncMock(side_effect=[dict(fixed_profile), dict(fixed_profile), dict(fixed_profile)]),
+        ):
+            with patch("app.services.character_factory.random.randint", side_effect=[21, 24, 29]):
+                profiles = await factory._generate_ai_profiles(count=3, age_min=20, age_max=30)
+
+        assert [profile["age"] for profile in profiles] == [21, 24, 29]
+
+    @pytest.mark.asyncio
     async def test_profile_personality_preferences_used(self):
         """Generated profile should use provided personality preferences"""
         from app.services.character_factory import CharacterFactory
@@ -281,6 +315,60 @@ class TestCharacterFactoryMatureFallbacks:
         assert novita_provider.img2img_async.await_count == 0
         assert novita_provider.txt2img_async.await_count == 1
 
+    @pytest.mark.asyncio
+    async def test_generate_character_images_uses_visual_brief_for_sfw_prompt(self):
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+        profile = {
+            "name": "Visual Character",
+            "age": 27,
+            "ethnicity": "asian",
+            "occupation": "college_student",
+            "personality_tags": ["playful"],
+            "_visual_brief": {
+                "avatar": {
+                    "style": "candid lifestyle portrait photo",
+                    "background": "inside a quiet art gallery with white walls",
+                    "pose": "walking across the frame with a natural stride",
+                    "action": "turning slightly as if just called by name",
+                    "camera": "wide-angle lifestyle composition",
+                    "quality": "soft overcast light, realistic skin detail",
+                    "seed": 123,
+                }
+            },
+        }
+
+        sfw_provider = MagicMock()
+        sfw_provider.txt2img_async = AsyncMock(return_value="task_avatar")
+        sfw_provider.wait_for_task = AsyncMock(
+            return_value=MagicMock(image_url="https://novita.example/avatar.png")
+        )
+
+        with patch.object(factory, "_get_txt2img_provider", new_callable=AsyncMock) as mock_sfw_provider:
+            with patch.object(factory, "_get_novita_image_provider", new_callable=AsyncMock) as mock_mature_provider:
+                with patch.object(factory, "_select_lora_from_db", new_callable=AsyncMock) as mock_select_lora:
+                    with patch.object(factory, "_generate_mature_with_ipadapter", new_callable=AsyncMock):
+                        with patch("app.services.character_factory.storage_service") as mock_storage:
+                            mock_sfw_provider.return_value = sfw_provider
+                            mock_mature_provider.return_value = sfw_provider
+                            mock_select_lora.return_value = []
+                            mock_storage.upload_from_url = AsyncMock(
+                                return_value="https://r2.example.com/avatar.png"
+                            )
+
+                            await factory._generate_character_images(profile)
+
+        prompt = sfw_provider.txt2img_async.await_args.kwargs["prompt"]
+        assert prompt.startswith("candid lifestyle portrait photo of a 27-year-old")
+        assert "inside a quiet art gallery with white walls" in prompt
+        assert "walking across the frame with a natural stride" in prompt
+        assert "turning slightly as if just called by name" in prompt
+        assert "wide-angle lifestyle composition" in prompt
+        assert "selfie" not in prompt
+        assert "holding phone" not in prompt
+        assert "full-body portrait photo" not in prompt
+
     def test_assign_batch_visual_briefs_spreads_choices_and_seeds(self):
         from app.services.character_factory import CharacterFactory
 
@@ -289,6 +377,7 @@ class TestCharacterFactoryMatureFallbacks:
         CharacterFactory._assign_batch_visual_briefs(profiles)
 
         briefs = [profile["_visual_brief"] for profile in profiles]
+        avatar_styles = [brief["avatar"]["style"] for brief in briefs]
         avatar_backgrounds = [brief["avatar"]["background"] for brief in briefs]
         avatar_poses = [brief["avatar"]["pose"] for brief in briefs]
         mature_backgrounds = [brief["mature"]["background"] for brief in briefs]
@@ -299,6 +388,7 @@ class TestCharacterFactoryMatureFallbacks:
             for section in ("avatar", "mature", "video")
         ]
 
+        assert len(set(avatar_styles)) == len(avatar_styles)
         assert len(set(avatar_backgrounds)) == len(avatar_backgrounds)
         assert len(set(avatar_poses)) == len(avatar_poses)
         assert len(set(mature_backgrounds)) == len(mature_backgrounds)
@@ -345,6 +435,55 @@ class TestCharacterFactoryMatureFallbacks:
         assert len(result) == 1
         mock_video.assert_awaited_once()
         assert mock_video.call_args[0][1] == "https://example.com/mature-cover.png"
+
+    @pytest.mark.asyncio
+    async def test_generate_character_video_passes_lora_configs(self):
+        from app.services.character_factory import CharacterFactory
+
+        factory = CharacterFactory()
+        profile = {
+            "name": "Video Character",
+            "personality_tags": ["confident", "playful"],
+            "_visual_brief": {
+                "video": {
+                    "motion": "slow turn with natural movement",
+                    "action": "glancing aside before looking back",
+                    "camera": "three-quarter portrait video composition",
+                    "background": "in a modern bedroom with linen sheets",
+                    "quality": "smooth motion, coherent anatomy",
+                    "seed": 12345,
+                }
+            },
+        }
+
+        video_provider = MagicMock()
+        video_provider.generate_video = AsyncMock(
+            return_value=MagicMock(video_url="https://novita.example/video.mp4")
+        )
+
+        with patch.object(factory, "_get_novita_video_provider", return_value=video_provider):
+            with patch.object(factory, "_select_lora_from_db", new_callable=AsyncMock) as mock_loras:
+                with patch("app.services.character_factory.storage_service") as mock_storage:
+                    mock_loras.return_value = [{
+                        "name": "Video LoRA",
+                        "model_name": "civitai:111@222",
+                        "strength": 0.7,
+                        "trigger_word": "cinematic motion",
+                    }]
+                    mock_storage.upload_from_url = AsyncMock(
+                        return_value="https://r2.example.com/video.mp4"
+                    )
+
+                    result = await factory._generate_character_video(
+                        profile,
+                        "https://r2.example.com/mature.png",
+                    )
+
+        assert result == "https://r2.example.com/video.mp4"
+        kwargs = video_provider.generate_video.await_args.kwargs
+        assert kwargs["loras"] is not None
+        assert kwargs["loras"][0].model_name == "civitai:111@222"
+        assert kwargs["loras"][0].strength == 0.7
 
     @pytest.mark.asyncio
     async def test_generate_character_images_retries_mature_prompt_three_times(self):

@@ -18,6 +18,7 @@ from app.services.database_service import DatabaseService
 from app.services.redis_service import RedisService
 from app.services.credit_service import credit_service
 from app.services.firebase_service import FirebaseService
+from app.models.credit_transaction import CreditTransaction
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -25,6 +26,17 @@ db_svc = DatabaseService()
 redis_svc = RedisService()
 
 DAILY_CHECKIN_CREDITS = 2
+
+
+def _has_daily_checkin_transaction(user_id: str, today_key: str) -> bool:
+    current_order_id = f"checkin:{user_id}:{today_key}"
+    legacy_order_id = f"checkin:{today_key}"
+    with db_svc.transaction() as session:
+        return session.query(CreditTransaction.id).filter(
+            CreditTransaction.user_id == user_id,
+            CreditTransaction.transaction_type == "daily_checkin",
+            CreditTransaction.order_id.in_([current_order_id, legacy_order_id]),
+        ).first() is not None
 
 
 def _normalize_email(email: str) -> str:
@@ -197,14 +209,20 @@ async def get_current_user(
     request: Request,
     user = Depends(get_current_user_required)
 ) -> User:
+    db_user = await db_svc.get_user_by_id(user.id)
+    balance = await credit_service.get_balance(user.id)
+    now = datetime.utcnow()
+
     return User(
         id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        subscription_tier=getattr(user, 'subscription_tier', 'free'),
-        credits=getattr(user, 'credits', 0),
+        email=(db_user.email if db_user else user.email),
+        display_name=(db_user.display_name if db_user else user.display_name),
+        avatar_url=(db_user.avatar_url if db_user else getattr(user, 'avatar_url', None)),
+        subscription_tier=balance.get("subscription_tier") or getattr(user, 'subscription_tier', 'free'),
+        credits=balance.get("total", 0),
         is_admin=getattr(user, 'is_admin', False),
-        created_at=datetime.now(),
+        created_at=(db_user.created_at if db_user and db_user.created_at else now),
+        updated_at=(db_user.updated_at if db_user else None),
     )
 
 
@@ -251,23 +269,37 @@ async def daily_checkin(
 ) -> dict[str, Any]:
     user_id = str(user.id)
     today_key = datetime.utcnow().strftime("%Y%m%d")
-    lock_key = f"auth:checkin:{user_id}:{today_key}"
-    if await redis_svc.exists(lock_key):
+    if _has_daily_checkin_transaction(user_id, today_key):
         raise HTTPException(status_code=429, detail="Already checked in today")
 
-    await redis_svc.set(lock_key, "1", ex=86400)
+    lock_key = f"auth:checkin:{user_id}:{today_key}"
+    redis_lock_set = False
+    try:
+        if await redis_svc.exists(lock_key):
+            raise HTTPException(status_code=429, detail="Already checked in today")
+        await redis_svc.set(lock_key, "1", ex=86400)
+        redis_lock_set = True
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(f"daily_checkin Redis lock unavailable for user {user_id}: {exc}")
+
     try:
         await credit_service.add_credits(
             user_id=user_id,
             amount=float(DAILY_CHECKIN_CREDITS),
             transaction_type="daily_checkin",
             credit_source="purchased",
-            order_id=f"checkin:{today_key}",
+            order_id=f"checkin:{user_id}:{today_key}",
             description=f"Daily check-in reward ({DAILY_CHECKIN_CREDITS} credits)",
         )
     except Exception as exc:
         logger.error(f"daily_checkin failed for user {user_id}: {exc}")
-        await redis_svc.delete(lock_key)
+        if redis_lock_set:
+            try:
+                await redis_svc.delete(lock_key)
+            except Exception as redis_exc:
+                logger.warning(f"Failed to release daily_checkin Redis lock for user {user_id}: {redis_exc}")
         raise HTTPException(status_code=500, detail="Failed to grant daily check-in credits")
 
     balance = await credit_service.get_balance(user_id)
@@ -329,7 +361,7 @@ async def age_verification_webhook(request: Request) -> BaseResponse:
 
 
 @router.post("/login")
-async def login(request: Request, data: LoginRequest) -> dict[str, Any]:
+async def login(request: Request, response: Response, data: LoginRequest) -> dict[str, Any]:
     email = _normalize_email(data.email)
     user = await _get_user_by_email(email)
     if not user:
@@ -338,6 +370,7 @@ async def login(request: Request, data: LoginRequest) -> dict[str, Any]:
     is_admin = email in get_settings().admin_emails
     access_token = jwt_service.create_access_token(user.id, email, is_admin=is_admin)
     refresh_token = jwt_service.create_refresh_token(user.id)
+    set_auth_cookies(response, access_token, refresh_token)
 
     return {
         "success": True,

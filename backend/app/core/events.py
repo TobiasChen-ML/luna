@@ -23,6 +23,7 @@ class EventType(str, Enum):
     VOICE_NOTE_PENDING = "voice_note_pending"
     VOICE_NOTE_READY = "voice_note_ready"
     VOICE_NOTE_FAILED = "voice_note_failed"
+    TOOL_CALL = "tool_call"
     CREDIT_UPDATE = "credit_update"
     SESSION_CREATED = "session_created"
     USER_MESSAGE = "user_message"

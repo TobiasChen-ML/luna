@@ -75,7 +75,7 @@ AVATAR_BACKGROUND_SCENES = [
     "in a gym locker room with mirrors",
     "on a basketball court outdoors in sunlight",
     "in a cozy bedroom with soft morning sunlight streaming in",
-    "in a stylish hotel bathroom with marble walls, taking a mirror selfie",
+    "in a stylish hotel bathroom with marble walls",
     "at a resort poolside with blue water behind her",
     "in a sunlit modern apartment living room",
     "outdoors in a park with dappled golden hour light",
@@ -83,6 +83,49 @@ AVATAR_BACKGROUND_SCENES = [
     "in a dressing room with ring lights",
     "in a luxury spa changing room",
     "on a sandy beach at sunset",
+    "inside a quiet art gallery with white walls",
+    "in a neon-lit city alley after rain",
+    "at a sidewalk cafe with warm afternoon light",
+    "in a library aisle with tall wooden shelves",
+    "inside a minimalist photography studio",
+    "in a greenhouse filled with tropical plants",
+    "at a train station platform during golden hour",
+    "in a vintage record store with colorful album covers",
+    "beside a hotel lobby window with city reflections",
+    "on a quiet residential street lined with trees",
+    "inside a bright kitchen with marble counters",
+    "in a dance rehearsal room with wooden floors",
+    "near a lakeside pier with soft morning fog",
+    "in a modern office lounge with glass walls",
+    "on a rooftop garden with potted plants",
+    "inside a boutique clothing shop with soft lighting",
+    "in a museum corridor with dramatic overhead light",
+    "at a night market with colorful lanterns",
+    "beside a pool cabana with striped shadows",
+    "inside a cozy book cafe with warm lamps",
+]
+
+AVATAR_PHOTO_STYLE_VARIANTS = [
+    "candid lifestyle portrait photo",
+    "editorial fashion portrait photo",
+    "environmental portrait photo",
+    "street-style portrait photo",
+    "cinematic character portrait photo",
+    "natural light portrait photo",
+    "magazine-style portrait photo",
+    "travel diary portrait photo",
+    "documentary-style portrait photo",
+    "polished studio portrait photo",
+    "soft glamour portrait photo",
+    "urban fashion lookbook photo",
+    "relaxed social media portrait photo",
+    "high-end dating profile portrait photo",
+    "film still style portrait photo",
+    "warm indoor lifestyle portrait photo",
+    "outdoor golden-hour portrait photo",
+    "minimalist clean portrait photo",
+    "moody cinematic portrait photo",
+    "playful candid portrait photo",
 ]
 
 IMAGE_POSE_VARIANTS = [
@@ -102,6 +145,22 @@ IMAGE_POSE_VARIANTS = [
     "perched on a windowsill at a diagonal angle",
     "standing with arms loosely folded below the chest",
     "sitting sideways with one knee raised",
+    "standing with one shoulder closer to the lens",
+    "walking across the frame with a natural stride",
+    "sitting relaxed on a sofa arm",
+    "standing beside a window with one knee bent",
+    "leaning forward slightly with balanced posture",
+    "standing centered with relaxed open shoulders",
+    "sitting on stairs with an angled posture",
+    "turning mid-step with natural movement",
+    "standing near a doorway with soft posture",
+    "sitting cross-legged in a relaxed pose",
+    "leaning on a railing at a diagonal angle",
+    "standing with weight shifted to one leg",
+    "resting against a countertop with casual posture",
+    "sitting at a cafe table in three-quarter view",
+    "standing in a graceful S-curve pose",
+    "looking over her shoulder while standing",
 ]
 
 IMAGE_ACTION_VARIANTS = [
@@ -121,6 +180,26 @@ IMAGE_ACTION_VARIANTS = [
     "settling into the seat with relaxed hands",
     "placing one hand behind her head",
     "reaching toward the camera in a candid moment",
+    "holding a coffee cup near her waist",
+    "turning a page in a book",
+    "checking the light from a nearby window",
+    "buttoning a jacket casually",
+    "resting both hands loosely at her sides",
+    "walking with one hand brushing her hair",
+    "pausing as if listening to someone off camera",
+    "smiling subtly with relaxed shoulders",
+    "looking down briefly before meeting the camera",
+    "holding sunglasses loosely in one hand",
+    "adjusting the cuff of her sleeve",
+    "touching the edge of a nearby chair",
+    "turning slightly as if just called by name",
+    "holding a small handbag at her side",
+    "resting her elbows lightly on a table",
+    "stepping forward with a confident expression",
+    "looking out a window in a quiet moment",
+    "laughing softly with natural expression",
+    "standing still with composed eye contact",
+    "tucking hair behind one ear",
 ]
 
 IMAGE_CAMERA_VARIANTS = [
@@ -136,10 +215,26 @@ IMAGE_CAMERA_VARIANTS = [
     "dynamic diagonal composition",
     "over-the-shoulder portrait framing",
     "low side-angle fashion editorial framing",
-    "mirror selfie perspective with visible phone",
+    "mirror portrait perspective without a phone",
     "intimate medium close-up portrait crop",
     "floor-level upward perspective",
     "cinematic off-center composition",
+    "horizontal waist-up environmental framing",
+    "full-length editorial framing",
+    "medium portrait with background context",
+    "wide-angle lifestyle composition",
+    "portrait lens with soft background compression",
+    "candid side-profile composition",
+    "centered clean catalogue framing",
+    "asymmetric rule-of-thirds composition",
+    "overhead soft-angle portrait framing",
+    "long-lens street portrait perspective",
+    "shoulder-level natural camera height",
+    "low three-quarter fashion angle",
+    "cinematic hallway depth perspective",
+    "window-lit side angle portrait",
+    "seated medium-wide composition",
+    "walking shot with slight motion energy",
 ]
 
 IMAGE_QUALITY_VARIANTS = [
@@ -151,6 +246,16 @@ IMAGE_QUALITY_VARIANTS = [
     "natural window light, subtle film grain",
     "high-end portrait photography, sharp focus",
     "ambient room lighting, realistic color tones",
+    "subtle cinematic contrast, natural highlights",
+    "soft overcast light, realistic skin detail",
+    "editorial color palette, clean shadows",
+    "bright airy lighting, crisp facial detail",
+    "film-like grain, balanced warm tones",
+    "studio-soft key light, smooth background falloff",
+    "rich natural contrast, detailed fabric texture",
+    "muted luxury color grading, accurate anatomy",
+    "clean commercial photography, polished detail",
+    "realistic lens rendering, depth and separation",
 ]
 
 MATURE_BACKGROUND_VARIANTS = [
@@ -253,16 +358,13 @@ class CharacterFactory:
         return provider
 
     async def _get_txt2img_provider(self):
-        try:
-            from app.core.config import get_config_value
-            provider_name = await get_config_value("IMAGE_PROVIDER") or "novita"
-        except Exception:
-            provider_name = "novita"
         media = self._get_media_service()
-        provider = media.get_image_provider(provider_name)
+        provider = media.get_image_provider("z_image_turbo_lora")
         if provider is None:
             await media.refresh_providers()
-            provider = media.get_image_provider(provider_name)
+            provider = media.get_image_provider("z_image_turbo_lora")
+        if provider is None:
+            provider = media.get_image_provider("novita")
         return provider
 
     def _get_novita_video_provider(self):
@@ -295,6 +397,7 @@ class CharacterFactory:
         cls, *, include_background: bool = False
     ) -> dict[str, str]:
         variation = {
+            "style": cls._sample_from_pool(AVATAR_PHOTO_STYLE_VARIANTS),
             "pose": cls._sample_from_pool(IMAGE_POSE_VARIANTS),
             "action": cls._sample_from_pool(IMAGE_ACTION_VARIANTS),
             "camera": cls._sample_from_pool(IMAGE_CAMERA_VARIANTS),
@@ -328,6 +431,7 @@ class CharacterFactory:
             "batch_index": index,
             "batch_count": count,
             "avatar": {
+                "style": cls._pick_unique(AVATAR_PHOTO_STYLE_VARIANTS, index),
                 "background": cls._pick_unique(AVATAR_BACKGROUND_SCENES, index),
                 "pose": cls._pick_unique(IMAGE_POSE_VARIANTS, index),
                 "action": cls._pick_unique(IMAGE_ACTION_VARIANTS, index * 2),
@@ -356,6 +460,7 @@ class CharacterFactory:
     @classmethod
     def _assign_batch_visual_briefs(cls, profiles: list[dict]) -> None:
         count = len(profiles)
+        avatar_styles = random.sample(AVATAR_PHOTO_STYLE_VARIANTS, len(AVATAR_PHOTO_STYLE_VARIANTS))
         avatar_backgrounds = random.sample(AVATAR_BACKGROUND_SCENES, len(AVATAR_BACKGROUND_SCENES))
         avatar_poses = random.sample(IMAGE_POSE_VARIANTS, len(IMAGE_POSE_VARIANTS))
         avatar_actions = random.sample(IMAGE_ACTION_VARIANTS, len(IMAGE_ACTION_VARIANTS))
@@ -374,6 +479,7 @@ class CharacterFactory:
                 "batch_index": index,
                 "batch_count": count,
                 "avatar": {
+                    "style": avatar_styles[index % len(avatar_styles)],
                     "background": avatar_backgrounds[index % len(avatar_backgrounds)],
                     "pose": avatar_poses[index % len(avatar_poses)],
                     "action": avatar_actions[index % len(avatar_actions)],
@@ -1028,6 +1134,7 @@ class CharacterFactory:
                     top_category=top_category,
                 )
 
+            profile["age"] = random.randint(age_min, age_max)
             profiles.append(profile)
 
         return profiles
@@ -1215,7 +1322,7 @@ class CharacterFactory:
 
     async def _generate_character_images(self, profile: dict) -> dict:
         """Three-step image generation:
-        1. Novita txt2img -> SFW full-body selfie (avatar = cover)
+        1. Novita txt2img -> SFW full-body portrait (avatar = cover)
         2. Novita img2img + IPAdapter + DB LoRAs -> Mature (mature_image = mature_cover)
         3. Novita WAN2.1 img2video -> mature_video (launched as background task)
         """
@@ -1234,8 +1341,8 @@ class CharacterFactory:
         avatar_brief = visual_brief.get("avatar", {}) if isinstance(visual_brief, dict) else {}
         background = avatar_brief.get("background") or self._get_random_background(profile)
 
-        novita = await self._get_txt2img_provider()
-        if not novita:
+        sfw_provider = await self._get_txt2img_provider()
+        if not sfw_provider:
             logger.warning("Image provider not configured - skipping image generation")
             return images
 
@@ -1244,7 +1351,7 @@ class CharacterFactory:
             "ugly, watermark, deformed, disfigured"
         )
 
-        # ── Step 1: SFW full-body selfie ─────────────────────────────────────
+        # ── Step 1: SFW full-body portrait ───────────────────────────────────
         _sfw_context = f"{name}, {personality} personality, {occupation_style}"
         sfw_loras = await self._select_lora_from_db("txt2img", context=_sfw_context)
         def _pick_one_trigger(raw: str) -> str:
@@ -1256,13 +1363,13 @@ class CharacterFactory:
         sfw_variation = self._sample_image_prompt_variation()
         avatar_seed = int(avatar_brief.get("seed") or self._random_seed())
         avatar_prompt = (
-            f"full body selfie photo of a beautiful {age}-year-old {ethnicity_style['avatar']}, "
+            f"{avatar_brief.get('style') or sfw_variation['style']} of a {age}-year-old {ethnicity_style['avatar']}, "
             f"{background}, {occupation_style}, {personality} personality, "
             f"{sfw_trigger_part}"
             f"{avatar_brief.get('pose') or sfw_variation['pose']}, "
             f"{avatar_brief.get('action') or sfw_variation['action']}, "
-            f"{avatar_brief.get('camera') or sfw_variation['camera']}, holding phone, "
-            f"{avatar_brief.get('quality') or sfw_variation['quality']}, attractive, natural lighting, "
+            f"{avatar_brief.get('camera') or sfw_variation['camera']}, "
+            f"{avatar_brief.get('quality') or sfw_variation['quality']}, "
             "photorealistic, high quality, 4k, detailed"
         )
 
@@ -1273,8 +1380,8 @@ class CharacterFactory:
         ] or None
 
         try:
-            logger.info(f"[Step 1] Novita txt2img full-body selfie for {name}...")
-            task_id = await novita.txt2img_async(
+            logger.info(f"[Step 1] Novita Z-Image-Turbo-LoRA SFW avatar for {name}...")
+            task_id = await sfw_provider.txt2img_async(
                 prompt=avatar_prompt,
                 negative_prompt=sfw_negative,
                 width=768,
@@ -1282,7 +1389,7 @@ class CharacterFactory:
                 loras=sfw_lora_configs,
                 seed=avatar_seed,
             )
-            result = await novita.wait_for_task(task_id)
+            result = await sfw_provider.wait_for_task(task_id)
             if result.image_url:
                 try:
                     url = await storage_service.upload_from_url(
@@ -1306,6 +1413,7 @@ class CharacterFactory:
         # ── Step 2: Mature with IPAdapter + LoRAs ──────────────────────────────
         sfw_avatar_url = images.get("avatar_url")
         if sfw_avatar_url:
+            novita = await self._get_novita_image_provider() or sfw_provider
             mature_url = None
             retry_personalities = [
                 personality,
@@ -1376,6 +1484,12 @@ class CharacterFactory:
             trigger_words = " ".join(
                 _pick_one(l["trigger_word"]) for l in video_loras if l.get("trigger_word")
             )
+            from app.services.media import LoRAConfig as MediaLoRAConfig
+            video_lora_configs = [
+                MediaLoRAConfig(model_name=l["model_name"], strength=l["strength"])
+                for l in video_loras
+                if l.get("model_name")
+            ] or None
 
             video_variation = self._sample_video_prompt_variation()
             video_seed = int(video_brief.get("seed") or self._random_seed())
@@ -1405,6 +1519,7 @@ class CharacterFactory:
                 seed=video_seed,
                 enable_safety_checker=False,
                 timeout_seconds=600,
+                loras=video_lora_configs,
             )
 
             if result and result.video_url:

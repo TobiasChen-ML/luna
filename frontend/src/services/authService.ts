@@ -1,6 +1,5 @@
 import {
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
   GoogleAuthProvider,
@@ -82,15 +81,15 @@ export const authService = {
   },
 
   async login(email: string, password: string): Promise<User> {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    
-    try {
-      await exchangeFirebaseToken();
-    } catch (error: unknown) {
-      console.error('Failed to exchange Firebase token for App JWT:', error);
-    }
-    
-    return userCredential.user;
+    const response = await api.post<TokenResponse>('/auth/login', { email, password });
+    const { access_token, refresh_token } = response.data;
+    await setAuthTokens(access_token, refresh_token);
+
+    return {
+      uid: response.data.user?.id ?? '',
+      email,
+      displayName: response.data.user?.display_name ?? null,
+    } as User;
   },
 
   async loginWithGoogle(): Promise<GoogleLoginResult> {

@@ -136,7 +136,32 @@ class PromptBuilder:
                 logger.warning(f"Failed to render template {template_name}: {e}")
                 continue
 
+        if ctx.script_id:
+            parts.append(self._build_story_leadership_instructions(ctx))
+
+        parts.append(
+            "## Tool Availability Rules\n\n"
+            "- Image, video, and voice generation are available system tools for this character agent.\n"
+            "- Do not refuse ordinary media requests because of the character's job, identity, spirituality, or lack of technology skills.\n"
+            "- If a media request reaches normal chat instead of a tool call, acknowledge it naturally in character and avoid inventing capability limitations."
+        )
+
         return "\n\n".join(parts)
+
+    def _build_story_leadership_instructions(self, ctx: PromptContext) -> str:
+        if ctx.use_script_library:
+            story_source = "the bound script library story"
+        else:
+            story_source = "the active script"
+
+        return f"""## Story Leadership Rules
+
+- Treat {story_source} as the source of the next topic and scene direction.
+- The character must actively open and steer the conversation from the current scene, current beat, plot hint, or available choices.
+- Do not ask the user to choose a topic, vibe, direction, or what to talk about.
+- If the user gives a compliment, greeting, short reply, or ambiguous message, acknowledge it briefly in character, then immediately introduce the next concrete story beat.
+- Keep choices implicit unless the script provides explicit choices; when choices are needed, present them as in-character story options instead of asking an open-ended question.
+- Avoid generic deflection phrases such as "let's see what happens" when a script beat or scene hook is available."""
     
     def _extract_variables(self, ctx: PromptContext, section: PromptSection) -> dict[str, Any]:
         base_vars: dict[str, Any] = {}

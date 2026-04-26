@@ -98,4 +98,43 @@ describe('MessageBubble', () => {
     const voiceButton = screen.getByTitle(/Play voice/i);
     expect(voiceButton).toBeInTheDocument();
   });
+
+  it('renders assistant markdown emphasis as bracketed action text', () => {
+    renderMessageBubble(
+      {
+        ...baseAssistantMessage,
+        content: '*leans closer* Hello.',
+      },
+      { characterName: 'Roxy' }
+    );
+
+    expect(screen.getByText('(leans closer)')).toBeInTheDocument();
+    expect(screen.getByText('Hello.')).toBeInTheDocument();
+  });
+
+  it('renders NDJSON action segments with brackets', () => {
+    renderMessageBubble(
+      {
+        ...baseAssistantMessage,
+        isNDJSON: true,
+        segments: [{ type: 'action', text: 'smiles softly' }],
+      },
+      { characterName: 'Roxy' }
+    );
+
+    expect(screen.getByText('(smiles softly)')).toBeInTheDocument();
+  });
+
+  it('renders inner segments as bracketed action text', () => {
+    renderMessageBubble(
+      {
+        ...baseAssistantMessage,
+        isNDJSON: true,
+        segments: [{ type: 'inner', text: 'wonders what to say next' }],
+      },
+      { characterName: 'Roxy' }
+    );
+
+    expect(screen.getByText('(wonders what to say next)')).toBeInTheDocument();
+  });
 });

@@ -8,6 +8,7 @@ interface ErrorLike {
 
 interface InsufficientCreditsLike {
   error?: unknown;
+  error_code?: unknown;
   required?: unknown;
   available?: unknown;
   current?: unknown;
@@ -33,7 +34,8 @@ function extractInsufficientCredits(payload: unknown): InsufficientCreditsInfo |
   if (!record) return null;
 
   const body = record as InsufficientCreditsLike;
-  if (body.error !== 'insufficient_credits') return null;
+  const errorCode = body.error ?? body.error_code;
+  if (errorCode !== 'insufficient_credits') return null;
 
   const required = toNumber(body.required);
   const available = toNumber(body.available) ?? toNumber(body.current);

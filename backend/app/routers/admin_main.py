@@ -14,6 +14,7 @@ from app.core.dependencies import verify_admin_token, get_admin_user
 from app.core.config import get_settings, Settings
 from app.core.auth_cookies import set_auth_cookies, clear_auth_cookies
 from app.services.auth_service import jwt_service
+from app.services.database_service import DatabaseService
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -1797,11 +1798,57 @@ async def admin_dashboard(request: Request) -> dict[str, Any]:
 
 
 @router.get("/tasks")
-async def list_admin_tasks(request: Request) -> dict[str, Any]:
+async def list_admin_tasks(
+    request: Request,
+    page: int = 1,
+    page_size: int = 100,
+) -> dict[str, Any]:
+    from app.core.database import db
+
+    columns = {
+        row["name"]
+        for row in await db.execute("PRAGMA table_info(tasks)", fetch_all=True)
+    }
+    id_column = "task_id" if "task_id" in columns else "id"
+    type_column = "task_type" if "task_type" in columns else "type"
+    if id_column not in columns or type_column not in columns:
+        return {"tasks": [], "total": 0, "page": page, "page_size": page_size}
+
+    safe_page = max(page, 1)
+    safe_page_size = min(max(page_size, 1), 500)
+    offset = (safe_page - 1) * safe_page_size
+
+    total_result = await db.execute("SELECT COUNT(*) as count FROM tasks", fetch=True)
+    rows = await db.execute(
+        f"""
+        SELECT
+            {id_column} as id,
+            {type_column} as type,
+            status,
+            progress,
+            created_at
+        FROM tasks
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (safe_page_size, offset),
+        fetch_all=True,
+    )
+
     return {
         "tasks": [
-            {"id": "task_001", "type": "generation", "status": "pending"}
-        ]
+            {
+                "id": row.get("id"),
+                "type": row.get("type"),
+                "status": row.get("status") or "pending",
+                "progress": row.get("progress") or 0,
+                "created_at": row.get("created_at"),
+            }
+            for row in rows or []
+        ],
+        "total": total_result["count"] if total_result else 0,
+        "page": safe_page,
+        "page_size": safe_page_size,
     }
 
 
@@ -1962,18 +2009,31 @@ async def settings_page(request: Request) -> dict[str, Any]:
 @router.get("/api/users")
 async def list_users_api(
     request: Request,
+    search: Optional[str] = None,
     admin: User = Depends(get_admin_user)
 ) -> list[dict[str, Any]]:
+    users, _ = await DatabaseService().list_users(page=1, page_size=200)
+    query = (search or "").strip().lower()
+    if query:
+        users = [
+            user for user in users
+            if query in (user.email or "").lower()
+            or query in (user.display_name or "").lower()
+            or query in (user.id or "").lower()
+        ]
+
+    admin_emails = set(get_settings().admin_emails)
     return [
         {
-            "id": "user_001",
-            "email": "user@example.com",
-            "display_name": "Test User",
-            "is_admin": False,
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_admin": user.email in admin_emails,
             "is_banned": False,
-            "subscription_tier": "premium",
-            "created_at": datetime.now().isoformat(),
+            "subscription_tier": user.tier or "free",
+            "created_at": user.created_at.isoformat() if user.created_at else datetime.now().isoformat(),
         }
+        for user in users
     ]
 
 
@@ -1998,20 +2058,90 @@ async def unban_user(
 @router.get("/api/orders")
 async def list_orders_api(
     request: Request,
+    search: str = "",
+    limit: int = 100,
+    offset: int = 0,
     admin: User = Depends(get_admin_user)
 ) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": "order_001",
-            "user_id": "user_001",
-            "user_email": "user@example.com",
-            "amount": 9.99,
-            "currency": "USD",
-            "status": "completed",
-            "payment_method": "ccbill",
-            "created_at": datetime.now().isoformat(),
-        }
+    from app.core.database import db
+
+    conditions = [
+        "ct.transaction_type IN ('purchase', 'subscription', 'refund_deduction')"
     ]
+    params: list[Any] = []
+    cleaned_search = search.strip()
+    if cleaned_search:
+        conditions.append(
+            """(
+                ct.order_id LIKE ?
+                OR CAST(ct.id AS TEXT) LIKE ?
+                OR ct.user_id LIKE ?
+                OR u.email LIKE ?
+                OR ct.description LIKE ?
+            )"""
+        )
+        pattern = f"%{cleaned_search}%"
+        params.extend([pattern, pattern, pattern, pattern, pattern])
+
+    safe_limit = min(max(limit, 1), 500)
+    safe_offset = max(offset, 0)
+    params.extend([safe_limit, safe_offset])
+    where_clause = " AND ".join(conditions)
+    rows = await db.execute(
+        f"""
+        SELECT
+            ct.id as transaction_id,
+            ct.order_id,
+            ct.user_id,
+            u.email as user_email,
+            ct.transaction_type,
+            ct.amount,
+            ct.credit_source,
+            ct.description,
+            ct.created_at
+        FROM credit_transactions ct
+        LEFT JOIN users u ON u.id = ct.user_id
+        WHERE {where_clause}
+        ORDER BY ct.created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        tuple(params),
+        fetch_all=True,
+    )
+
+    orders: list[dict[str, Any]] = []
+    for row in rows or []:
+        transaction_type = row.get("transaction_type") or "purchase"
+        order_id = row.get("order_id") or f"tx_{row.get('transaction_id')}"
+        description = (row.get("description") or "").lower()
+        credit_source = (row.get("credit_source") or "").lower()
+
+        payment_method = credit_source or "credits"
+        if "telegram" in description:
+            payment_method = "telegram_stars"
+        elif "usdt" in description:
+            payment_method = "usdt"
+        elif "ccbill" in description:
+            payment_method = "ccbill"
+        elif "stripe" in description or str(order_id).startswith(("pi_", "cs_")):
+            payment_method = "stripe"
+        elif transaction_type == "subscription":
+            payment_method = "subscription"
+
+        orders.append(
+            {
+                "id": str(order_id),
+                "user_id": row.get("user_id") or "",
+                "user_email": row.get("user_email"),
+                "amount": abs(float(row.get("amount") or 0)),
+                "currency": "credits",
+                "status": "refunded" if transaction_type == "refund_deduction" else "completed",
+                "payment_method": payment_method,
+                "created_at": row.get("created_at"),
+            }
+        )
+
+    return orders
 
 
 config_router = APIRouter(prefix="/api/admin/api/config", tags=["admin-config"])

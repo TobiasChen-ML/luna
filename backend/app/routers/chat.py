@@ -26,8 +26,9 @@ from app.services.relationship_analyzer import relationship_analyzer
 from app.services.script_service import script_service
 from app.services.chat_history_service import chat_history_service
 from app.services.content_safety import content_safety
-from app.services.video_intent_handler import video_intent_handler
 from app.services.voice_service import VoiceService
+from app.services.media_service import MediaService
+from app.services.character_agent_orchestrator import character_agent_orchestrator
 from app.services.database_service import DatabaseService
 from app.services.credit_service import credit_service
 from app.services.auth_service import jwt_service
@@ -159,6 +160,58 @@ async def _get_usage_cost(usage_type: str) -> float:
     return float(amount_map.get(usage_type, 0))
 
 
+async def _deduct_stream_usage(
+    *,
+    request: Request,
+    usage_type: str,
+    user_id: str,
+    user_db_id: Optional[str],
+    character_id: Optional[str],
+    session_id: Optional[str],
+) -> Optional[dict[str, Any]]:
+    cost = await _get_usage_cost(usage_type)
+    if cost <= 0:
+        return None
+
+    if user_db_id and user_id != "guest":
+        try:
+            balance = await credit_service.get_balance(user_db_id)
+            if balance["total"] < cost:
+                return {
+                    "error_code": "insufficient_credits",
+                    "required": cost,
+                    "available": balance["total"],
+                    "message": f"Not enough credits for {usage_type} generation",
+                }
+            await credit_service.deduct_credits(
+                user_id=user_db_id,
+                amount=cost,
+                usage_type=usage_type,
+                character_id=character_id,
+                session_id=session_id,
+            )
+            return {"credits": balance["total"] - cost}
+        except Exception as e:
+            logger.error("%s credit deduction failed: %s", usage_type, e)
+            return {"error_code": "credit_deduction_failed", "message": "Failed to process credits"}
+
+    if user_id == "guest":
+        guest_state = _get_guest_state(_resolve_guest_id(request))
+        guest_remaining = float(guest_state.get("credits_remaining", GUEST_MAX_CREDITS))
+        if guest_remaining < cost:
+            return {
+                "error_code": "guest_credits_exhausted",
+                "required": cost,
+                "available": guest_remaining,
+                "message": "Guest credits exhausted. Please register to continue.",
+            }
+        guest_state["credits_remaining"] = max(0.0, guest_remaining - cost)
+        guest_state["updated_at"] = int(time.time())
+        return {"credits": guest_state["credits_remaining"]}
+
+    return None
+
+
 def _render_guest_fallback(character_name: str, user_message: str) -> str:
     message = (user_message or "").strip()
     if not message:
@@ -192,12 +245,12 @@ def _compose_script_opening(
     if user_role:
         starter = (
             f"You are {user_role} in this story. "
-            "Start by telling me your first move in this scene."
+            f"{character_name} will lead from the opening scene and pull you into the next story beat."
         )
     elif opening_scene or world_setting:
-        starter = "Start by telling me what you do first in this scene."
+        starter = f"{character_name} will start with a concrete scene moment and guide the story forward."
     else:
-        starter = "Start by telling me what kind of moment you want to have."
+        starter = f"{character_name} will open with a concrete topic from her story and guide the next turn."
 
     return f"{base}\n\n{starter}"
 
@@ -269,7 +322,7 @@ async def _build_character_opening(
     if character and isinstance(character.get("greeting"), str):
         greeting = character["greeting"].strip()
         if greeting:
-            return f"{greeting}\n\nStart by telling me what's on your mind right now."
+            return f"{greeting}\n\nI'll lead from here and bring you into the next moment."
 
     name = (
         (character or {}).get("first_name")
@@ -281,11 +334,11 @@ async def _build_character_opening(
     if personality:
         return (
             f"Hi, I'm {name}. {personality}\n\n"
-            "Start by telling me what kind of vibe you want right now."
+            "I'll open the scene and guide us into the next moment."
         )
     return (
         f"Hi, I'm {name}. It's great to meet you.\n\n"
-        f"If you want an easy start, say: \"Hey {name}, how should we begin?\""
+        "I'll choose the first thread and guide us from there."
     )
 
 
@@ -690,18 +743,142 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
             character = await character_service.get_character_by_id(data.character_id)
             voice_id = character.get("voice_id") if character else None
             
-            is_audio_intent = False
+            media_service = MediaService.get_instance()
+            tool_plan = await character_agent_orchestrator.plan_tool(
+                user_message=data.message,
+                character=character or {"name": "Assistant"},
+                llm_service=llm,
+            )
+
+            is_audio_intent = tool_plan.tool_name == "generate_voice" and bool(voice_id)
             credit_deducted = False
             remaining_credits = 0
             voice_cost = await _get_usage_cost("voice")
-            
-            if voice_id:
+
+            if tool_plan.uses_media_tool:
+                usage_type = "video" if tool_plan.tool_name == "generate_video" else "image"
+                media_credit_result = await _deduct_stream_usage(
+                    request=request,
+                    usage_type=usage_type,
+                    user_id=user_id,
+                    user_db_id=user_db_id,
+                    character_id=data.character_id,
+                    session_id=session_id,
+                )
+                if media_credit_result and media_credit_result.get("error_code"):
+                    yield SSEEvent(
+                        event=EventType.ERROR,
+                        data=media_credit_result,
+                    ).to_sse()
+                    return
+
+                await chat_history_service.save_message(
+                    ChatMessageCreateModel(
+                        session_id=session_id,
+                        role="user",
+                        content=data.message,
+                        character_id=data.character_id,
+                        user_id=user_id,
+                    )
+                )
+
+                yield SSEEvent(
+                    event=EventType.TOOL_CALL,
+                    data={
+                        "tool_name": tool_plan.tool_name,
+                        "phase": "requested",
+                        "status": "pending",
+                        "args": {"prompt": tool_plan.prompt or data.message},
+                    },
+                ).to_sse()
+
                 try:
-                    intent_result = await llm.detect_intent(data.message)
-                    is_audio_intent = intent_result.get("intent") == "audio"
+                    tool_result = await character_agent_orchestrator.execute_media_tool(
+                        tool_plan,
+                        user_message=data.message,
+                        character=character or {"id": data.character_id, "name": "Assistant"},
+                        llm_service=llm,
+                        media_service=media_service,
+                        session_id=session_id,
+                        user_id=user_id,
+                    )
                 except Exception as e:
-                    logger.debug(f"Intent detection failed: {e}")
-                    is_audio_intent = False
+                    logger.error("Character media tool execution failed: %s", e)
+                    yield SSEEvent(
+                        event=EventType.ERROR,
+                        data={"message": f"{usage_type.capitalize()} generation failed", "detail": str(e)},
+                    ).to_sse()
+                    return
+
+                response_message = (
+                    tool_result.response_message
+                    or f"Of course. I'll make that {usage_type} for you."
+                )
+                saved_assistant_message = await chat_history_service.save_message(
+                    ChatMessageCreateModel(
+                        session_id=session_id,
+                        role="assistant",
+                        content=response_message,
+                        character_id=data.character_id,
+                        user_id=user_id,
+                    )
+                )
+
+                yield SSEEvent(
+                    event=EventType.TEXT_DONE,
+                    data={
+                        "message_id": saved_assistant_message["id"],
+                        "full_content": response_message,
+                        "content": response_message,
+                    },
+                ).to_sse()
+
+                if tool_result.task_id:
+                    yield SSEEvent(
+                        event=EventType.TOOL_CALL,
+                        data={
+                            "tool_name": tool_plan.tool_name,
+                            "phase": "submitted",
+                            "status": "pending",
+                            "task_id": tool_result.task_id,
+                            "args": {"prompt": tool_result.prompt or tool_plan.prompt or data.message},
+                        },
+                    ).to_sse()
+
+                    if tool_plan.tool_name == "generate_image":
+                        yield SSEEvent(
+                            event=EventType.IMAGE_GENERATING,
+                            data={
+                                "status": "pending",
+                                "task_id": tool_result.task_id,
+                                "message_id": tool_result.task_id,
+                                "session_id": session_id,
+                                "estimated_time_seconds": 15,
+                            },
+                        ).to_sse()
+                    else:
+                        yield SSEEvent(
+                            event=EventType.VIDEO_SUBMITTED,
+                            data={
+                                "task_id": tool_result.task_id,
+                                "session_id": session_id,
+                                "holding_message_id": tool_result.task_id,
+                                "holding_message": response_message,
+                                "estimated_time_seconds": 30,
+                            },
+                        ).to_sse()
+
+                if media_credit_result and media_credit_result.get("credits") is not None:
+                    yield SSEEvent(
+                        event=EventType.CREDIT_UPDATE,
+                        data={"credits": media_credit_result["credits"]},
+                    ).to_sse()
+
+                yield SSEEvent(
+                    event=EventType.STREAM_END,
+                    data={"session_id": session_id}
+                ).to_sse()
+                return
             
             if is_audio_intent:
                 if user_db_id and user_id != "guest":
@@ -739,31 +916,6 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                     else:
                         guest_state["credits_remaining"] = max(0.0, guest_remaining - voice_cost)
                         guest_state["updated_at"] = int(time.time())
-            
-            decline_message = await video_intent_handler.handle_video_intent(
-                user_message=data.message,
-                character=character or {"name": "Assistant"},
-                llm_service=llm,
-            )
-            
-            if decline_message:
-                logger.info(f"Video intent detected for character {data.character_id} - sending decline message")
-                
-                yield SSEEvent(
-                    event=EventType.VIDEO_INTENT_DECLINED,
-                    data={
-                        "message": decline_message,
-                        "show_photo_button": True,
-                        "character_id": data.character_id,
-                    }
-                ).to_sse()
-                
-                yield SSEEvent(
-                    event=EventType.STREAM_END,
-                    data={"session_id": session_id}
-                ).to_sse()
-                return
-            
             ctx = await _build_prompt_context(
                 character_id=data.character_id,
                 user_id=user_id,

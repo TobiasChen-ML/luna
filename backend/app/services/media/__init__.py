@@ -818,6 +818,8 @@ class NovitaVideoProvider(BaseMediaProvider):
         flow_shift: float = 5.0,
         seed: int = -1,
         enable_safety_checker: bool = False,
+        loras: Optional[list[LoRAConfig]] = None,
+        fast_mode: Optional[bool] = None,
         **kwargs,
     ) -> str:
         import httpx
@@ -839,6 +841,13 @@ class NovitaVideoProvider(BaseMediaProvider):
             payload["image_url"] = init_image
         if negative_prompt:
             payload["negative_prompt"] = negative_prompt
+        if loras:
+            payload["loras"] = [
+                {"path": ZImageTurboLoraProvider._resolve_lora_path(l.model_name), "scale": l.strength}
+                for l in loras
+            ]
+        if fast_mode is not None:
+            payload["fast_mode"] = fast_mode
 
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
@@ -896,6 +905,8 @@ class NovitaVideoProvider(BaseMediaProvider):
         seed: int = -1,
         enable_safety_checker: bool = False,
         timeout_seconds: int = 600,
+        loras: Optional[list[LoRAConfig]] = None,
+        fast_mode: Optional[bool] = None,
         **kwargs,
     ) -> VideoGenerationResult:
         task_id = await self.generate_video_async(
@@ -909,6 +920,8 @@ class NovitaVideoProvider(BaseMediaProvider):
             flow_shift=flow_shift,
             seed=seed,
             enable_safety_checker=enable_safety_checker,
+            loras=loras,
+            fast_mode=fast_mode,
         )
 
         result = await self.wait_for_task(task_id, timeout_seconds=timeout_seconds)

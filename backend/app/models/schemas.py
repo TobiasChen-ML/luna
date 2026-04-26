@@ -106,7 +106,7 @@ class User(BaseModel):
     display_name: str | None = None
     avatar_url: str | None = None
     subscription_tier: SubscriptionTier = SubscriptionTier.FREE
-    credits: int = 0
+    credits: float = 0
     is_admin: bool = False
     created_at: datetime
     updated_at: datetime | None = None

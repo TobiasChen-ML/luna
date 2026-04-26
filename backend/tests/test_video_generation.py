@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.services.media import (
+    LoRAConfig,
     NovitaVideoProvider,
     VideoGenerationResult,
     TaskResult,
@@ -48,6 +49,31 @@ class TestNovitaVideoProvider:
             )
 
             assert task_id == "task_t2v_001"
+
+    @pytest.mark.asyncio
+    async def test_generate_video_async_includes_loras(self, provider):
+        """wan-i2v should pass LoRA path/scale through to Novita."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"task_id": "task_i2v_lora_001"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = post
+
+            task_id = await provider.generate_video_async(
+                prompt="A cinematic movement",
+                init_image="https://example.com/init.png",
+                loras=[LoRAConfig(model_name="civitai:123@456", strength=0.75)],
+                fast_mode=True,
+            )
+
+        assert task_id == "task_i2v_lora_001"
+        payload = post.call_args.kwargs["json"]
+        assert payload["loras"] == [
+            {"path": "https://civitai.com/api/download/models/456", "scale": 0.75}
+        ]
+        assert payload["fast_mode"] is True
 
     @pytest.mark.asyncio
     async def test_generate_video_async_includes_configured_webhook(self, provider):

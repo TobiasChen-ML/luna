@@ -128,3 +128,18 @@ class TestAuthP0Flows:
         monkeypatch.setattr(auth.redis_svc, "exists", AsyncMock(return_value=True))
         resp = client.post("/api/auth/checkin")
         assert resp.status_code == 429
+
+    def test_daily_checkin_succeeds_when_redis_unavailable(self, client, monkeypatch):
+        from app.routers import auth
+
+        monkeypatch.setattr(auth.redis_svc, "exists", AsyncMock(side_effect=RuntimeError("redis down")))
+        monkeypatch.setattr(auth.redis_svc, "set", AsyncMock())
+        monkeypatch.setattr(auth.redis_svc, "delete", AsyncMock())
+        monkeypatch.setattr(auth.credit_service, "add_credits", AsyncMock(return_value=True))
+        monkeypatch.setattr(auth.credit_service, "get_balance", AsyncMock(return_value={"total": 125.0}))
+
+        resp = client.post("/api/auth/checkin")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["new_balance"] == 125.0

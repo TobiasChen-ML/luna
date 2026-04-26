@@ -145,9 +145,14 @@ class LLMService:
             else:
                 normalized_messages.append(m)
         
+        structured_model = model or await get_config_value(
+            "LLM_INTENT_MODEL",
+            self.settings.llm_structured_model,
+        )
+
         request = LLMRequest(
             messages=normalized_messages,
-            model=model,
+            model=structured_model,
             temperature=temperature,
             max_tokens=1024
         )

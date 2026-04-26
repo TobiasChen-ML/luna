@@ -55,6 +55,13 @@ interface CharacterMediaItem {
   url: string;
 }
 
+type CharacterWithExtraMedia = Character & {
+  avatar_url?: string | null;
+  mature_image_url?: string | null;
+  mature_cover_url?: string | null;
+  mature_video_url?: string | null;
+};
+
 function formatCharacterDescription(character: Character) {
   const characterWithBackstory = character as Character & { backstory?: string };
   return characterWithBackstory.backstory?.trim() || character.background?.backstory?.trim() || '';
@@ -166,8 +173,14 @@ function ChatContent() {
     }
   }, []);
 
+  const currentCharacterWithMedia = currentCharacter as CharacterWithExtraMedia | null;
+  const characterAvatarUrl =
+    currentCharacter?.profile_image_url ||
+    currentCharacter?.media_urls?.avatar ||
+    currentCharacterWithMedia?.avatar_url;
+
   const mediaItems = useMemo<CharacterMediaItem[]>(() => {
-    if (!currentCharacter) return [];
+    if (!currentCharacter || !currentCharacterWithMedia) return [];
 
     const media: CharacterMediaItem[] = [];
     const seen = new Set<string>();
@@ -179,25 +192,19 @@ function ChatContent() {
       media.push({ type, url: cleaned });
     };
 
-    const currentCharacterWithMature = currentCharacter as Character & {
-      mature_image_url?: string | null;
-      mature_cover_url?: string | null;
-      mature_video_url?: string | null;
-    };
-
     // Guests: only SFW avatar. Authenticated users: SFW + Mature image + Mature video.
-    pushUnique('image', currentCharacter.profile_image_url || currentCharacter.media_urls?.avatar);
+    pushUnique('image', characterAvatarUrl);
 
     if (isAuthenticated) {
       pushUnique(
         'image',
-        currentCharacterWithMature.mature_image_url || currentCharacterWithMature.mature_cover_url
+        currentCharacterWithMedia.mature_image_url || currentCharacterWithMedia.mature_cover_url
       );
-      pushUnique('video', currentCharacterWithMature.mature_video_url);
+      pushUnique('video', currentCharacterWithMedia.mature_video_url);
     }
 
     return media;
-  }, [currentCharacter, isAuthenticated]);
+  }, [characterAvatarUrl, currentCharacter, currentCharacterWithMedia, isAuthenticated]);
 
   useEffect(() => {
     setMediaIndex(0);
@@ -234,9 +241,7 @@ function ChatContent() {
       showNextMedia();
     }
   };
-  const safeCharacterAvatar = getSafeAvatarUrl(
-    currentCharacter?.profile_image_url || currentCharacter?.media_urls?.avatar
-  );
+  const safeCharacterAvatar = getSafeAvatarUrl(characterAvatarUrl);
   const generatedVideoBaseImages = useMemo<string[]>(() => {
     if (!currentCharacter) return [];
     const seen = new Set<string>();

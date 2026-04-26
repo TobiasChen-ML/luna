@@ -569,7 +569,14 @@ class Database:
             );
             CREATE INDEX IF NOT EXISTS idx_openpose_presets_active ON openpose_presets(is_active);
         """)
+        await self._ensure_prompt_templates_schema(db)
         await db.commit()
+
+    async def _ensure_prompt_templates_schema(self, db: aiosqlite.Connection) -> None:
+        cursor = await db.execute("PRAGMA table_info(prompt_templates)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "description_zh" not in columns:
+            await db.execute("ALTER TABLE prompt_templates ADD COLUMN description_zh TEXT")
 
     async def execute(
         self,

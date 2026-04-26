@@ -15,6 +15,7 @@ from typing import Optional
 from app.core.database import db
 
 logger = logging.getLogger(__name__)
+_RECENT_RANDOM_FALLBACKS: dict[str, list[str]] = {}
 
 _SELECTION_SCHEMA = {
     "type": "object",
@@ -82,6 +83,25 @@ def _build_system_prompt(loras: list[dict]) -> str:
     )
 
 
+def _random_fallback_lora(loras: list[dict], applies_to: str) -> dict:
+    """Choose a fallback LoRA while avoiding immediate repeats per use case."""
+    if len(loras) <= 1:
+        return loras[0]
+
+    recent = _RECENT_RANDOM_FALLBACKS.setdefault(applies_to, [])
+    recent_set = set(recent)
+    candidates = [lora for lora in loras if str(lora.get("id")) not in recent_set]
+    if not candidates:
+        recent.clear()
+        candidates = loras
+
+    chosen = random.choice(candidates)
+    recent.append(str(chosen.get("id")))
+    keep = max(1, min(len(loras) - 1, 4))
+    del recent[:-keep]
+    return chosen
+
+
 async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dict]:
     """
     Use the LLM to pick the best LoRA for *context*.
@@ -113,7 +133,9 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
         api_key = await get_config_value("LLM_API_KEY")
         if not api_key:
             logger.warning("[LoraSelector] LLM_API_KEY not configured, falling back to random")
-            return random.choice(loras)
+            chosen = _random_fallback_lora(loras, applies_to)
+            logger.info(f"[LoraSelector] Random fallback selected '{chosen['name']}'.")
+            return chosen
 
         provider = NovitaLLMProvider(api_key=api_key)
         request = LLMRequest(
@@ -164,6 +186,6 @@ async def select_lora(context: str, applies_to: str = "img2img") -> Optional[dic
     except Exception as e:
         logger.warning(f"[LoraSelector] LLM selection failed: {e}, falling back to random.")
 
-    chosen = random.choice(loras)
+    chosen = _random_fallback_lora(loras, applies_to)
     logger.info(f"[LoraSelector] Random fallback selected '{chosen['name']}'.")
     return chosen

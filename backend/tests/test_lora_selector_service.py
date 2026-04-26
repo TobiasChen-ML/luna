@@ -2,7 +2,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.lora_selector_service import _build_system_prompt, select_lora
+from app.services.lora_selector_service import (
+    _RECENT_RANDOM_FALLBACKS,
+    _build_system_prompt,
+    select_lora,
+)
 
 
 def test_build_system_prompt_uses_fallback_summary_when_description_empty():
@@ -57,3 +61,31 @@ async def test_select_lora_accepts_fuzzy_name_from_llm():
 
     assert chosen is not None
     assert chosen["id"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_select_lora_random_fallback_avoids_immediate_repeats():
+    loras = [
+        {
+            "id": str(index),
+            "name": f"LoRA-{index}",
+            "model_name": f"model-{index}",
+            "strength": 0.8,
+            "trigger_word": "",
+            "description": "",
+            "example_prompt": "",
+            "example_negative_prompt": "",
+            "prompt_template_mode": "append_trigger",
+        }
+        for index in range(3)
+    ]
+
+    _RECENT_RANDOM_FALLBACKS.clear()
+    with patch("app.services.lora_selector_service._fetch_loras", new=AsyncMock(return_value=loras)):
+        with patch("app.core.config.get_config_value", new=AsyncMock(return_value="")):
+            chosen = [
+                await select_lora(context="street portrait", applies_to="txt2img")
+                for _ in range(3)
+            ]
+
+    assert len({item["id"] for item in chosen if item}) == 3

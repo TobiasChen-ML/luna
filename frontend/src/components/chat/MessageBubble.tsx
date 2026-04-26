@@ -3,6 +3,7 @@ import { cn } from '@/utils/cn';
 import { format } from 'date-fns';
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ImagePreviewModal } from '../common';
 import { Volume2, Loader2, Mic, Video, Play, WandSparkles, X, FileText } from 'lucide-react';
@@ -83,6 +84,47 @@ function normalizeLegacyDialogueLines(content: string): string {
   return normalized.join('\n');
 }
 
+function formatActionText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (
+    (trimmed.startsWith('(') && trimmed.endsWith(')')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    return trimmed;
+  }
+  return `(${trimmed})`;
+}
+
+const assistantMarkdownComponents: Components = {
+  p: ({ children }) => <p className="text-zinc-100 leading-relaxed">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+  em: ({ children }) => (
+    <em className="italic text-[#f92]">
+      ({children})
+    </em>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-white/20 pl-3 text-zinc-100">
+      {children}
+    </blockquote>
+  ),
+  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-zinc-200">{children}</ul>,
+  ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-zinc-200">{children}</ol>,
+  li: ({ children }) => <li className="pl-1">{children}</li>,
+  code: ({ children, className }) => {
+    const isBlock = Boolean(className);
+    if (isBlock) {
+      return <code className={className}>{children}</code>;
+    }
+    return (
+      <code className="rounded bg-black/30 px-1 py-0.5 text-[0.85em] text-pink-200">
+        {children}
+      </code>
+    );
+  },
+};
+
 function SegmentRenderer({ segments }: { segments: NDJSONSegment[] }) {
   return (
     <div className="space-y-2">
@@ -92,20 +134,20 @@ function SegmentRenderer({ segments }: { segments: NDJSONSegment[] }) {
             return null;
           case 'scene':
             return (
-              <p key={idx} className="text-amber-200/70 italic text-sm border-l-2 border-amber-500/30 pl-3">
+              <p key={idx} className="text-zinc-100 text-sm leading-relaxed">
                 {seg.text}
               </p>
             );
           case 'narration':
             return (
-              <p key={idx} className="text-zinc-300 text-sm leading-relaxed">
+              <p key={idx} className="text-zinc-100 text-sm leading-relaxed">
                 {seg.text}
               </p>
             );
           case 'action':
             return (
-              <p key={idx} className="text-zinc-400 italic text-sm">
-                {seg.text}
+              <p key={idx} className="text-[#f92] italic text-sm leading-relaxed">
+                {formatActionText(seg.text)}
               </p>
             );
           case 'dialogue':
@@ -128,8 +170,8 @@ function SegmentRenderer({ segments }: { segments: NDJSONSegment[] }) {
             );
           case 'inner':
             return (
-              <p key={idx} className="text-purple-300 italic text-sm opacity-80">
-                ({seg.text})
+              <p key={idx} className="text-[#f92] italic text-sm leading-relaxed">
+                {formatActionText(seg.text)}
               </p>
             );
           case 'hook':
@@ -456,7 +498,7 @@ export function MessageBubble({ message, characterName, characterAvatar, session
               "prose prose-invert prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
               !isUser && !message.image_url && !message.video_url && "pr-12"
             )}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={isUser ? undefined : assistantMarkdownComponents}>
                 {isUser ? safeContent : normalizeLegacyDialogueLines(safeContent)}
               </ReactMarkdown>
             </div>
