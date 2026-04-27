@@ -228,7 +228,11 @@ def verify_telegram_init_data(init_data: str, bot_token: str) -> dict[str, Any] 
         data_check_items = [f"{k}={v}" for k, v in sorted(parsed.items())]
         data_check_string = '\n'.join(data_check_items)
         
-        secret_key = hashlib.sha256(bot_token.encode()).digest()
+        secret_key = hmac.new(
+            b"WebAppData",
+            bot_token.encode(),
+            hashlib.sha256,
+        ).digest()
         expected_hash = hmac.new(
             secret_key,
             data_check_string.encode(),

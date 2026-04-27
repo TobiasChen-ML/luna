@@ -39,6 +39,7 @@ import {
   UserCircle2,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
   Video,
 } from 'lucide-react';
 import { api } from '@/services/api';
@@ -116,9 +117,10 @@ function ChatContent() {
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [resizingPanel, setResizingPanel] = useState<'left' | 'right' | null>(null);
   const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState(false);
+  const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [isCommingSoonModalOpen, setIsCommingSoonModalOpen] = useState(false);
-  const [isAdultMode, setIsAdultMode] = useState(true);
+  const isAdultMode = true;
   const [isRealtimeCallOpen, setIsRealtimeCallOpen] = useState(false);
   const desktopLayoutRef = useRef<HTMLDivElement | null>(null);
   const mediaTouchStartXRef = useRef<number | null>(null);
@@ -787,7 +789,7 @@ function ChatContent() {
   return (
     <div className="relative z-20 flex h-full min-h-[100dvh] w-full flex-col overflow-hidden">
       {/* Top Bar */}
-      <div className="bg-zinc-900 border-b border-white/10 px-2 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-4 flex-shrink-0">
+      <div className="relative bg-zinc-900 border-b border-white/10 px-2 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-4 flex-shrink-0">
         {/* Mobile Menu Button */}
         <button
           type="button"
@@ -820,23 +822,32 @@ function ChatContent() {
         {/* Brand */}
         <button
           onClick={() => navigate('/')}
-          className="flex-1 min-w-0 text-left font-heading font-bold text-lg text-white hover:text-zinc-100 transition-colors"
+          className="flex-1 min-w-0 text-left font-heading font-bold text-[0.625rem] leading-none text-white hover:text-zinc-100 transition-colors sm:text-sm sm:leading-normal lg:text-lg"
           title="Go to Home"
         >
           RoxyClub.ai
         </button>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Credits Display */}
-          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
+          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 text-yellow-500 sm:h-auto sm:gap-1.5 sm:px-3 sm:py-1.5">
             <Coins size={14} className="sm:w-4 sm:h-4" />
             <span className="font-medium text-xs sm:text-sm">{user?.credits || 0}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileActionsOpen((prev) => !prev)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white lg:hidden"
+            aria-label="Open chat actions"
+            aria-expanded={isMobileActionsOpen}
+          >
+            <MoreVertical size={18} />
+          </button>
           <Button
             variant="outline"
             size="sm"
-            className="flex items-center gap-2 p-2 sm:px-3"
+            className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
             onClick={() => navigate('/billing')}
             title="Buy Credits"
           >
@@ -846,24 +857,11 @@ function ChatContent() {
 
           {currentCharacter && (
             <>
-              {/* Mature / Safe Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsAdultMode((prev) => !prev)}
-                title={isAdultMode ? 'Mature mode — click to switch to Safe' : 'Safe mode — click to switch to Mature'}
-                className={`rounded-full px-2.5 py-1 text-xs font-bold border transition-colors ${
-                  isAdultMode
-                    ? 'bg-rose-600/20 border-rose-500/50 text-rose-400 hover:bg-rose-600/30'
-                    : 'bg-zinc-700/40 border-zinc-500/50 text-zinc-400 hover:bg-zinc-700/60'
-                }`}
-              >
-                {isAdultMode ? 'Mature' : 'Safe'}
-              </button>
               {/* Gallery Button */}
               <Button
                 variant="outline"
                 size="sm"
-                className="flex items-center gap-2 p-2 sm:px-3"
+                className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
                 onClick={() => setIsGalleryOpen(true)}
                 title="Gallery"
               >
@@ -873,7 +871,7 @@ function ChatContent() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex items-center gap-2 p-2 sm:px-3"
+                className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
                 onClick={() => setShowConsentModal(true)}
                 title="Explicit Consent"
               >
@@ -885,7 +883,7 @@ function ChatContent() {
                 size="sm"
                 onClick={() => setIsRealtimeCallOpen(true)}
                 disabled={!currentCharacter || !sessionId || isSessionLoading}
-                className="flex items-center gap-2 p-2 sm:px-3"
+                className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
                 title="通话"
               >
                 <Video size={16} />
@@ -895,6 +893,60 @@ function ChatContent() {
             </>
           )}
         </div>
+
+        {isMobileActionsOpen && (
+          <div className="absolute right-2 top-[calc(100%+0.5rem)] z-50 w-52 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-xl shadow-black/40 lg:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileActionsOpen(false);
+                navigate('/billing');
+              }}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white"
+            >
+              <CircleDollarSign size={16} />
+              <span>Buy Credits</span>
+            </button>
+            {currentCharacter && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileActionsOpen(false);
+                    setIsGalleryOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white"
+                >
+                  <Image size={16} />
+                  <span>Gallery</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileActionsOpen(false);
+                    setShowConsentModal(true);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Consent</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileActionsOpen(false);
+                    setIsRealtimeCallOpen(true);
+                  }}
+                  disabled={!currentCharacter || !sessionId || isSessionLoading}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600 disabled:hover:bg-transparent"
+                >
+                  <Video size={16} />
+                  <span>Call</span>
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div ref={desktopLayoutRef} className="flex-1 flex overflow-hidden bg-black">

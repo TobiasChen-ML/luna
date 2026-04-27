@@ -1,5 +1,26 @@
+import hashlib
+import hmac
+import json
+import urllib.parse
+
 import pytest
 from fastapi.testclient import TestClient
+
+
+def build_telegram_init_data(bot_token: str, user: dict) -> str:
+    params = {
+        "auth_date": "1710000000",
+        "query_id": "test-query",
+        "user": json.dumps(user, separators=(",", ":")),
+    }
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    params["hash"] = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return urllib.parse.urlencode(params)
 
 
 class TestIntegrationRouter:
@@ -72,14 +93,32 @@ class TestIntegrationRouter:
         data = response.json()
         assert "country" in data or "allowed" in data
     
-    def test_telegram_auth(self, client: TestClient):
+    def test_telegram_auth(self, client: TestClient, monkeypatch: pytest.MonkeyPatch):
+        bot_token = "test-bot-token"
+
+        async def fake_get_config_value(key: str, default=None):
+            if key == "TELEGRAM_BOT_TOKEN":
+                return bot_token
+            return default
+
+        monkeypatch.setattr("app.core.config.get_config_value", fake_get_config_value)
+        init_data = build_telegram_init_data(
+            bot_token,
+            {
+                "id": 123456,
+                "username": "test_user",
+                "first_name": "Test",
+                "last_name": "User",
+            },
+        )
+
         response = client.post("/api/auth/telegram", json={
-            "id": "telegram_user_001",
-            "username": "test_user"
+            "init_data": init_data,
         })
         assert response.status_code == 200
         data = response.json()
-        assert "success" in data or "token" in data
+        assert data["success"] is True
+        assert data["user"]["id"] == "telegram_123456"
     
     def test_get_creator(self, client: TestClient):
         response = client.get("/api/creators/user_001")
