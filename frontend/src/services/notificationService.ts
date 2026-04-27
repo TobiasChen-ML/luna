@@ -278,7 +278,7 @@ class NotificationService {
         throw new Error('User not authenticated');
       }
 
-      const response = await fetch(`${this.baseUrl}/api/notifications/stream`, {
+      const response = await fetch(`${this.baseUrl}/notifications/stream`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,

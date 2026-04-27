@@ -10,6 +10,7 @@ import {
   HelpCircle,
   Home,
   ImagePlus,
+  Loader2,
   Menu,
   MessageCircle,
   Search,
@@ -143,7 +144,7 @@ const HERO_WEBP_SRCSET = [
 const HERO_IMAGE_SIZES = '(max-width: 768px) 100vw, 1240px';
 
 export function LandingPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [characters, setCharacters] = useState<HomeCharacter[]>([]);
@@ -399,14 +400,34 @@ export function LandingPage() {
             >
               Premium 70% OFF
             </Link>
-            <button
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-2 text-zinc-100 font-semibold"
-            >
-              <span className="w-7 h-7 rounded-full bg-pink-400/90 inline-block" />
-              <span className="hidden sm:inline">My Profile</span>
-              <ChevronDown size={16} />
-            </button>
+            {authLoading ? (
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-2 text-zinc-400 font-semibold"
+              >
+                <Loader2 size={18} className="animate-spin" />
+                <span className="hidden sm:inline">Loading</span>
+              </button>
+            ) : isAuthenticated ? (
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="flex items-center gap-2 text-zinc-100 font-semibold"
+              >
+                <span className="w-7 h-7 rounded-full bg-pink-400/90 inline-block" />
+                <span className="hidden sm:inline">My Profile</span>
+                <ChevronDown size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-zinc-100 hover:bg-white/5"
+              >
+                Login
+              </button>
+            )}
           </div>
         </div>
       </header>

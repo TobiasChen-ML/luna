@@ -834,6 +834,7 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                 ).to_sse()
 
                 if tool_result.task_id:
+                    now = datetime.utcnow().isoformat()
                     yield SSEEvent(
                         event=EventType.TOOL_CALL,
                         data={
@@ -842,6 +843,22 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                             "status": "pending",
                             "task_id": tool_result.task_id,
                             "args": {"prompt": tool_result.prompt or tool_plan.prompt or data.message},
+                        },
+                    ).to_sse()
+                    yield SSEEvent(
+                        event=EventType.TASK_STATUS,
+                        data={
+                            "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+                            "message_id": tool_result.task_id,
+                            "task_id": tool_result.task_id,
+                            "skill_name": tool_plan.tool_name,
+                            "status": "pending",
+                            "created_at": now,
+                            "updated_at": now,
+                            "payload": {
+                                "prompt": tool_result.prompt or tool_plan.prompt or data.message,
+                                "session_id": session_id,
+                            },
                         },
                     ).to_sse()
 
@@ -867,6 +884,33 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                                 "estimated_time_seconds": 30,
                             },
                         ).to_sse()
+                else:
+                    error_message = tool_result.error or f"{usage_type}_generation_not_submitted"
+                    yield SSEEvent(
+                        event=EventType.TOOL_CALL,
+                        data={
+                            "tool_name": tool_plan.tool_name,
+                            "phase": "failed",
+                            "status": "failed",
+                            "message": error_message,
+                            "args": {"prompt": tool_result.prompt or tool_plan.prompt or data.message},
+                        },
+                    ).to_sse()
+                    now = datetime.utcnow().isoformat()
+                    yield SSEEvent(
+                        event=EventType.TASK_STATUS,
+                        data={
+                            "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+                            "message_id": saved_assistant_message["id"],
+                            "task_id": "",
+                            "skill_name": tool_plan.tool_name,
+                            "status": "failed",
+                            "created_at": now,
+                            "updated_at": now,
+                            "payload": {"reason": error_message},
+                            "error_code": error_message,
+                        },
+                    ).to_sse()
 
                 if media_credit_result and media_credit_result.get("credits") is not None:
                     yield SSEEvent(

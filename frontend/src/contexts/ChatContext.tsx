@@ -115,6 +115,7 @@ interface PersistedChatVideoTask {
   taskId: string;
   sessionId: string;
   createdAt: string;
+  initialDelayMs?: number;
 }
 
 interface SessionInitData {
@@ -504,6 +505,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (videoPollAttemptsRef.current[task.taskId] > VIDEO_TASK_POLL_MAX_ATTEMPTS) {
           stopVideoTaskPolling(task.taskId);
           removePersistedChatVideoTask(task.taskId);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === task.taskId || msg.metadata?.task_id === task.taskId
+                ? { ...msg, status: 'failed', error: 'Media generation timed out' }
+                : msg
+            )
+          );
           setPendingVideoTasks((prev) =>
             prev.map((item) =>
               item.taskId === task.taskId ? { ...item, status: 'failed' } : item
@@ -537,6 +545,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (status === 'failed') {
             stopVideoTaskPolling(task.taskId);
             removePersistedChatVideoTask(task.taskId);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === task.taskId || msg.metadata?.task_id === task.taskId
+                  ? { ...msg, status: 'failed', error: 'Media generation failed' }
+                  : msg
+              )
+            );
             setPendingVideoTasks((prev) =>
               prev.map((item) =>
                 item.taskId === task.taskId ? { ...item, status: 'failed' } : item
@@ -550,6 +565,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (statusCode === 403 || statusCode === 404) {
             stopVideoTaskPolling(task.taskId);
             removePersistedChatVideoTask(task.taskId);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === task.taskId || msg.metadata?.task_id === task.taskId
+                  ? { ...msg, status: 'failed', error: 'Media task is not accessible' }
+                  : msg
+              )
+            );
             setPendingVideoTasks((prev) =>
               prev.map((item) =>
                 item.taskId === task.taskId ? { ...item, status: 'failed' } : item
@@ -566,7 +588,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       videoPollTimersRef.current[task.taskId] = setTimeout(
         pollOnce,
-        VIDEO_TASK_POLL_INITIAL_DELAY_MS
+        task.initialDelayMs ?? VIDEO_TASK_POLL_INITIAL_DELAY_MS
       );
     },
     [refreshSessionMessages, refreshUser, stopVideoTaskPolling]
@@ -1074,8 +1096,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           break;
 
         case 'image_generating':
-          // Could show a loading indicator
-          console.log('Image generating:', event.data.status);
+          if (event.data.task_id) {
+            const imageMessageId = event.data.message_id || event.data.task_id;
+            setMessages((prev) => {
+              if (prev.some((msg) => msg.id === imageMessageId)) return prev;
+              return [
+                ...prev,
+                {
+                  id: imageMessageId,
+                  role: 'assistant' as const,
+                  content: '',
+                  message_type: 'image',
+                  status: 'generating',
+                  timestamp: new Date().toISOString(),
+                  character_id: currentCharacter?.id || '',
+                  metadata: {
+                    task_id: event.data.task_id,
+                    task_status: event.data.status,
+                    task_skill: 'generate_image',
+                  },
+                },
+              ];
+            });
+            if (event.data.session_id || sessionId) {
+              startVideoTaskPolling({
+                taskId: event.data.task_id,
+                sessionId: event.data.session_id || sessionId || '',
+                createdAt: new Date().toISOString(),
+                initialDelayMs: 5000,
+              });
+            }
+          }
           break;
 
         case 'image_done': {

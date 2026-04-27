@@ -26,6 +26,7 @@ from app.routers.integration import (
     creators_router,
 )
 from app.routers.support import router as support_router, admin_support_router
+from app.routers.telegram_bot import router as telegram_bot_router
 from app.routers.ops import router as ops_router, admin_ops_router
 from app.routers.world import (
     character_router as world_character_router,
@@ -65,6 +66,7 @@ __all__ = [
     "creators_router",
     "support_router",
     "admin_support_router",
+    "telegram_bot_router",
     "ops_router",
     "admin_ops_router",
     "world_character_router",

@@ -39,6 +39,7 @@ from app.routers import (
     creators_router,
     support_router,
     admin_support_router,
+    telegram_bot_router,
     ops_router,
     admin_ops_router,
     world_character_router,
@@ -205,6 +206,7 @@ app.include_router(telegram_auth_router)
 app.include_router(creators_router)
 app.include_router(support_router)
 app.include_router(admin_support_router)
+app.include_router(telegram_bot_router)
 app.include_router(ops_router)
 app.include_router(admin_ops_router)
 app.include_router(world_character_router)

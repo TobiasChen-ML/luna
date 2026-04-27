@@ -105,6 +105,9 @@ export interface TextDoneEvent {
 export interface ImageGeneratingEvent {
   status: string;
   estimated_time_seconds: number;
+  task_id?: string;
+  message_id?: string;
+  session_id?: string;
 }
 
 export interface ImageDoneEvent {

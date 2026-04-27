@@ -24,6 +24,7 @@ class EventType(str, Enum):
     VOICE_NOTE_READY = "voice_note_ready"
     VOICE_NOTE_FAILED = "voice_note_failed"
     TOOL_CALL = "tool_call"
+    TASK_STATUS = "task_status"
     CREDIT_UPDATE = "credit_update"
     SESSION_CREATED = "session_created"
     USER_MESSAGE = "user_message"
