@@ -350,6 +350,9 @@ export const billingService = {
   async createTelegramStarsOrder(payload: {
     amount_stars: number;
     credits?: number;
+    product_type?: 'credit_pack' | 'subscription';
+    tier?: SubscriptionTier;
+    billing_period?: string;
     pack_id?: string;
     title?: string;
     description?: string;

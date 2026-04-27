@@ -534,10 +534,17 @@ class BillingService:
         amount_stars: int,
         credits: int,
         pack_id: Optional[str] = None,
+        product_type: str = "credit_pack",
+        tier: Optional[str] = None,
+        billing_period: Optional[str] = None,
         title: Optional[str] = None,
         description: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> dict:
+        normalized_product_type = (product_type or "credit_pack").lower()
+        if normalized_product_type not in {"credit_pack", "subscription"}:
+            raise ValueError("product_type must be credit_pack or subscription")
+
         order_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         order = {
@@ -546,6 +553,9 @@ class BillingService:
             "amount_stars": int(amount_stars),
             "credits": int(credits),
             "pack_id": pack_id,
+            "product_type": normalized_product_type,
+            "tier": tier,
+            "billing_period": billing_period,
             "title": title or f"{credits} Credits",
             "description": description or f"Top up {credits} credits",
             "metadata": metadata or {},
@@ -571,6 +581,9 @@ class BillingService:
             "order_id": order_id,
             "amount": int(amount_stars),
             "credits": credits,
+            "product_type": normalized_product_type,
+            "tier": tier,
+            "billing_period": billing_period,
             "status": "pending",
             "raw": order,
         }
@@ -643,6 +656,7 @@ class BillingService:
         webhook_payload: Optional[dict[str, Any]] = None,
     ) -> dict:
         from ..models.credit_transaction import CreditTransaction
+        from ..models.user import User
         from .credit_service import credit_service
 
         order = await self.get_telegram_stars_order(order_id)
@@ -665,13 +679,17 @@ class BillingService:
         if not user_id or credits <= 0:
             raise ValueError("Invalid order payload")
 
+        product_type = str(order.get("product_type") or "credit_pack").lower()
+        transaction_type = "subscription" if product_type == "subscription" else "purchase"
+        credit_source = "monthly" if product_type == "subscription" else "purchased"
+
         with self.db.transaction() as session:
             existing_tx = (
                 session.query(CreditTransaction)
                 .filter(
                     CreditTransaction.user_id == user_id,
                     CreditTransaction.order_id == order_id,
-                    CreditTransaction.transaction_type == "purchase",
+                    CreditTransaction.transaction_type == transaction_type,
                 )
                 .first()
             )
@@ -681,12 +699,35 @@ class BillingService:
             await credit_service.add_credits(
                 user_id=user_id,
                 amount=credits,
-                transaction_type="purchase",
-                credit_source="purchased",
+                transaction_type=transaction_type,
+                credit_source=credit_source,
                 order_id=order_id,
-                description=f"Purchased {credits} credits via Telegram Stars",
+                description=(
+                    f"Telegram Stars subscription: {order.get('tier') or 'premium'} "
+                    f"{order.get('billing_period') or ''}".strip()
+                    if product_type == "subscription"
+                    else f"Purchased {credits} credits via Telegram Stars"
+                ),
             )
             credits_applied = True
+
+        subscription_applied = False
+        if product_type == "subscription":
+            period = str(order.get("billing_period") or "1m").lower()
+            period_days = {"1m": 30, "3m": 90, "12m": 365, "month": 30, "year": 365}.get(period, 30)
+            with self.db.transaction() as session:
+                user = session.query(User).filter(User.id == user_id).first()
+                if not user:
+                    raise ValueError("User not found")
+                now_dt = datetime.utcnow()
+                current_end = user.subscription_end_date
+                start = current_end if current_end and current_end > now_dt else now_dt
+                user.tier = order.get("tier") or "premium"
+                user.subscription_period = period
+                user.subscription_start_date = user.subscription_start_date or now_dt
+                user.subscription_end_date = start + timedelta(days=period_days)
+                user.last_monthly_credit_grant = now_dt
+                subscription_applied = True
 
         now = datetime.utcnow().isoformat()
         order["status"] = "paid"
@@ -694,6 +735,7 @@ class BillingService:
         order["paid_at"] = now
         order["updated_at"] = now
         order["credits_applied"] = credits_applied
+        order["subscription_applied"] = subscription_applied or order.get("subscription_applied", False)
         order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
 
         await self.redis.set_json(
@@ -707,6 +749,7 @@ class BillingService:
             "status": "paid",
             "already_processed": False,
             "credits_applied": credits_applied,
+            "subscription_applied": bool(order.get("subscription_applied")),
         }
 
     async def mark_telegram_stars_order_failed(
@@ -738,6 +781,10 @@ class BillingService:
         user_id = order.get("user_id")
         if not user_id:
             raise ValueError("Order missing user_id")
+
+        product_type = str(order.get("product_type") or "credit_pack").lower()
+        purchase_type = "subscription" if product_type == "subscription" else "purchase"
+        refund_source = "monthly" if product_type == "subscription" else "purchased"
 
         with self.db.transaction() as session:
             existing_refund = (
@@ -772,7 +819,7 @@ class BillingService:
                 .filter(
                     CreditTransaction.user_id == user_id,
                     CreditTransaction.order_id == order_id,
-                    CreditTransaction.transaction_type == "purchase",
+                    CreditTransaction.transaction_type == purchase_type,
                 )
                 .first()
             )
@@ -798,11 +845,16 @@ class BillingService:
             if not user:
                 raise ValueError("User not found")
 
-            credits_to_deduct = min(
-                float(purchase_tx.amount or 0),
-                float(user.purchased_credits or 0),
-            )
-            user.purchased_credits = float(user.purchased_credits or 0) - credits_to_deduct
+            available_bucket = user.monthly_credits if refund_source == "monthly" else user.purchased_credits
+            credits_to_deduct = min(float(purchase_tx.amount or 0), float(available_bucket or 0))
+            if refund_source == "monthly":
+                user.monthly_credits = float(user.monthly_credits or 0) - credits_to_deduct
+                if product_type == "subscription":
+                    user.tier = "free"
+                    user.subscription_end_date = None
+                    user.subscription_period = None
+            else:
+                user.purchased_credits = float(user.purchased_credits or 0) - credits_to_deduct
             user.credits = float(user.monthly_credits or 0) + float(user.purchased_credits or 0)
 
             deduction_transaction = CreditTransaction(
@@ -810,11 +862,16 @@ class BillingService:
                 transaction_type="refund_deduction",
                 amount=-credits_to_deduct,
                 balance_after=user.credits,
-                credit_source="purchased",
+                credit_source=refund_source,
                 order_id=order_id,
-                description="Telegram Stars refund processed",
+                description=f"Telegram Stars {product_type} refund processed",
             )
             session.add(deduction_transaction)
+
+        try:
+            await self.redis.delete(f"user:balance:{user_id}")
+        except Exception as exc:
+            logger.debug(f"Failed to clear balance cache for Telegram Stars refund {order_id}: {exc}")
 
         now = datetime.utcnow().isoformat()
         order["status"] = "refunded"

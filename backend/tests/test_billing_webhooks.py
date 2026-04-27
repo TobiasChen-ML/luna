@@ -26,7 +26,7 @@ def compute_usdt_signature(payload: dict, secret: str) -> str:
 
 
 def compute_telegram_signature(payload: dict, bot_token: str) -> str:
-    sorted_items = sorted(payload.items())
+    sorted_items = sorted((key, value) for key, value in payload.items() if key != "hash" and value is not None)
     data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted_items)
     secret_key = hashlib.sha256(bot_token.encode()).digest()
     return hmac.new(
@@ -335,6 +335,118 @@ class TestTelegramStarsWebhook:
         assert response.status_code == 200
         assert response.json()["success"] is True
         mock_refunded.assert_awaited_once()
+
+    def test_telegram_stars_successful_payment_payload_marks_order_paid(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+        from app.routers import billing
+
+        with patch.object(webhook_service, "verify_telegram_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.telegram_bot_token = "test_bot_token"
+                mock_get_settings.return_value = mock_settings
+                with patch.object(
+                    billing.billing_svc,
+                    "mark_telegram_stars_order_paid",
+                    new_callable=AsyncMock,
+                ) as mock_paid:
+                    mock_paid.return_value = {"order_id": "stars_order_001", "status": "paid"}
+                    payload = {
+                        "successful_payment": {
+                            "telegram_payment_charge_id": "charge_001",
+                            "invoice_payload": "ignored_by_telegram",
+                        },
+                        "payload": "stars:stars_order_001",
+                        "auth_date": int(time.time()),
+                    }
+                    response = client.post("/api/billing/webhooks/telegram-stars", json=payload)
+
+        assert response.status_code == 200
+        mock_paid.assert_awaited_once_with(
+            order_id="stars_order_001",
+            charge_id="charge_001",
+            webhook_payload=payload,
+        )
+
+    def test_telegram_stars_failed_and_cancelled_webhooks_update_order(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+        from app.routers import billing
+
+        with patch.object(webhook_service, "verify_telegram_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.telegram_bot_token = "test_bot_token"
+                mock_get_settings.return_value = mock_settings
+                with patch.object(
+                    billing.billing_svc,
+                    "mark_telegram_stars_order_failed",
+                    new_callable=AsyncMock,
+                ) as mock_failed:
+                    with patch.object(
+                        billing.billing_svc,
+                        "mark_telegram_stars_order_cancelled",
+                        new_callable=AsyncMock,
+                    ) as mock_cancelled:
+                        failed_payload = {
+                            "status": "failed",
+                            "order_id": "stars_order_failed",
+                            "auth_date": int(time.time()),
+                        }
+                        cancelled_payload = {
+                            "status": "cancelled",
+                            "order_id": "stars_order_cancelled",
+                            "auth_date": int(time.time()),
+                        }
+                        failed_response = client.post("/api/billing/webhooks/telegram-stars", json=failed_payload)
+                        cancelled_response = client.post("/api/billing/webhooks/telegram-stars", json=cancelled_payload)
+
+        assert failed_response.status_code == 200
+        assert cancelled_response.status_code == 200
+        mock_failed.assert_awaited_once_with(order_id="stars_order_failed", webhook_payload=failed_payload)
+        mock_cancelled.assert_awaited_once_with(order_id="stars_order_cancelled", webhook_payload=cancelled_payload)
+
+    def test_telegram_stars_bot_webhook_secret_token_and_nested_payment(self, client: TestClient):
+        from app.routers import billing
+
+        with patch("app.core.config.get_settings") as mock_get_settings:
+            mock_settings = MagicMock()
+            mock_settings.telegram_bot_token = "test_bot_token"
+            mock_get_settings.return_value = mock_settings
+            with patch("app.core.config.get_config_value", new_callable=AsyncMock) as mock_config:
+                async def config_value(key, default=None):
+                    if key == "TELEGRAM_BOT_TOKEN":
+                        return "test_bot_token"
+                    if key == "TELEGRAM_WEBHOOK_SECRET_TOKEN":
+                        return "secret-token"
+                    return default
+
+                mock_config.side_effect = config_value
+                with patch.object(
+                    billing.billing_svc,
+                    "mark_telegram_stars_order_paid",
+                    new_callable=AsyncMock,
+                ) as mock_paid:
+                    mock_paid.return_value = {"order_id": "stars_order_nested", "status": "paid"}
+                    payload = {
+                        "message": {
+                            "successful_payment": {
+                                "telegram_payment_charge_id": "charge_nested",
+                                "invoice_payload": "stars:stars_order_nested",
+                            }
+                        }
+                    }
+                    response = client.post(
+                        "/api/billing/webhooks/telegram-stars",
+                        json=payload,
+                        headers={"X-Telegram-Bot-Api-Secret-Token": "secret-token"},
+                    )
+
+        assert response.status_code == 200
+        mock_paid.assert_awaited_once_with(
+            order_id="stars_order_nested",
+            charge_id="charge_nested",
+            webhook_payload=payload,
+        )
 
 
 class TestWebhookCreditIntegration:

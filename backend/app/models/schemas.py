@@ -286,6 +286,9 @@ class TelegramStarsOrderCreate(BaseModel):
     amount_stars: int | None = None
     amount: int | None = None
     credits: int | None = None
+    product_type: str | None = None
+    tier: str | None = None
+    billing_period: str | None = None
     product_id: str | None = None
     pack_id: str | None = None
     title: str | None = None

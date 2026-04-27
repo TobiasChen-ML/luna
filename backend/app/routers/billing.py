@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, HTTPException, Header, Depends
 from typing import Any, Optional
 import logging
 import time
+import hmac
 
 from app.models import (
     BaseResponse, SubscriptionTier,
@@ -30,13 +31,50 @@ def _extract_order_id_from_telegram_payload(payload: dict[str, Any]) -> Optional
     if direct_order_id:
         return str(direct_order_id)
 
-    payload_value = payload.get("payload")
-    if isinstance(payload_value, str):
-        if payload_value.startswith("stars:"):
-            return payload_value.split(":", 1)[1]
-        return payload_value
+    candidates: list[Any] = [payload.get("payload")]
+
+    successful_payment = payload.get("successful_payment")
+    if isinstance(successful_payment, dict):
+        candidates.append(successful_payment.get("invoice_payload"))
+
+    pre_checkout_query = payload.get("pre_checkout_query")
+    if isinstance(pre_checkout_query, dict):
+        candidates.append(pre_checkout_query.get("invoice_payload"))
+
+    message = payload.get("message")
+    if isinstance(message, dict):
+        message_payment = message.get("successful_payment")
+        if isinstance(message_payment, dict):
+            candidates.append(message_payment.get("invoice_payload"))
+
+    for payload_value in candidates:
+        if isinstance(payload_value, str):
+            if payload_value.startswith("stars:"):
+                return payload_value.split(":", 1)[1]
+            if payload_value:
+                return payload_value
 
     return None
+
+
+def _normalize_stars_status(payload: dict[str, Any]) -> str:
+    status = payload.get("status")
+    if status:
+        return str(status).lower()
+
+    successful_payment = payload.get("successful_payment")
+    if isinstance(successful_payment, dict):
+        return "paid"
+
+    message = payload.get("message")
+    if isinstance(message, dict) and isinstance(message.get("successful_payment"), dict):
+        return "paid"
+
+    pre_checkout_query = payload.get("pre_checkout_query")
+    if isinstance(pre_checkout_query, dict):
+        return "pre_checkout"
+
+    return ""
 
 
 @router.get("/pricing")
@@ -250,9 +288,38 @@ async def create_telegram_stars_order(
     if amount_stars is None:
         raise HTTPException(status_code=400, detail="amount_stars (or amount) is required")
 
+    metadata = dict(data.metadata or {})
+    pack_key = data.pack_id or data.product_id
+    product_type = (data.product_type or metadata.get("product_type") or metadata.get("product") or "").lower()
+    tier = (data.tier or metadata.get("tier") or "").lower()
+    billing_period = (
+        data.billing_period
+        or metadata.get("billing_period")
+        or metadata.get("period")
+        or ""
+    )
+    billing_period = str(billing_period).lower()
+
+    if not product_type and pack_key and str(pack_key).startswith("subscription_"):
+        product_type = "subscription"
+    if not product_type:
+        product_type = "credit_pack"
+
     credits = data.credits
-    if credits is None:
-        pack_key = data.pack_id or data.product_id
+    if product_type == "subscription":
+        if not tier:
+            tier = SubscriptionTier.PREMIUM.value
+        if tier not in {SubscriptionTier.PREMIUM.value, SubscriptionTier.PRO.value}:
+            raise HTTPException(status_code=400, detail="tier must be premium or pro")
+        if billing_period not in {"1m", "3m", "12m", "month", "year"}:
+            raise HTTPException(status_code=400, detail="billing_period must be 1m, 3m, 12m, month, or year")
+        period_map = {"month": "1m", "year": "12m"}
+        billing_period = period_map.get(billing_period, billing_period)
+        if credits is None:
+            config = await credit_service.get_config()
+            period_months = {"1m": 1, "3m": 3, "12m": 12}[billing_period]
+            credits = int(float(config.get("premium_monthly_credits", 100)) * period_months)
+    elif credits is None:
         if pack_key:
             packs = await pricing_service.get_credit_packs(active_only=True)
             pack_map = {p.pack_id: p for p in packs}
@@ -268,15 +335,26 @@ async def create_telegram_stars_order(
     if credits is None or credits <= 0:
         raise HTTPException(status_code=400, detail="credits is required and must be > 0")
 
+    metadata.update(
+        {
+            "product_type": product_type,
+            "tier": tier or None,
+            "billing_period": billing_period or None,
+        }
+    )
+
     try:
         result = await billing_svc.create_telegram_stars_order(
             user_id=user.id,
             amount_stars=int(amount_stars),
             credits=int(credits),
             pack_id=data.pack_id or data.product_id,
+            product_type=product_type,
+            tier=tier or None,
+            billing_period=billing_period or None,
             title=data.title,
             description=data.description,
-            metadata=data.metadata or {},
+            metadata=metadata,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -301,6 +379,9 @@ async def get_telegram_stars_order(
         "status": order.get("status", OrderStatus.PENDING),
         "amount": int(order.get("amount_stars", 0)),
         "credits": int(order.get("credits", 0)),
+        "product_type": order.get("product_type", "credit_pack"),
+        "tier": order.get("tier"),
+        "billing_period": order.get("billing_period"),
         "invoice_link": order.get("invoice_link"),
         "created_at": order.get("created_at"),
         "updated_at": order.get("updated_at"),
@@ -519,7 +600,8 @@ async def usdt_webhook(
 
 @router.post("/webhooks/telegram-stars", response_model=BaseResponse)
 async def telegram_stars_webhook(
-    request: Request
+    request: Request,
+    x_telegram_bot_api_secret_token: str = Header(None, alias="X-Telegram-Bot-Api-Secret-Token"),
 ) -> BaseResponse:
     try:
         payload = await request.json()
@@ -532,7 +614,19 @@ async def telegram_stars_webhook(
             logger.error("Telegram bot token not configured")
             raise HTTPException(status_code=503, detail="Webhook processing unavailable")
         
-        if not webhook_service.verify_telegram_signature(payload, bot_token):
+        webhook_secret = (
+            await get_config_value("TELEGRAM_WEBHOOK_SECRET_TOKEN")
+            or await get_config_value("TELEGRAM_STAR_GATEWAY_WEBHOOK_AUTH_TOKEN")
+            or await get_config_value("TELEGRAM_BOT_WEBHOOK_SECRET")
+        )
+        if webhook_secret:
+            if not x_telegram_bot_api_secret_token:
+                logger.warning("Telegram Stars webhook missing secret token header")
+                raise HTTPException(status_code=401, detail="Missing secret token")
+            if not hmac.compare_digest(x_telegram_bot_api_secret_token, webhook_secret):
+                logger.warning("Telegram Stars webhook secret token verification failed")
+                raise HTTPException(status_code=401, detail="Invalid secret token")
+        elif not webhook_service.verify_telegram_signature(payload, bot_token):
             logger.warning("Telegram Stars webhook signature verification failed")
             raise HTTPException(status_code=401, detail="Invalid signature")
         
@@ -541,9 +635,21 @@ async def telegram_stars_webhook(
             logger.warning("Telegram Stars webhook timestamp outside tolerance window")
             raise HTTPException(status_code=400, detail="Webhook expired")
 
-        status = str(payload.get("status", "")).lower()
+        status = _normalize_stars_status(payload)
         order_id = _extract_order_id_from_telegram_payload(payload)
         charge_id = payload.get("charge_id") or payload.get("payment_id")
+        successful_payment = payload.get("successful_payment")
+        message = payload.get("message")
+        if not isinstance(successful_payment, dict) and isinstance(message, dict):
+            nested_payment = message.get("successful_payment")
+            if isinstance(nested_payment, dict):
+                successful_payment = nested_payment
+        if isinstance(successful_payment, dict):
+            charge_id = (
+                charge_id
+                or successful_payment.get("telegram_payment_charge_id")
+                or successful_payment.get("provider_payment_charge_id")
+            )
         if not order_id:
             logger.warning(f"Telegram Stars webhook missing order_id/payload: {payload}")
             raise HTTPException(status_code=400, detail="order_id required")

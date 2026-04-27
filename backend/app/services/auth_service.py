@@ -157,7 +157,12 @@ class WebhookSignatureService:
             return False
         
         try:
-            sorted_items = sorted(payload.items())
+            received_hash = payload.get("hash", "")
+            sorted_items = sorted(
+                (key, value)
+                for key, value in payload.items()
+                if key != "hash" and value is not None
+            )
             data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted_items)
             
             secret_key = hashlib.sha256(bot_token.encode()).digest()
@@ -167,7 +172,7 @@ class WebhookSignatureService:
                 hashlib.sha256
             ).hexdigest()
             
-            return hmac.compare_digest(payload.get('hash', ''), expected_hash)
+            return hmac.compare_digest(received_hash, expected_hash)
         except Exception as e:
             logger.error(f"Telegram signature verification error: {e}")
             return False

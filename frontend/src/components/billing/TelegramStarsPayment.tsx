@@ -78,6 +78,7 @@ export function TelegramStarsPayment({ onSuccess }: TelegramStarsPaymentProps) {
       const order = await billingService.createTelegramStarsOrder({
         amount_stars: pack.stars,
         credits: pack.credits,
+        product_type: 'credit_pack',
         pack_id: pack.id,
         title: `${pack.credits} Credits`,
         description: `Top up ${pack.credits} AIGirl credits`,

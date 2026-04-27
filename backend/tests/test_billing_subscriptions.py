@@ -130,3 +130,72 @@ class TestBillingSubscriptionEndpoints:
         assert "total" in data
         assert "limit" in data
         assert "offset" in data
+
+    def test_telegram_stars_subscription_order_normalizes_product_metadata(self, client, monkeypatch):
+        from app.routers import billing
+
+        mock_create = AsyncMock(
+            return_value={
+                "order_id": "stars_sub_1",
+                "amount": 1299,
+                "credits": 100,
+                "product_type": "subscription",
+                "tier": "premium",
+                "billing_period": "1m",
+                "status": "pending",
+            }
+        )
+        monkeypatch.setattr(billing.billing_svc, "create_telegram_stars_order", mock_create)
+
+        response = client.post(
+            "/api/billing/telegram-stars/orders",
+            json={
+                "amount_stars": 1299,
+                "product_type": "subscription",
+                "tier": "premium",
+                "billing_period": "month",
+                "credits": 100,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["product_type"] == "subscription"
+        call = mock_create.await_args.kwargs
+        assert call["product_type"] == "subscription"
+        assert call["tier"] == "premium"
+        assert call["billing_period"] == "1m"
+
+    def test_telegram_stars_credit_pack_order_uses_pack_total_credits(self, client, monkeypatch):
+        from app.routers import billing
+
+        class Pack:
+            pack_id = "pack_100"
+            credits = 100
+            bonus_credits = 10
+
+        mock_create = AsyncMock(
+            return_value={
+                "order_id": "stars_pack_1",
+                "amount": 999,
+                "credits": 110,
+                "product_type": "credit_pack",
+                "status": "pending",
+            }
+        )
+        monkeypatch.setattr(billing.pricing_service, "get_credit_packs", AsyncMock(return_value=[Pack()]))
+        monkeypatch.setattr(billing.billing_svc, "create_telegram_stars_order", mock_create)
+
+        response = client.post(
+            "/api/billing/telegram-stars/orders",
+            json={
+                "amount_stars": 999,
+                "product_type": "credit_pack",
+                "pack_id": "pack_100",
+            },
+        )
+
+        assert response.status_code == 200
+        call = mock_create.await_args.kwargs
+        assert call["credits"] == 110
+        assert call["product_type"] == "credit_pack"

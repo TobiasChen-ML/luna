@@ -53,6 +53,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
       const order = await billingService.createTelegramStarsOrder({
         amount_stars: pack.price_cents,
         credits: pack.credits,
+        product_type: 'credit_pack',
         pack_id: pack.id,
         title: `${pack.name} Credit Pack`,
         description: pack.description || `${pack.credits} credits`,

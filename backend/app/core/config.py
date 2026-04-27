@@ -342,6 +342,11 @@ async def get_storage_config() -> dict[str, Any]:
 
 
 async def get_payment_config() -> dict[str, Any]:
+    telegram_stars_enabled = (
+        await get_config_value("TELEGRAM_STARS_ENABLED")
+        or await get_config_value("TELEGRAM_STAR_GATEWAY_ENABLED", "false")
+        or "false"
+    )
     return {
         "ccbill_enabled": (await get_config_value("CCBILL_ENABLED", "false") or "false").lower() == "true",
         "ccbill_merchant_id": await get_config_value("CCBILL_MERCHANT_ID"),
@@ -351,9 +356,21 @@ async def get_payment_config() -> dict[str, Any]:
         "usdt_gateway_enabled": (await get_config_value("USDT_PAYMENT_GATEWAY_ENABLED", "false") or "false").lower() == "true",
         "usdt_gateway_base_url": await get_config_value("USDT_PAYMENT_GATEWAY_BASE_URL"),
         "usdt_gateway_api_key": await get_config_value("USDT_PAYMENT_GATEWAY_API_KEY"),
-        "telegram_stars_enabled": (await get_config_value("TELEGRAM_STAR_GATEWAY_ENABLED", "false") or "false").lower() == "true",
-        "telegram_stars_base_url": await get_config_value("TELEGRAM_STAR_GATEWAY_BASE_URL"),
-        "telegram_stars_api_token": await get_config_value("TELEGRAM_STAR_GATEWAY_API_TOKEN"),
+        "telegram_stars_enabled": telegram_stars_enabled.lower() == "true",
+        "telegram_bot_token_configured": bool(await get_config_value("TELEGRAM_BOT_TOKEN")),
+        "telegram_webhook_secret_configured": bool(
+            await get_config_value("TELEGRAM_WEBHOOK_SECRET_TOKEN")
+            or await get_config_value("TELEGRAM_STAR_GATEWAY_WEBHOOK_AUTH_TOKEN")
+            or await get_config_value("TELEGRAM_BOT_WEBHOOK_SECRET")
+        ),
+        "telegram_stars_base_url": (
+            await get_config_value("TELEGRAM_STARS_BASE_URL")
+            or await get_config_value("TELEGRAM_STAR_GATEWAY_BASE_URL")
+        ),
+        "telegram_stars_api_token": (
+            await get_config_value("TELEGRAM_STARS_API_TOKEN")
+            or await get_config_value("TELEGRAM_STAR_GATEWAY_API_TOKEN")
+        ),
     }
 
 

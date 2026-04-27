@@ -120,6 +120,9 @@ export function SubscriptionsPage() {
       const order = await billingService.createTelegramStarsOrder({
         amount_stars: amountStars,
         credits: selectedCycle.monthlyCredits,
+        product_type: 'subscription',
+        tier: selectedTier,
+        billing_period: selectedCycle.metadataPeriod,
         pack_id: `subscription_${selectedTier}_${billingCycle}`,
         title: `${selectedPlan.name} Subscription`,
         description: selectedCycle.checkoutDescription,
