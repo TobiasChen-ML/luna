@@ -1,7 +1,12 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.media_service import MediaService
-from app.services.media import NovitaImageProvider, ImageGenerationResult
+from app.services.media import (
+    ControlNetConfig,
+    ImageGenerationResult,
+    IPAdapterConfig,
+    NovitaImageProvider,
+)
 
 
 class TestMediaServiceNovita:
@@ -93,3 +98,60 @@ class TestMediaServiceNovita:
             MediaService._normalize_novita_base_url("https://api.novita.ai/openai/v1")
             == "https://api.novita.ai/v3"
         )
+
+    @pytest.mark.asyncio
+    async def test_img2img_strips_data_url_prefixes_from_nested_images(self, monkeypatch):
+        captured = {}
+
+        class FakeResponse:
+            is_error = False
+            status_code = 200
+            text = ""
+            request = MagicMock()
+
+            def json(self):
+                return {"task_id": "task_123"}
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def post(self, *args, **kwargs):
+                captured["payload"] = kwargs["json"]
+                return FakeResponse()
+
+        import httpx
+
+        monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+
+        provider = NovitaImageProvider(api_key="test-key", base_url="https://api.novita.ai/v3")
+        provider._download_image_base64 = AsyncMock(
+            return_value="data:image/png;base64,aW5pdC1pbWFnZQ=="
+        )
+
+        task_id = await provider.img2img_async(
+            init_image_url="https://example.com/init.png",
+            prompt="test",
+            ip_adapters=[
+                IPAdapterConfig(
+                    image_base64="data:image/png;base64,aXAtYWRhcHRlcg==",
+                    strength=0.4,
+                )
+            ],
+            controlnet=ControlNetConfig(
+                model_name="controlnet-openpose-sdxl-1.0",
+                image_base64="data:image/png;base64,Y29udHJvbG5ldA==",
+            ),
+        )
+
+        request = captured["payload"]["request"]
+        assert task_id == "task_123"
+        assert request["image_base64"] == "aW5pdC1pbWFnZQ=="
+        assert request["ip_adapters"][0]["image_base64"] == "aXAtYWRhcHRlcg=="
+        assert request["controlnet"]["units"][0]["image_base64"] == "Y29udHJvbG5ldA=="

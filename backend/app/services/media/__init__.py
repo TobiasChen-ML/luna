@@ -105,10 +105,50 @@ class BaseMediaProvider:
     
     async def health_check(self) -> bool:
         return True
+
+    @staticmethod
+    def _strip_data_url_prefix(image_base64: str) -> str:
+        value = (image_base64 or "").strip()
+        if value.startswith("data:") and "," in value:
+            return value.split(",", 1)[1].strip()
+        return value
+
+    @staticmethod
+    def _is_webp_bytes(content: bytes) -> bool:
+        return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+
+    @staticmethod
+    def _convert_webp_to_jpeg(content: bytes, source: str) -> bytes:
+        import io
+
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(content)) as img:
+                buf = io.BytesIO()
+                img.convert("RGB").save(buf, format="JPEG", quality=95)
+                logger.info("Converted WEBP source to JPEG for Novita image request: %s", source)
+                return buf.getvalue()
+        except Exception as e:
+            logger.warning("WEBP->JPEG conversion failed for %s, using raw bytes: %s", source, e)
+            return content
+
+    @classmethod
+    def _normalize_image_base64(cls, image_base64: str, source: str = "base64 image") -> str:
+        cleaned = cls._strip_data_url_prefix(image_base64)
+        try:
+            content = base64.b64decode(cleaned, validate=True)
+        except Exception:
+            return cleaned
+
+        if cls._is_webp_bytes(content):
+            content = cls._convert_webp_to_jpeg(content, source)
+            return base64.b64encode(content).decode("utf-8")
+
+        return cleaned
     
     async def _download_image_base64(self, image_url: str) -> str:
         import httpx
-        import io
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.get(image_url)
             response.raise_for_status()
@@ -117,17 +157,12 @@ class BaseMediaProvider:
 
             # Novita img2img rejects WEBP input (INVALID_IMAGE_FORMAT).
             # Normalize unsupported source formats to JPEG before base64 encoding.
-            if "image/webp" in content_type or image_url.lower().split("?", 1)[0].endswith(".webp"):
-                try:
-                    from PIL import Image
-
-                    with Image.open(io.BytesIO(content)) as img:
-                        buf = io.BytesIO()
-                        img.convert("RGB").save(buf, format="JPEG", quality=95)
-                        content = buf.getvalue()
-                    logger.info("Converted WEBP source to JPEG for img2img/IPAdapter request.")
-                except Exception as e:
-                    logger.warning("WEBP->JPEG conversion failed, using raw bytes: %s", e)
+            if (
+                "image/webp" in content_type
+                or image_url.lower().split("?", 1)[0].endswith(".webp")
+                or self._is_webp_bytes(content)
+            ):
+                content = self._convert_webp_to_jpeg(content, image_url)
 
             return base64.b64encode(content).decode("utf-8")
 
@@ -352,7 +387,10 @@ class NovitaImageProvider(BaseMediaProvider):
     ) -> str:
         import httpx
         
-        image_base64 = await self._download_image_base64(init_image_url)
+        image_base64 = self._normalize_image_base64(
+            await self._download_image_base64(init_image_url),
+            "img2img init image",
+        )
         
         resolved_model = await self._get_img2img_model(model)
         resolved_strength = await self._get_img2img_strength(strength)
@@ -391,11 +429,14 @@ class NovitaImageProvider(BaseMediaProvider):
         if ip_adapters:
             resolved_ip_adapters = [
                 IPAdapterConfig(
-                    image_base64=ip.image_base64,
+                    image_base64=self._normalize_image_base64(
+                        ip.image_base64,
+                        f"ip_adapter[{index}]",
+                    ),
                     model_name=ip.model_name,
                     strength=await self._get_ip_adapter_strength(ip.strength),
                 )
-                for ip in ip_adapters
+                for index, ip in enumerate(ip_adapters)
             ]
             payload["request"]["ip_adapters"] = [
                 {
@@ -411,7 +452,10 @@ class NovitaImageProvider(BaseMediaProvider):
             payload["request"]["controlnet"] = {
                 "units": [{
                     "model_name": controlnet.model_name,
-                    "image_base64": controlnet.image_base64,
+                    "image_base64": self._normalize_image_base64(
+                        controlnet.image_base64,
+                        "controlnet image",
+                    ),
                     "strength": resolved_controlnet_strength,
                     "preprocessor": controlnet.preprocessor or "dwpose",
                     "guidance_start": controlnet.guidance_start,
