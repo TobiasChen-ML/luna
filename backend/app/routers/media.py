@@ -623,9 +623,9 @@ async def generate_pose_mature(
             model_name="controlnet-openpose-sdxl-1.0",
             image_base64=pose_image_base64,
             strength=data.controlnet_strength,
-            preprocessor="dwpose",
+            preprocessor="openpose",
             guidance_start=0.0,
-            guidance_end=0.8,
+            guidance_end=1.0,
         )
 
         ip_adapters = [

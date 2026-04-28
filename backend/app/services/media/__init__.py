@@ -428,7 +428,25 @@ class NovitaImageProvider(BaseMediaProvider):
                 },
                 json=payload
             )
-            response.raise_for_status()
+            if response.is_error:
+                response_text = response.text[:2000]
+                logger.error(
+                    "Novita img2img rejected request: status=%s body=%s model=%s "
+                    "size=%sx%s has_controlnet=%s has_ip_adapters=%s has_loras=%s",
+                    response.status_code,
+                    response_text,
+                    resolved_model,
+                    resolved_width,
+                    resolved_height,
+                    bool(controlnet),
+                    bool(ip_adapters),
+                    bool(compatible_loras),
+                )
+                raise httpx.HTTPStatusError(
+                    f"Novita img2img failed with {response.status_code}: {response_text}",
+                    request=response.request,
+                    response=response,
+                )
             data = response.json()
         
         return data.get("task_id", "")

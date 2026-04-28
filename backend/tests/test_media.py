@@ -218,6 +218,35 @@ class TestMediaRouter:
         assert data["task_id"] == "task_txt2img_002"
         mock_provider.img2img_async.assert_awaited_once()
         mock_provider.txt2img_async.assert_awaited_once()
+
+    def test_generate_pose_mature_uses_openpose_controlnet(self, client: TestClient):
+        from app.services.media import NovitaImageProvider
+
+        mock_provider = MagicMock(spec=NovitaImageProvider)
+        mock_provider._download_image_base64 = AsyncMock(return_value="base64-image")
+        mock_provider.img2img_async = AsyncMock(return_value="task_pose_001")
+
+        with patch("app.routers.media.media_service.get_image_provider", return_value=mock_provider):
+            with patch(
+                "app.routers.media.character_service.get_character_by_id",
+                AsyncMock(return_value={"id": "char_3", "avatar_url": "https://example.com/avatar.png"}),
+            ):
+                response = client.post(
+                    "/api/images/generate-pose-mature",
+                    json={
+                        "prompt": "test prompt",
+                        "character_id": "char_3",
+                        "pose_image_url": "https://example.com/pose.png",
+                    },
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "task_pose_001"
+        controlnet = mock_provider.img2img_async.await_args.kwargs["controlnet"]
+        assert controlnet.model_name == "controlnet-openpose-sdxl-1.0"
+        assert controlnet.preprocessor == "openpose"
+        assert controlnet.guidance_end == 1.0
     
     def test_generate_video_wan(self, client: TestClient):
         response = client.post("/api/images/generate-video-wan-character", json={
