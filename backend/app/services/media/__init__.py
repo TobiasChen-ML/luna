@@ -118,7 +118,7 @@ class BaseMediaProvider:
         return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
 
     @staticmethod
-    def _convert_webp_to_jpeg(content: bytes, source: str) -> bytes:
+    def _convert_image_to_jpeg(content: bytes, source: str) -> bytes:
         import io
 
         try:
@@ -127,25 +127,21 @@ class BaseMediaProvider:
             with Image.open(io.BytesIO(content)) as img:
                 buf = io.BytesIO()
                 img.convert("RGB").save(buf, format="JPEG", quality=95)
-                logger.info("Converted WEBP source to JPEG for Novita image request: %s", source)
+                logger.info("Converted image source to JPEG for Novita image request: %s", source)
                 return buf.getvalue()
         except Exception as e:
-            logger.warning("WEBP->JPEG conversion failed for %s, using raw bytes: %s", source, e)
-            return content
+            raise ValueError(f"Invalid image content for Novita request ({source})") from e
 
     @classmethod
     def _normalize_image_base64(cls, image_base64: str, source: str = "base64 image") -> str:
         cleaned = cls._strip_data_url_prefix(image_base64)
         try:
             content = base64.b64decode(cleaned, validate=True)
-        except Exception:
-            return cleaned
+        except Exception as e:
+            raise ValueError(f"Invalid base64 image for Novita request ({source})") from e
 
-        if cls._is_webp_bytes(content):
-            content = cls._convert_webp_to_jpeg(content, source)
-            return base64.b64encode(content).decode("utf-8")
-
-        return cleaned
+        content = cls._convert_image_to_jpeg(content, source)
+        return base64.b64encode(content).decode("utf-8")
     
     async def _download_image_base64(self, image_url: str) -> str:
         import httpx
@@ -155,14 +151,16 @@ class BaseMediaProvider:
             content = response.content
             content_type = (response.headers.get("content-type") or "").lower()
 
-            # Novita img2img rejects WEBP input (INVALID_IMAGE_FORMAT).
-            # Normalize unsupported source formats to JPEG before base64 encoding.
-            if (
-                "image/webp" in content_type
-                or image_url.lower().split("?", 1)[0].endswith(".webp")
-                or self._is_webp_bytes(content)
-            ):
-                content = self._convert_webp_to_jpeg(content, image_url)
+            if not content_type.startswith("image/"):
+                logger.warning(
+                    "Downloaded Novita image source has non-image content-type: url=%s content_type=%s",
+                    image_url,
+                    content_type or "<missing>",
+                )
+
+            # Novita img2img/IP-Adapter is strict about source image format.
+            # Validate every downloaded source and send JPEG bytes consistently.
+            content = self._convert_image_to_jpeg(content, image_url)
 
             return base64.b64encode(content).decode("utf-8")
 

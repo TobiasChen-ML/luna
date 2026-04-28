@@ -1,4 +1,6 @@
 import pytest
+import base64
+import io
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.media_service import MediaService
 from app.services.media import (
@@ -10,6 +12,14 @@ from app.services.media import (
 
 
 class TestMediaServiceNovita:
+    @staticmethod
+    def _jpeg_base64() -> str:
+        from PIL import Image
+
+        image = Image.new("RGB", (8, 8), (200, 180, 160))
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
 
     @pytest.fixture
     def mock_settings(self):
@@ -131,8 +141,9 @@ class TestMediaServiceNovita:
         monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
 
         provider = NovitaImageProvider(api_key="test-key", base_url="https://api.novita.ai/v3")
+        image_base64 = self._jpeg_base64()
         provider._download_image_base64 = AsyncMock(
-            return_value="data:image/png;base64,aW5pdC1pbWFnZQ=="
+            return_value=f"data:image/jpeg;base64,{image_base64}"
         )
 
         task_id = await provider.img2img_async(
@@ -140,18 +151,22 @@ class TestMediaServiceNovita:
             prompt="test",
             ip_adapters=[
                 IPAdapterConfig(
-                    image_base64="data:image/png;base64,aXAtYWRhcHRlcg==",
+                    image_base64=f"data:image/jpeg;base64,{image_base64}",
                     strength=0.4,
                 )
             ],
             controlnet=ControlNetConfig(
                 model_name="controlnet-openpose-sdxl-1.0",
-                image_base64="data:image/png;base64,Y29udHJvbG5ldA==",
+                image_base64=f"data:image/jpeg;base64,{image_base64}",
             ),
         )
 
         request = captured["payload"]["request"]
         assert task_id == "task_123"
-        assert request["image_base64"] == "aW5pdC1pbWFnZQ=="
-        assert request["ip_adapters"][0]["image_base64"] == "aXAtYWRhcHRlcg=="
-        assert request["controlnet"]["units"][0]["image_base64"] == "Y29udHJvbG5ldA=="
+        for value in (
+            request["image_base64"],
+            request["ip_adapters"][0]["image_base64"],
+            request["controlnet"]["units"][0]["image_base64"],
+        ):
+            assert not value.startswith("data:")
+            assert base64.b64decode(value).startswith(b"\xff\xd8")
