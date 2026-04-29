@@ -590,18 +590,11 @@ async def generate_pose_mature(
             negative_prompt = f"{example_negative}, {negative_prompt}"
 
     try:
-        base_image_url: Optional[str] = None
         face_reference_url: Optional[str] = None
         if data.character_id:
             try:
                 character = await character_service.get_character_by_id(data.character_id)
                 if character:
-                    base_image_url = (
-                        character.get("mature_image_url")
-                        or character.get("avatar_url")
-                        or character.get("profile_image_url")
-                        or character.get("cover_url")
-                    )
                     face_reference_url = (
                         character.get("avatar_url")
                         or character.get("profile_image_url")
@@ -633,7 +626,7 @@ async def generate_pose_mature(
         ] if face_base64 else None
         
         task_id = await provider.img2img_async(
-            init_image_url=base_image_url or data.pose_image_url,
+            init_image_url=data.pose_image_url,
             prompt=prompt,
             negative_prompt=negative_prompt,
             width=data.width,

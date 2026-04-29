@@ -248,6 +248,7 @@ class TestMediaRouter:
         assert controlnet.preprocessor == "dwpose"
         assert controlnet.strength == 1.0
         assert controlnet.guidance_end == 1.0
+        assert mock_provider.img2img_async.await_args.kwargs["init_image_url"] == "https://example.com/pose.png"
         assert mock_provider.img2img_async.await_args.kwargs["strength"] == 0.75
         ip_adapters = mock_provider.img2img_async.await_args.kwargs["ip_adapters"]
         assert ip_adapters[0].strength == 0.25
