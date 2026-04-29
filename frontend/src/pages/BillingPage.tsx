@@ -2,7 +2,7 @@
  * BillingPage - Main billing and subscription management page
  */
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CreditCard, History, Loader2, RefreshCw } from 'lucide-react';
 import { Container } from '../components/layout/Container';
 import { Card } from '../components/common/Card';
@@ -12,7 +12,6 @@ import { CreditBalanceCard } from '../components/billing/CreditBalanceCard';
 import { PlanSelector } from '../components/billing/PlanSelector';
 import { CreditPackModal } from '../components/billing/CreditPackModal';
 import { billingService, type CurrentSubscription, type CreditBalance, type PaymentHistoryItem } from '../services/billingService';
-import { TelegramStarsPayment } from '../components/billing/TelegramStarsPayment';
 import { useTelegram } from '../contexts/TelegramContext';
 import { openTelegramMiniApp } from '../utils/telegram';
 import type { SubscriptionTier, BillingPeriod, BillingPricingConfig } from '../types';
@@ -20,18 +19,27 @@ import type { SubscriptionTier, BillingPeriod, BillingPricingConfig } from '../t
 export default function BillingPage() {
   const { isTma } = useTelegram();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [subscription, setSubscription] = useState<CurrentSubscription | null>(null);
   const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
   const [pricingConfig, setPricingConfig] = useState<BillingPricingConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showPlanSelector, setShowPlanSelector] = useState(false);
 
   useEffect(() => {
     loadBillingData();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get('buyCredits') === '1') {
+      setShowCreditModal(true);
+    }
+  }, [searchParams]);
 
   const loadBillingData = async () => {
     try {
@@ -63,6 +71,36 @@ export default function BillingPage() {
       window.location.href = portalUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open billing portal');
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    try {
+      setSubscriptionBusy(true);
+      setError(null);
+      setSuccess(null);
+      const result = await billingService.cancelSubscription();
+      await loadBillingData();
+      setSuccess(result.message || 'Your subscription will stay active until the current period ends.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel subscription');
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  };
+
+  const handleReactivateSubscription = async () => {
+    try {
+      setSubscriptionBusy(true);
+      setError(null);
+      setSuccess(null);
+      const result = await billingService.reactivateSubscription();
+      await loadBillingData();
+      setSuccess(result.message || 'Your subscription has been reactivated.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reactivate subscription');
+    } finally {
+      setSubscriptionBusy(false);
     }
   };
 
@@ -105,10 +143,9 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Telegram Stars Payment for Telegram Mini App users */}
-        {isTma && (
-          <div className="mb-8 p-5 rounded-2xl border border-zinc-700 bg-zinc-900/60">
-            <TelegramStarsPayment onSuccess={() => loadBillingData()} />
+        {success && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-green-300">
+            {success}
           </div>
         )}
 
@@ -135,6 +172,9 @@ export default function BillingPage() {
             isActive={subscription?.is_active || false}
             onManage={handleManageSubscription}
             onUpgrade={() => setShowPlanSelector(true)}
+            onCancel={handleCancelSubscription}
+            onReactivate={handleReactivateSubscription}
+            isManaging={subscriptionBusy}
           />
 
           {/* Credit Balance Card */}
@@ -252,7 +292,12 @@ export default function BillingPage() {
       {/* Credit Pack Modal */}
       <CreditPackModal
         isOpen={showCreditModal}
-        onClose={() => setShowCreditModal(false)}
+        onClose={() => {
+          setShowCreditModal(false);
+          if (searchParams.get('buyCredits') === '1') {
+            navigate('/billing', { replace: true });
+          }
+        }}
       />
     </div>
   );

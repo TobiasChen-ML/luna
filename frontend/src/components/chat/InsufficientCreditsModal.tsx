@@ -48,7 +48,7 @@ export function InsufficientCreditsModal({
           </p>
         )}
 
-        <Link to="/billing" className="block" onClick={onClose}>
+        <Link to="/billing?buyCredits=1" className="block" onClick={onClose}>
           <Button className="w-full">Go to payment page and buy extra package</Button>
         </Link>
 

@@ -831,10 +831,15 @@ function ChatContent() {
         {/* Action Buttons */}
         <div className="flex shrink-0 items-center gap-2">
           {/* Credits Display */}
-          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 text-yellow-500 sm:h-auto sm:gap-1.5 sm:px-3 sm:py-1.5">
+          <button
+            type="button"
+            onClick={() => navigate('/billing?buyCredits=1')}
+            className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 text-yellow-500 transition hover:border-yellow-400/40 hover:bg-yellow-500/15 sm:h-auto sm:gap-1.5 sm:px-3 sm:py-1.5"
+            title="Go to buy credits"
+          >
             <Coins size={14} className="sm:w-4 sm:h-4" />
             <span className="font-medium text-xs sm:text-sm">{user?.credits || 0}</span>
-          </div>
+          </button>
           <button
             type="button"
             onClick={() => setIsMobileActionsOpen((prev) => !prev)}
@@ -848,7 +853,7 @@ function ChatContent() {
             variant="outline"
             size="sm"
             className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
-            onClick={() => navigate('/billing')}
+            onClick={() => navigate('/billing?buyCredits=1')}
             title="Buy Credits"
           >
             <CircleDollarSign size={16} />
@@ -900,7 +905,7 @@ function ChatContent() {
               type="button"
               onClick={() => {
                 setIsMobileActionsOpen(false);
-                navigate('/billing');
+                navigate('/billing?buyCredits=1');
               }}
               className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white"
             >

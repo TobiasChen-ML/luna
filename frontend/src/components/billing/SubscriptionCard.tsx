@@ -1,7 +1,7 @@
 /**
  * SubscriptionCard - Displays current subscription status
  */
-import { Crown, Calendar, AlertCircle, ExternalLink } from 'lucide-react';
+import { Crown, Calendar, AlertCircle, Loader2, RotateCcw, XCircle } from 'lucide-react';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import type { Subscription, SubscriptionTier, BillingPricingConfig } from '../../types';
@@ -14,6 +14,9 @@ interface SubscriptionCardProps {
   isActive: boolean;
   onManage: () => void;
   onUpgrade: () => void;
+  onCancel?: () => void;
+  onReactivate?: () => void;
+  isManaging?: boolean;
 }
 
 const tierColors: Record<SubscriptionTier, string> = {
@@ -33,6 +36,9 @@ export function SubscriptionCard({
   isActive,
   onManage,
   onUpgrade,
+  onCancel,
+  onReactivate,
+  isManaging = false,
 }: SubscriptionCardProps) {
   const tierName = billingService.getTierDisplayName(tier);
   const periodEnd = subscription?.current_period_end
@@ -56,9 +62,14 @@ export function SubscriptionCard({
           </div>
         </div>
 
-        {tier !== 'free' && isActive && (
-          <Button variant="outline" size="sm" onClick={onManage}>
-            Manage <ExternalLink className="w-3 h-3 ml-1" />
+        {tier !== 'free' && isActive && subscription?.cancel_at_period_end && onReactivate && (
+          <Button variant="outline" size="sm" onClick={onReactivate} disabled={isManaging}>
+            {isManaging ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <RotateCcw className="w-3 h-3 mr-1" />
+            )}
+            Reactivate
           </Button>
         )}
       </div>
@@ -104,6 +115,29 @@ export function SubscriptionCard({
               {monthlyCredits.toLocaleString()}
             </span>
           </div>
+
+          {isActive && !subscription?.cancel_at_period_end && onCancel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={isManaging}
+              className="w-full border-red-500/40 text-red-300 hover:bg-red-500/10"
+            >
+              {isManaging ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <XCircle className="w-4 h-4 mr-2" />
+              )}
+              Cancel at Period End
+            </Button>
+          )}
+
+          {isActive && !onCancel && (
+            <Button variant="outline" size="sm" onClick={onManage}>
+              Manage Subscription
+            </Button>
+          )}
         </div>
       )}
     </Card>

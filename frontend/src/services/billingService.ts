@@ -3,7 +3,7 @@
  */
 import { auth } from '@/config/firebase';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Types
 export type SubscriptionTier = 'free' | 'premium';
@@ -151,7 +151,7 @@ export const billingService = {
    * Get current user's subscription status
    */
   async getCurrentSubscription(): Promise<CurrentSubscription> {
-    const response = await authFetch(`${API_BASE}/api/billing/subscriptions/current`);
+    const response = await authFetch(`${API_BASE}/billing/subscriptions/current`);
 
     if (!response.ok) {
       const error = await response.json();
@@ -168,7 +168,7 @@ export const billingService = {
     tier: SubscriptionTier,
     billingPeriod: BillingPeriod = 'month'
   ): Promise<CheckoutResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/subscriptions/checkout`, {
+    const response = await authFetch(`${API_BASE}/billing/subscriptions/checkout`, {
       method: 'POST',
       body: JSON.stringify({
         tier,
@@ -188,7 +188,7 @@ export const billingService = {
    * Get customer portal URL for managing subscription
    */
   async getPortalUrl(returnUrl?: string): Promise<string> {
-    const response = await authFetch(`${API_BASE}/api/billing/subscriptions/portal`, {
+    const response = await authFetch(`${API_BASE}/billing/subscriptions/portal`, {
       method: 'POST',
       body: JSON.stringify({ return_url: returnUrl }),
     });
@@ -206,7 +206,7 @@ export const billingService = {
    * Cancel subscription at period end
    */
   async cancelSubscription(): Promise<{ success: boolean; cancel_at: string; message: string }> {
-    const response = await authFetch(`${API_BASE}/api/billing/subscriptions/cancel`, {
+    const response = await authFetch(`${API_BASE}/billing/subscriptions/cancel`, {
       method: 'POST',
     });
 
@@ -222,7 +222,7 @@ export const billingService = {
    * Reactivate a canceled subscription
    */
   async reactivateSubscription(): Promise<{ success: boolean; message: string }> {
-    const response = await authFetch(`${API_BASE}/api/billing/subscriptions/reactivate`, {
+    const response = await authFetch(`${API_BASE}/billing/subscriptions/reactivate`, {
       method: 'POST',
     });
 
@@ -240,7 +240,7 @@ export const billingService = {
    * Get available credit packs
    */
   async getCreditPacks(): Promise<CreditPack[]> {
-    const response = await fetch(`${API_BASE}/api/billing/credit-packs`);
+    const response = await fetch(`${API_BASE}/billing/credit-packs`);
 
     if (!response.ok) {
       throw new Error('Failed to get credit packs');
@@ -258,7 +258,7 @@ export const billingService = {
       return pricingConfigCache;
     }
 
-    const response = await fetch(`${API_BASE}/api/billing/pricing`);
+    const response = await fetch(`${API_BASE}/billing/pricing`);
 
     if (!response.ok) {
       throw new Error('Failed to get pricing config');
@@ -273,7 +273,7 @@ export const billingService = {
    * Create checkout session for credit pack purchase
    */
   async createCreditPackCheckout(packId: string): Promise<CheckoutResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/credit-packs/checkout`, {
+    const response = await authFetch(`${API_BASE}/billing/credit-packs/checkout`, {
       method: 'POST',
       body: JSON.stringify({ pack_id: packId }),
     });
@@ -294,7 +294,7 @@ export const billingService = {
     pack_id?: string;
     metadata?: Record<string, unknown>;
   }): Promise<GatewayOrderResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/usdt/orders`, {
+    const response = await authFetch(`${API_BASE}/billing/usdt/orders`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -308,7 +308,7 @@ export const billingService = {
   },
 
   async getUsdtOrder(orderId: string): Promise<GatewayOrderResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/usdt/orders/${orderId}`);
+    const response = await authFetch(`${API_BASE}/billing/usdt/orders/${orderId}`);
 
     if (!response.ok) {
       const error = await response.json();
@@ -319,7 +319,7 @@ export const billingService = {
   },
 
   async submitUsdtOrderTx(orderId: string, tx_hash: string): Promise<GatewayOrderResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/usdt/orders/${orderId}/submit`, {
+    const response = await authFetch(`${API_BASE}/billing/usdt/orders/${orderId}/submit`, {
       method: 'POST',
       body: JSON.stringify({ tx_hash }),
     });
@@ -333,7 +333,7 @@ export const billingService = {
   },
 
   async refreshUsdtOrder(orderId: string): Promise<GatewayOrderResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/usdt/orders/${orderId}/refresh`, {
+    const response = await authFetch(`${API_BASE}/billing/usdt/orders/${orderId}/refresh`, {
       method: 'POST',
     });
 
@@ -358,7 +358,7 @@ export const billingService = {
     description?: string;
     metadata?: Record<string, unknown>;
   }): Promise<GatewayOrderResponse> {
-    const response = await authFetch(`${API_BASE}/api/billing/telegram-stars/orders`, {
+    const response = await authFetch(`${API_BASE}/billing/telegram-stars/orders`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -376,7 +376,7 @@ export const billingService = {
     payload?: { title?: string; description?: string }
   ): Promise<TelegramInvoiceLinkResponse> {
     const response = await authFetch(
-      `${API_BASE}/api/billing/telegram-stars/orders/${orderId}/invoice-link`,
+      `${API_BASE}/billing/telegram-stars/orders/${orderId}/invoice-link`,
       {
         method: 'POST',
         body: JSON.stringify(payload || {}),
@@ -393,7 +393,7 @@ export const billingService = {
 
   async getTelegramStarsOrder(orderId: string): Promise<GatewayOrderResponse> {
     const response = await authFetch(
-      `${API_BASE}/api/billing/telegram-stars/orders/${orderId}`
+      `${API_BASE}/billing/telegram-stars/orders/${orderId}`
     );
 
     if (!response.ok) {
@@ -410,7 +410,7 @@ export const billingService = {
    * Get detailed credit balance breakdown
    */
   async getCreditBalance(): Promise<CreditBalance> {
-    const response = await authFetch(`${API_BASE}/api/billing/credits/balance`);
+    const response = await authFetch(`${API_BASE}/billing/credits/balance`);
 
     if (!response.ok) {
       const error = await response.json();
@@ -427,7 +427,7 @@ export const billingService = {
    */
   async getPaymentHistory(limit = 20, offset = 0): Promise<PaymentHistoryResponse> {
     const response = await authFetch(
-      `${API_BASE}/api/billing/history?limit=${limit}&offset=${offset}`
+      `${API_BASE}/billing/history?limit=${limit}&offset=${offset}`
     );
 
     if (!response.ok) {
@@ -475,7 +475,7 @@ export const billingService = {
     description: string;
     order_id?: string;
   }): Promise<{ id: string; status: string }> {
-    const resp = await authFetch(`${API_BASE}/api/billing/support`, {
+    const resp = await authFetch(`${API_BASE}/billing/support`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -487,7 +487,7 @@ export const billingService = {
   },
 
   async listMyTickets(): Promise<SupportTicket[]> {
-    const resp = await authFetch(`${API_BASE}/api/billing/support`);
+    const resp = await authFetch(`${API_BASE}/billing/support`);
     if (!resp.ok) throw new Error('Failed to load tickets');
     return resp.json();
   },

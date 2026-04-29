@@ -109,6 +109,7 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_admin_user_id: Optional[str] = None
     telegram_bot_username: Optional[str] = None
+    telegram_bot_webhook_secret: Optional[str] = None
 
     admin_password: Optional[str] = None
     admin_emails: list[str] = ["admin@roxy.ai"]
@@ -210,6 +211,7 @@ ENV_TO_SETTINGS_MAP = {
     "LIVEKIT_API_SECRET": "livekit_api_secret",
     "LIVEKIT_WS_URL": "livekit_ws_url",
     "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
+    "TELEGRAM_BOT_WEBHOOK_SECRET": "telegram_bot_webhook_secret",
     "ELEVENLABS_BASE_URL": "elevenlabs_base_url",
     "SORA_API_KEY": "sora_api_key",
     "SORA_BASE_URL": "sora_base_url",

@@ -11,8 +11,11 @@ from app.core.auth_cookies import set_auth_cookies
 from app.core.config import get_settings
 from app.models import BaseResponse, BlogPostCreate, BlogPostUpdate
 from app.services.auth_service import jwt_service
+from app.services.credit_service import credit_service
+from app.services.database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
+db_svc = DatabaseService()
 
 router = APIRouter(tags=["integration"])
 
@@ -309,19 +312,30 @@ async def telegram_auth(request: Request, response: Response, data: dict[str, An
     user_id = f"telegram_{tg_user_id}"
     email = f"{tg_user_id}@telegram.roxy.ai"
     is_admin = False
+
+    user = await db_svc.get_user_by_id(user_id)
+    is_new_user = False
+    if not user:
+        user = await db_svc.create_user(user_id=user_id, email=email, display_name=display_name)
+        is_new_user = True
+        try:
+            await credit_service.grant_signup_bonus(user.id)
+            user = await db_svc.get_user_by_id(user_id) or user
+        except Exception as exc:
+            logger.warning(f"Failed to grant signup bonus for Telegram user {user.id}: {exc}")
     
     access_token = jwt_service.create_access_token(user_id, email, is_admin=is_admin)
     refresh_token = jwt_service.create_refresh_token(user_id)
 
     set_auth_cookies(response, access_token, refresh_token)
 
-    user = {
-        "id": user_id,
-        "email": email,
-        "display_name": display_name,
+    user_data = {
+        "id": user.id,
+        "email": user.email,
+        "display_name": user.display_name or display_name,
         "avatar_url": photo_url,
-        "subscription_tier": "free",
-        "credits": 100,
+        "subscription_tier": user.tier or "free",
+        "credits": float(user.credits or 0),
         "telegram_id": tg_user_id,
         "telegram_username": username,
     }
@@ -331,8 +345,8 @@ async def telegram_auth(request: Request, response: Response, data: dict[str, An
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": user,
-        "is_new_user": True,
+        "user": user_data,
+        "is_new_user": is_new_user,
     }
 
 

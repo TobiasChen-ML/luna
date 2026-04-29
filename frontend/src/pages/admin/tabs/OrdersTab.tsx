@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Loader2, RefreshCw, X } from 'lucide-react';
+import { Search, Eye, Loader2, RefreshCw, X, Star } from 'lucide-react';
 import { api } from '@/services/api';
 
 interface Order {
@@ -13,9 +13,33 @@ interface Order {
   created_at: string;
 }
 
+interface TelegramStarAmount {
+  amount?: number;
+  nanostar_amount?: number;
+}
+
+interface TelegramStarTransaction {
+  id?: string;
+  amount?: TelegramStarAmount;
+  date?: number;
+  source?: Record<string, unknown>;
+  receiver?: Record<string, unknown>;
+  title?: string;
+  payload?: string;
+  invoice_payload?: string;
+  description?: string;
+}
+
+interface TelegramStarsAdminData {
+  balance?: TelegramStarAmount;
+  transactions?: TelegramStarTransaction[];
+}
+
 export default function OrdersTab() {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [starsLoading, setStarsLoading] = useState(false);
+  const [starsData, setStarsData] = useState<TelegramStarsAdminData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -28,11 +52,25 @@ export default function OrdersTab() {
     try {
       const response = await api.get('/admin/api/orders');
       setOrders(response.data || []);
+      await fetchTelegramStars();
     } catch (error) {
       console.error('Failed to fetch orders:', error);
       setMessage({ type: 'error', text: '加载订单失败' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTelegramStars = async () => {
+    setStarsLoading(true);
+    try {
+      const response = await api.get('/admin/api/telegram-stars', { params: { limit: 20 } });
+      setStarsData(response.data || null);
+    } catch (error) {
+      console.error('Failed to fetch Telegram Stars:', error);
+      setMessage({ type: 'error', text: '加载 Telegram Stars 数据失败' });
+    } finally {
+      setStarsLoading(false);
     }
   };
 
@@ -62,6 +100,34 @@ export default function OrdersTab() {
     }
   };
 
+  const formatStarsAmount = (amount?: TelegramStarAmount) => {
+    if (!amount) return '0';
+    const whole = Number(amount.amount || 0);
+    const nano = Number(amount.nanostar_amount || 0);
+    const total = whole + nano / 1_000_000_000;
+    return total.toLocaleString(undefined, { maximumFractionDigits: 9 });
+  };
+
+  const getTransactionDirection = (tx: TelegramStarTransaction) => {
+    if (tx.source) return '收入';
+    if (tx.receiver) return '支出';
+    return '交易';
+  };
+
+  const getTransactionParty = (tx: TelegramStarTransaction) => {
+    const party = tx.source || tx.receiver;
+    if (!party) return '-';
+    const type = String(party.type || '');
+    const user = party.user as Record<string, unknown> | undefined;
+    if (user?.username) return `@${String(user.username)}`;
+    if (user?.id) return String(user.id);
+    return type || '-';
+  };
+
+  const getTransactionPayload = (tx: TelegramStarTransaction) => (
+    tx.payload || tx.invoice_payload || tx.title || tx.description || '-'
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -78,7 +144,7 @@ export default function OrdersTab() {
           <p className="text-zinc-400 mt-1">查看和管理支付订单</p>
         </div>
         <button onClick={fetchOrders} className="p-2 hover:bg-zinc-800 rounded-lg">
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={`w-4 h-4 ${loading || starsLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
@@ -90,6 +156,71 @@ export default function OrdersTab() {
           <button onClick={() => setMessage(null)} className="ml-auto"><X className="w-4 h-4" /></button>
         </div>
       )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
+        <div className="bg-gradient-to-br from-amber-500/20 via-zinc-900 to-zinc-900 border border-amber-500/30 rounded-xl p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-amber-400/15 text-amber-300">
+              <Star className="w-6 h-6 fill-current" />
+            </div>
+            <div>
+              <p className="text-sm text-zinc-400">Telegram Stars 余额</p>
+              <p className="text-3xl font-bold text-white">
+                {starsLoading ? '...' : formatStarsAmount(starsData?.balance)}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={fetchTelegramStars}
+            className="mt-4 w-full px-4 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded-lg text-sm text-amber-100"
+          >
+            刷新 Stars
+          </button>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Telegram Stars 最近交易</h3>
+              <p className="text-xs text-zinc-500">来自 Telegram Bot API，不依赖本地入账记录</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-zinc-800/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">方向</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">Stars</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">来源/去向</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">Payload</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">时间</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {(starsData?.transactions || []).map((tx, index) => (
+                  <tr key={tx.id || index} className="hover:bg-zinc-800/30">
+                    <td className="px-4 py-3 text-zinc-300">{getTransactionDirection(tx)}</td>
+                    <td className="px-4 py-3 text-amber-200 font-semibold">{formatStarsAmount(tx.amount)}</td>
+                    <td className="px-4 py-3 text-zinc-400">{getTransactionParty(tx)}</td>
+                    <td className="px-4 py-3 text-zinc-400 font-mono text-xs max-w-xs truncate" title={getTransactionPayload(tx)}>
+                      {getTransactionPayload(tx)}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400 text-sm">
+                      {tx.date ? new Date(tx.date * 1000).toLocaleString() : '-'}
+                    </td>
+                  </tr>
+                ))}
+                {!starsLoading && (starsData?.transactions || []).length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-500">暂无 Telegram Stars 交易</td></tr>
+                )}
+                {starsLoading && (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-500">加载中...</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
       <div className="flex items-center gap-4">
         <div className="flex-1 relative">

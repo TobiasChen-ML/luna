@@ -27,6 +27,8 @@ interface CycleConfig {
 }
 
 const plans: Plan[] = [{ tier: 'premium', name: 'Premium', monthlyCredits: 100 }];
+const STAR_USD_CENTS = 2.04;
+const usdCentsToStars = (priceCents: number) => Math.max(1, Math.round(priceCents / STAR_USD_CENTS));
 
 const cycleConfig: Record<SubscriptionCycle, CycleConfig> = {
   '1m': {
@@ -60,13 +62,14 @@ const cycleConfig: Record<SubscriptionCycle, CycleConfig> = {
 
 export function SubscriptionsPage() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { isTma } = useTelegram();
+  const { isAuthenticated, refreshUser } = useAuth();
+  const { isTma, webApp } = useTelegram();
 
   const [selectedTier] = useState<Plan['tier']>('premium');
   const [billingCycle, setBillingCycle] = useState<SubscriptionCycle>('12m');
   const [loadingMethod, setLoadingMethod] = useState<'telegram' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const [pricingConfig, setPricingConfig] = useState<BillingPricingConfig | null>(null);
 
@@ -77,6 +80,7 @@ export function SubscriptionsPage() {
 
   const selectedCycle = cycleConfig[billingCycle];
   const selectedPrice = selectedCycle.priceCents;
+  const selectedStars = usdCentsToStars(selectedPrice);
   const selectedPeriodLabel = selectedCycle.label;
   const saleEnds = '07 Min 10 Sec';
   const cycleOrder: SubscriptionCycle[] = ['12m', '3m', '1m'];
@@ -107,6 +111,7 @@ export function SubscriptionsPage() {
 
   const handleTelegramCheckout = async () => {
     setError(null);
+    setSuccess(null);
     if (!ensureAuth()) return;
 
     if (!isTma) {
@@ -116,9 +121,8 @@ export function SubscriptionsPage() {
 
     try {
       setLoadingMethod('telegram');
-      const amountStars = selectedPrice;
       const order = await billingService.createTelegramStarsOrder({
-        amount_stars: amountStars,
+        amount_stars: selectedStars,
         credits: selectedCycle.monthlyCredits,
         product_type: 'subscription',
         tier: selectedTier,
@@ -138,7 +142,28 @@ export function SubscriptionsPage() {
         description: selectedCycle.checkoutDescription,
       });
 
-      window.open(invoice.invoice_link, '_blank', 'noopener,noreferrer');
+      if (webApp) {
+        webApp.openInvoice(invoice.invoice_link, async (status) => {
+          if (status === 'paid') {
+            setError(null);
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+              const latestOrder = await billingService.getTelegramStarsOrder(order.order_id);
+              if (latestOrder.status === 'paid') break;
+              await new Promise((resolve) => setTimeout(resolve, 1200));
+            }
+            await refreshUser();
+            setSuccess('Payment successful. Subscription is now active.');
+            return;
+          }
+          if (status === 'cancelled') {
+            setError('Payment cancelled.');
+            return;
+          }
+          setError('Payment failed. Please try again.');
+        });
+      } else {
+        window.location.href = invoice.invoice_link;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create Telegram Stars payment');
     } finally {
@@ -164,6 +189,11 @@ export function SubscriptionsPage() {
           {error && (
             <div className="mx-auto mt-5 max-w-2xl rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
               {error}
+            </div>
+          )}
+          {success && (
+            <div className="mx-auto mt-5 max-w-2xl rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+              {success}
             </div>
           )}
 
@@ -202,6 +232,9 @@ export function SubscriptionsPage() {
                           )}
                           <div className="text-4xl font-extrabold leading-none text-white">{formatCents(cfg.priceCents / (cycle === '12m' ? 12 : cycle === '3m' ? 3 : 1))}</div>
                           <div className="text-xs text-zinc-400">/month</div>
+                          <div className="mt-2 text-xs font-semibold text-amber-200">
+                            {usdCentsToStars(cfg.priceCents).toLocaleString()} Stars total
+                          </div>
                         </div>
                       </div>
                     </button>
@@ -242,7 +275,7 @@ export function SubscriptionsPage() {
               </div>
 
               <p className="mt-4 text-xs text-zinc-500 relative z-10">
-                Selected: {selectedPlan.name} {selectedPeriodLabel}. Amount: {billingService.formatPrice(selectedPrice)}.
+                Selected: {selectedPlan.name} {selectedPeriodLabel}. Amount: {billingService.formatPrice(selectedPrice)} / {selectedStars.toLocaleString()} Stars.
               </p>
               <p className="mt-1 text-xs text-zinc-500 relative z-10">
                 Extra credit packs are available separately and never expire.

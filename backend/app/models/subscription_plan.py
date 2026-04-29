@@ -30,7 +30,7 @@ class SubscriptionPlan(Base):
 
 
 DEFAULT_SUBSCRIPTION_PLANS = [
-    {"period": "1m", "price_cents": 1299, "monthly_equivalent_cents": 1299, "discount_percent": 0, "display_order": 1},
-    {"period": "3m", "price_cents": 1797, "monthly_equivalent_cents": 599, "discount_percent": 54, "display_order": 2},
+    {"period": "1m", "price_cents": 1399, "monthly_equivalent_cents": 1399, "discount_percent": 0, "display_order": 1},
+    {"period": "3m", "price_cents": 2697, "monthly_equivalent_cents": 899, "discount_percent": 35, "display_order": 2},
     {"period": "12m", "price_cents": 4788, "monthly_equivalent_cents": 399, "discount_percent": 70, "display_order": 3},
 ]

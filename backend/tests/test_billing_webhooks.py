@@ -368,6 +368,48 @@ class TestTelegramStarsWebhook:
             webhook_payload=payload,
         )
 
+    def test_telegram_stars_pre_checkout_answers_query(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+        from app.routers import billing
+
+        with patch.object(webhook_service, "verify_telegram_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.telegram_bot_token = "test_bot_token"
+                mock_get_settings.return_value = mock_settings
+                with patch.object(
+                    billing.billing_svc,
+                    "get_telegram_stars_order",
+                    new_callable=AsyncMock,
+                ) as mock_get_order:
+                    with patch.object(
+                        billing.billing_svc,
+                        "answer_telegram_pre_checkout_query",
+                        new_callable=AsyncMock,
+                    ) as mock_answer:
+                        mock_get_order.return_value = {
+                            "order_id": "stars_order_001",
+                            "status": "pending",
+                            "amount_stars": 1,
+                        }
+                        payload = {
+                            "pre_checkout_query": {
+                                "id": "pre_checkout_001",
+                                "invoice_payload": "stars:stars_order_001",
+                                "currency": "XTR",
+                                "total_amount": 1,
+                            },
+                            "auth_date": int(time.time()),
+                        }
+                        response = client.post("/api/billing/webhooks/telegram-stars", json=payload)
+
+        assert response.status_code == 200
+        mock_get_order.assert_awaited_once_with("stars_order_001")
+        mock_answer.assert_awaited_once_with(
+            pre_checkout_query_id="pre_checkout_001",
+            ok=True,
+        )
+
     def test_telegram_stars_failed_and_cancelled_webhooks_update_order(self, client: TestClient):
         from app.services.auth_service import webhook_service
         from app.routers import billing

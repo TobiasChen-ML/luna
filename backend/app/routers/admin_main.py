@@ -2144,6 +2144,82 @@ async def list_orders_api(
     return orders
 
 
+async def _telegram_bot_api_post(method: str, payload: dict[str, Any]) -> dict[str, Any]:
+    import asyncio
+    import json
+    import urllib.error
+    import urllib.request
+
+    from app.core.config import get_config_value
+
+    bot_token = await get_config_value("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        raise HTTPException(status_code=503, detail="Telegram bot token not configured")
+
+    api_url = f"https://api.telegram.org/bot{bot_token}/{method}"
+    body = json.dumps(payload).encode("utf-8")
+
+    def _request() -> dict[str, Any]:
+        req = urllib.request.Request(
+            api_url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        result = await asyncio.to_thread(_request)
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Telegram Bot API HTTP {exc.code}: {error_body}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Telegram Bot API request failed: {exc}") from exc
+
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=502,
+            detail=result.get("description") or "Telegram Bot API returned failure",
+        )
+
+    return result
+
+
+@router.get("/api/telegram-stars")
+async def get_telegram_stars_admin(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    safe_limit = min(max(limit, 1), 100)
+    safe_offset = max(offset, 0)
+
+    balance_result = await _telegram_bot_api_post("getMyStarBalance", {})
+    transactions_result = await _telegram_bot_api_post(
+        "getStarTransactions",
+        {"limit": safe_limit, "offset": safe_offset},
+    )
+
+    balance = balance_result.get("result") or {}
+    transactions_payload = transactions_result.get("result") or {}
+    if isinstance(transactions_payload, dict):
+        transactions = transactions_payload.get("transactions") or []
+    else:
+        transactions = []
+
+    return {
+        "balance": balance,
+        "transactions": transactions,
+        "limit": safe_limit,
+        "offset": safe_offset,
+    }
+
+
 config_router = APIRouter(prefix="/api/admin/api/config", tags=["admin-config"])
 
 SENSITIVE_CONFIG_KEYS = frozenset([

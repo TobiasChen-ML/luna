@@ -24,6 +24,11 @@ WEBHOOK_TIMESTAMP_TOLERANCE = 300
 
 
 MAX_CREDITS_PER_TRANSACTION = 10000
+STAR_USD_CENTS = 2.04
+
+
+def _usd_cents_to_stars(price_cents: int) -> int:
+    return max(1, int((int(price_cents) / STAR_USD_CENTS) + 0.5))
 
 
 def _extract_order_id_from_telegram_payload(payload: dict[str, Any]) -> Optional[str]:
@@ -285,8 +290,6 @@ async def create_telegram_stars_order(
     user = Depends(get_current_user_required),
 ) -> dict[str, Any]:
     amount_stars = data.amount_stars if data.amount_stars is not None else data.amount
-    if amount_stars is None:
-        raise HTTPException(status_code=400, detail="amount_stars (or amount) is required")
 
     metadata = dict(data.metadata or {})
     pack_key = data.pack_id or data.product_id
@@ -311,22 +314,26 @@ async def create_telegram_stars_order(
             tier = SubscriptionTier.PREMIUM.value
         if tier not in {SubscriptionTier.PREMIUM.value, SubscriptionTier.PRO.value}:
             raise HTTPException(status_code=400, detail="tier must be premium or pro")
-        if billing_period not in {"1m", "3m", "12m", "month", "year"}:
-            raise HTTPException(status_code=400, detail="billing_period must be 1m, 3m, 12m, month, or year")
-        period_map = {"month": "1m", "year": "12m"}
+        if billing_period not in {"1m", "3m", "12m", "month", "quarter", "year"}:
+            raise HTTPException(status_code=400, detail="billing_period must be 1m, 3m, 12m, month, quarter, or year")
+        period_map = {"month": "1m", "quarter": "3m", "year": "12m"}
         billing_period = period_map.get(billing_period, billing_period)
-        if credits is None:
-            config = await credit_service.get_config()
-            period_months = {"1m": 1, "3m": 3, "12m": 12}[billing_period]
-            credits = int(float(config.get("premium_monthly_credits", 100)) * period_months)
-    elif credits is None:
+        plan = await pricing_service.get_subscription_plan(billing_period)
+        if not plan or not plan.is_active:
+            raise HTTPException(status_code=400, detail="subscription plan not available")
+        amount_stars = _usd_cents_to_stars(plan.price_cents)
+        config = await credit_service.get_config()
+        credits = int(float(config.get("premium_monthly_credits", 100) or 100))
+    else:
+        matched = None
         if pack_key:
             packs = await pricing_service.get_credit_packs(active_only=True)
             pack_map = {p.pack_id: p for p in packs}
             matched = pack_map.get(pack_key)
             if matched:
                 credits = int((matched.credits or 0) + (matched.bonus_credits or 0))
-            elif pack_key.startswith("credits_"):
+                amount_stars = _usd_cents_to_stars(matched.price_cents)
+            elif credits is None and pack_key.startswith("credits_"):
                 # Backward-compatible fallback for legacy product ids like credits_50.
                 try:
                     credits = int(pack_key.split("_", 1)[1])
@@ -334,6 +341,8 @@ async def create_telegram_stars_order(
                     credits = None
     if credits is None or credits <= 0:
         raise HTTPException(status_code=400, detail="credits is required and must be > 0")
+    if amount_stars is None:
+        raise HTTPException(status_code=400, detail="amount_stars (or amount) is required")
 
     metadata.update(
         {
@@ -639,6 +648,7 @@ async def telegram_stars_webhook(
         order_id = _extract_order_id_from_telegram_payload(payload)
         charge_id = payload.get("charge_id") or payload.get("payment_id")
         successful_payment = payload.get("successful_payment")
+        pre_checkout_query = payload.get("pre_checkout_query")
         message = payload.get("message")
         if not isinstance(successful_payment, dict) and isinstance(message, dict):
             nested_payment = message.get("successful_payment")
@@ -650,6 +660,53 @@ async def telegram_stars_webhook(
                 or successful_payment.get("telegram_payment_charge_id")
                 or successful_payment.get("provider_payment_charge_id")
             )
+        if status == "pre_checkout":
+            if not isinstance(pre_checkout_query, dict):
+                raise HTTPException(status_code=400, detail="pre_checkout_query required")
+
+            pre_checkout_query_id = pre_checkout_query.get("id")
+            if not pre_checkout_query_id:
+                raise HTTPException(status_code=400, detail="pre_checkout_query id required")
+
+            if not order_id:
+                await billing_svc.answer_telegram_pre_checkout_query(
+                    pre_checkout_query_id=str(pre_checkout_query_id),
+                    ok=False,
+                    error_message="Payment order is missing.",
+                )
+                raise HTTPException(status_code=400, detail="order_id required")
+
+            order = await billing_svc.get_telegram_stars_order(order_id)
+            expected_amount = int(order.get("amount_stars", 0)) if order else 0
+            actual_amount = int(pre_checkout_query.get("total_amount", 0) or 0)
+            currency = str(pre_checkout_query.get("currency") or "").upper()
+            if not order or order.get("status") != "pending":
+                await billing_svc.answer_telegram_pre_checkout_query(
+                    pre_checkout_query_id=str(pre_checkout_query_id),
+                    ok=False,
+                    error_message="Payment order is no longer available.",
+                )
+            elif currency and currency != "XTR":
+                await billing_svc.answer_telegram_pre_checkout_query(
+                    pre_checkout_query_id=str(pre_checkout_query_id),
+                    ok=False,
+                    error_message="Unsupported payment currency.",
+                )
+            elif actual_amount and actual_amount != expected_amount:
+                await billing_svc.answer_telegram_pre_checkout_query(
+                    pre_checkout_query_id=str(pre_checkout_query_id),
+                    ok=False,
+                    error_message="Payment amount does not match this order.",
+                )
+            else:
+                await billing_svc.answer_telegram_pre_checkout_query(
+                    pre_checkout_query_id=str(pre_checkout_query_id),
+                    ok=True,
+                )
+
+            logger.info(f"Telegram Stars pre-checkout processed: order_id={order_id}")
+            return BaseResponse(success=True, message="Telegram Stars pre-checkout processed")
+
         if not order_id:
             logger.warning(f"Telegram Stars webhook missing order_id/payload: {payload}")
             raise HTTPException(status_code=400, detail="order_id required")

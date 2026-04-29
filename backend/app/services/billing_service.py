@@ -641,6 +641,25 @@ class BillingService:
             "raw": api_result,
         }
 
+    async def answer_telegram_pre_checkout_query(
+        self,
+        pre_checkout_query_id: str,
+        ok: bool,
+        error_message: Optional[str] = None,
+    ) -> dict[str, Any]:
+        bot_token = await get_config_value("TELEGRAM_BOT_TOKEN", self.settings.telegram_bot_token)
+        if not bot_token:
+            raise ValueError("Telegram bot token not configured")
+
+        payload: dict[str, Any] = {
+            "pre_checkout_query_id": pre_checkout_query_id,
+            "ok": ok,
+        }
+        if not ok and error_message:
+            payload["error_message"] = error_message
+
+        return await self._telegram_api_post(bot_token, "answerPreCheckoutQuery", payload)
+
     async def submit_telegram_stars_order(self, order_id: str, payment_id: str) -> dict:
         # Manual admin fallback. Uses the same paid flow as webhook to keep idempotency rules identical.
         return await self.mark_telegram_stars_order_paid(

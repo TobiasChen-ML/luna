@@ -14,8 +14,11 @@ interface CreditPackModalProps {
   onClose: () => void;
 }
 
+const STAR_USD_CENTS = 2.04;
+const usdCentsToStars = (priceCents: number) => Math.max(1, Math.round(priceCents / STAR_USD_CENTS));
+
 export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
-  const { isTma } = useTelegram();
+  const { isTma, webApp } = useTelegram();
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
       setLoading(true);
       setError(null);
       const data = await billingService.getCreditPacks();
-      setPacks(data);
+      setPacks(data.filter((pack) => pack.id !== 'pack_test_1star'));
     } catch (err) {
       setError('Failed to load credit packs');
       console.error(err);
@@ -50,8 +53,9 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
     try {
       setPurchasing(`${pack.id}:telegram`);
       setError(null);
+      const amountStars = usdCentsToStars(pack.price_cents);
       const order = await billingService.createTelegramStarsOrder({
-        amount_stars: pack.price_cents,
+        amount_stars: amountStars,
         credits: pack.credits,
         product_type: 'credit_pack',
         pack_id: pack.id,
@@ -66,10 +70,25 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
         title: `${pack.name} Credit Pack`,
         description: pack.description || `${pack.credits} credits`,
       });
-      window.open(invoice.invoice_link, '_blank', 'noopener,noreferrer');
+      if (webApp) {
+        webApp.openInvoice(invoice.invoice_link, (status) => {
+          setPurchasing(null);
+          if (status === 'paid') {
+            setError(null);
+            onClose();
+            return;
+          }
+          if (status === 'cancelled') {
+            setError('Payment cancelled.');
+            return;
+          }
+          setError('Payment failed. Please try again.');
+        });
+      } else {
+        window.location.href = invoice.invoice_link;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start Telegram Stars payment');
-    } finally {
       setPurchasing(null);
     }
   };
@@ -77,7 +96,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -85,9 +104,9 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg mx-4 shadow-2xl">
+      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-zinc-700">
+        <div className="shrink-0 flex items-center justify-between p-6 border-b border-zinc-700">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-pink-500/20">
               <Coins className="w-5 h-5 text-pink-400" />
@@ -103,7 +122,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-pink-400 animate-spin" />
@@ -160,6 +179,9 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
                       <div className="text-2xl font-bold text-white mb-3">
                         {billingService.formatPrice(pack.price_cents, pack.currency)}
                       </div>
+                      <div className="mb-3 text-xs font-semibold text-amber-200">
+                        {usdCentsToStars(pack.price_cents).toLocaleString()} Stars
+                      </div>
                       <Button
                         size="sm"
                         onClick={() => handleTelegramPurchase(pack)}
@@ -186,7 +208,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-zinc-700 text-center">
+        <div className="shrink-0 border-t border-zinc-700 p-4 text-center">
           <p className="text-xs text-zinc-500">
             Purchased credits never expire. Digital purchases are completed with Telegram Stars.
           </p>
