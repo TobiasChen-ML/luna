@@ -245,8 +245,12 @@ class TestMediaRouter:
         assert data["task_id"] == "task_pose_001"
         controlnet = mock_provider.img2img_async.await_args.kwargs["controlnet"]
         assert controlnet.model_name == "controlnet-openpose-sdxl-1.0"
-        assert controlnet.preprocessor == "openpose"
+        assert controlnet.preprocessor == "dwpose"
+        assert controlnet.strength == 1.0
         assert controlnet.guidance_end == 1.0
+        assert mock_provider.img2img_async.await_args.kwargs["strength"] == 0.75
+        ip_adapters = mock_provider.img2img_async.await_args.kwargs["ip_adapters"]
+        assert ip_adapters[0].strength == 0.25
     
     def test_generate_video_wan(self, client: TestClient):
         response = client.post("/api/images/generate-video-wan-character", json={

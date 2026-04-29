@@ -239,9 +239,9 @@ class GeneratePoseMatureRequest(BaseModel):
     height: int = Field(default=1024, ge=128, le=2048)
     steps: int = Field(default=20, ge=1, le=100)
     guidance_scale: float = Field(default=6.0, ge=1.0, le=30.0)
-    strength: float = Field(default=0.45, ge=0.0, le=1.0)
-    ip_adapter_strength: float = Field(default=0.45, ge=0.0, le=1.0)
-    controlnet_strength: float = Field(default=0.65, ge=0.0, le=1.0)
+    strength: float = Field(default=0.75, ge=0.0, le=1.0)
+    ip_adapter_strength: float = Field(default=0.25, ge=0.0, le=1.0)
+    controlnet_strength: float = Field(default=1.0, ge=0.0, le=1.0)
     negative_prompt: Optional[str] = None
 
 
@@ -623,7 +623,7 @@ async def generate_pose_mature(
             model_name="controlnet-openpose-sdxl-1.0",
             image_base64=pose_image_base64,
             strength=data.controlnet_strength,
-            preprocessor="openpose",
+            preprocessor="dwpose",
             guidance_start=0.0,
             guidance_end=1.0,
         )
