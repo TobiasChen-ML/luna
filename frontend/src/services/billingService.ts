@@ -305,7 +305,7 @@ export const billingService = {
 
   async createCryptoOrder(payload: {
     asset: 'USDT' | 'USDC';
-    network: 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+    network: 'POLYGON';
     product_type: 'credit_pack' | 'subscription';
     pack_id?: string;
     tier?: SubscriptionTier;

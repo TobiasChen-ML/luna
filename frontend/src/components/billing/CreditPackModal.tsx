@@ -16,10 +16,10 @@ interface CreditPackModalProps {
 const STAR_USD_CENTS = 2.04;
 const usdCentsToStars = (priceCents: number) => Math.max(1, Math.round(priceCents / STAR_USD_CENTS));
 type CryptoAsset = 'USDT' | 'USDC';
-type CryptoNetwork = 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+type CryptoNetwork = 'POLYGON';
 const cryptoNetworksByAsset: Record<CryptoAsset, CryptoNetwork[]> = {
-  USDT: ['TRC20', 'POLYGON', 'BEP20', 'ERC20'],
-  USDC: ['POLYGON', 'BEP20', 'ERC20', 'SOLANA'],
+  USDT: ['POLYGON'],
+  USDC: ['POLYGON'],
 };
 
 export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
@@ -29,7 +29,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>('USDT');
-  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('TRC20');
+  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('POLYGON');
   const [cryptoOrder, setCryptoOrder] = useState<Awaited<ReturnType<typeof billingService.createCryptoOrder>> | null>(null);
   const [txHash, setTxHash] = useState('');
 
@@ -219,7 +219,7 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
                   >
                     {cryptoNetworksByAsset[selectedAsset].map((network) => (
                       <option key={network} value={network}>
-                        {network === 'POLYGON' ? 'Polygon' : network === 'SOLANA' ? 'Solana' : network}
+                        Polygon
                       </option>
                     ))}
                   </select>

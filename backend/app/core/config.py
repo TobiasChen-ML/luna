@@ -404,7 +404,7 @@ async def get_payment_config() -> dict[str, Any]:
             or await get_config_value("USDT_WEBHOOK_SECRET")
         ),
         "crypto_local_addresses_configured": {
-            "USDT_TRC20": await has_crypto_address("USDT", "TRC20"),
+            "USDT_POLYGON": await has_crypto_address("USDT", "POLYGON"),
             "USDC_POLYGON": await has_crypto_address("USDC", "POLYGON"),
         },
         "usdt_gateway_enabled": crypto_gateway_enabled.lower() == "true",

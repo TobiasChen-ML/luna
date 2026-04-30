@@ -291,7 +291,7 @@ async def create_usdt_order(
         return await billing_svc.create_crypto_order(
             user_id=user.id,
             asset="USDT",
-            network=data.network or "TRC20",
+            network=data.network or "POLYGON",
             product_type="credit_pack",
             pack_id=data.pack_id,
             metadata=data.metadata,

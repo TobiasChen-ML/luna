@@ -19,8 +19,8 @@ TELEGRAM_STARS_ORDER_TTL_SECONDS = 86400 * 7
 CRYPTO_ORDER_TTL_SECONDS = 86400 * 7
 CRYPTO_PAYMENT_ASSETS = {"USDT", "USDC"}
 CRYPTO_PAYMENT_NETWORKS_BY_ASSET = {
-    "USDT": {"TRC20", "ERC20", "BEP20", "POLYGON"},
-    "USDC": {"ERC20", "BEP20", "POLYGON", "SOLANA"},
+    "USDT": {"POLYGON"},
+    "USDC": {"POLYGON"},
 }
 CRYPTO_PAYMENT_NETWORKS = set().union(*CRYPTO_PAYMENT_NETWORKS_BY_ASSET.values())
 
@@ -497,12 +497,11 @@ class BillingService:
         from .credit_service import credit_service
 
         normalized_asset = (asset or "USDT").upper()
-        normalized_network = (network or "TRC20").upper()
+        normalized_network = (network or "POLYGON").upper()
         if normalized_asset not in CRYPTO_PAYMENT_ASSETS:
             raise ValueError("asset must be USDT or USDC")
         if normalized_network not in CRYPTO_PAYMENT_NETWORKS_BY_ASSET[normalized_asset]:
-            allowed = ", ".join(sorted(CRYPTO_PAYMENT_NETWORKS_BY_ASSET[normalized_asset]))
-            raise ValueError(f"network must be one of {allowed} for {normalized_asset}")
+            raise ValueError(f"network must be POLYGON for {normalized_asset}")
 
         normalized_product_type = (product_type or "credit_pack").lower()
         if normalized_product_type not in {"credit_pack", "subscription"}:
@@ -609,7 +608,7 @@ class BillingService:
         gateway_order = await self._create_local_crypto_order(
             order_id=order_id,
             asset="USDT",
-            network="TRC20",
+            network="POLYGON",
             amount_crypto=float(amount),
             expires_at=expires_at,
         )
@@ -618,7 +617,7 @@ class BillingService:
             "provider_order_id": order_id,
             "user_id": user_id,
             "asset": "USDT",
-            "network": "TRC20",
+            "network": "POLYGON",
             "amount_usd_cents": int(float(amount) * 100),
             "amount_crypto": float(amount),
             "credits": credits,
@@ -801,6 +800,8 @@ class BillingService:
     ) -> dict[str, Any]:
         normalized_asset = asset.upper()
         normalized_network = network.upper()
+        if normalized_network != "POLYGON":
+            raise ValueError(f"Local crypto payment only supports POLYGON, got {normalized_network}")
         payment_address = await self._get_local_crypto_payment_address(
             order_id=order_id,
             asset=normalized_asset,
@@ -867,13 +868,7 @@ class BillingService:
     def _build_crypto_payment_uri(asset: str, network: str, address: str, amount: float) -> str:
         amount_text = f"{float(amount):.6f}".rstrip("0").rstrip(".")
         query = f"asset={asset}&network={network}&amount={amount_text}"
-        if network == "TRC20":
-            return f"tron:{address}?{query}"
-        if network in {"ERC20", "BEP20", "POLYGON"}:
-            return f"ethereum:{address}?{query}"
-        if network == "SOLANA":
-            return f"solana:{address}?{query}"
-        return f"{network.lower()}:{address}?{query}"
+        return f"ethereum:{address}?{query}"
 
     async def create_telegram_stars_order(
         self,

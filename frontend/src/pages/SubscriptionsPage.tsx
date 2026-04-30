@@ -15,10 +15,10 @@ interface Plan {
 
 type SubscriptionCycle = '1m' | '3m' | '12m';
 type CryptoAsset = 'USDT' | 'USDC';
-type CryptoNetwork = 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+type CryptoNetwork = 'POLYGON';
 const cryptoNetworksByAsset: Record<CryptoAsset, CryptoNetwork[]> = {
-  USDT: ['TRC20', 'POLYGON', 'BEP20', 'ERC20'],
-  USDC: ['POLYGON', 'BEP20', 'ERC20', 'SOLANA'],
+  USDT: ['POLYGON'],
+  USDC: ['POLYGON'],
 };
 
 interface CycleConfig {
@@ -76,7 +76,7 @@ export function SubscriptionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>('USDT');
-  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('TRC20');
+  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('POLYGON');
   const [cryptoOrder, setCryptoOrder] = useState<Awaited<ReturnType<typeof billingService.createCryptoOrder>> | null>(null);
   const [txHash, setTxHash] = useState('');
 
@@ -346,7 +346,7 @@ export function SubscriptionsPage() {
                       >
                       {cryptoNetworksByAsset[selectedAsset].map((network) => (
                         <option key={network} value={network}>
-                          {network === 'POLYGON' ? 'Polygon' : network === 'SOLANA' ? 'Solana' : network}
+                          Polygon
                         </option>
                       ))}
                       </select>

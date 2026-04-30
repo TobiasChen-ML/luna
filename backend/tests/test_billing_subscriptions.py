@@ -210,7 +210,7 @@ class TestBillingSubscriptionEndpoints:
             return_value={
                 "order_id": "crypto_pack_1",
                 "asset": "USDT",
-                "network": "TRC20",
+                "network": "POLYGON",
                 "amount_crypto": 9.99,
                 "credits": 110,
                 "product_type": "credit_pack",
@@ -225,7 +225,7 @@ class TestBillingSubscriptionEndpoints:
             "/api/billing/crypto/orders",
             json={
                 "asset": "USDT",
-                "network": "TRC20",
+                "network": "POLYGON",
                 "product_type": "credit_pack",
                 "pack_id": "pack_100",
             },
@@ -236,7 +236,7 @@ class TestBillingSubscriptionEndpoints:
         assert data["order_id"] == "crypto_pack_1"
         call = mock_create.await_args.kwargs
         assert call["asset"] == "USDT"
-        assert call["network"] == "TRC20"
+        assert call["network"] == "POLYGON"
         assert call["product_type"] == "credit_pack"
         assert call["pack_id"] == "pack_100"
 
@@ -279,9 +279,6 @@ class TestBillingSubscriptionEndpoints:
     def test_crypto_order_rejects_unsupported_asset_network_pair(self, client, monkeypatch):
         from app.routers import billing
 
-        mock_create = AsyncMock(side_effect=ValueError("network must be one of BEP20, ERC20, POLYGON, SOLANA for USDC"))
-        monkeypatch.setattr(billing.billing_svc, "create_crypto_order", mock_create)
-
         response = client.post(
             "/api/billing/crypto/orders",
             json={
@@ -292,8 +289,8 @@ class TestBillingSubscriptionEndpoints:
             },
         )
 
-        assert response.status_code == 400
-        assert "USDC" in response.text
+        assert response.status_code == 422
+        assert "network must be POLYGON" in response.text
 
     @pytest.mark.asyncio
     async def test_local_crypto_order_uses_configured_address_pool(self, monkeypatch):
@@ -304,7 +301,7 @@ class TestBillingSubscriptionEndpoints:
             values = {
                 "CRYPTO_PAYMENT_GATEWAY_ENABLED": "false",
                 "USDT_PAYMENT_GATEWAY_ENABLED": "false",
-                "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_TRC20": "TWalletA, TWalletB",
+                "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_POLYGON": "0xWalletA, 0xWalletB",
             }
             return values.get(key, default)
 
@@ -314,7 +311,7 @@ class TestBillingSubscriptionEndpoints:
             order_id="00000000-0000-0000-0000-000000000001",
             user_id="user_001",
             asset="USDT",
-            network="TRC20",
+            network="POLYGON",
             amount_usd_cents=999,
             credits=100,
             product_type="credit_pack",
@@ -325,8 +322,8 @@ class TestBillingSubscriptionEndpoints:
         )
 
         assert order["gateway"] == "local"
-        assert order["payment_address"] == "TWalletB"
-        assert order["payment_uri"].startswith("tron:TWalletB?")
+        assert order["payment_address"] == "0xWalletB"
+        assert order["payment_uri"].startswith("ethereum:0xWalletB?")
         assert "amount=9.99" in order["payment_uri"]
 
     @pytest.mark.asyncio

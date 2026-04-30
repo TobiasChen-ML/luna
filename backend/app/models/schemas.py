@@ -291,7 +291,7 @@ class USDTOrderCreate(BaseModel):
 
 class CryptoOrderCreate(BaseModel):
     asset: str = "USDT"
-    network: str = "TRC20"
+    network: str = "POLYGON"
     product_type: str = "credit_pack"
     pack_id: str | None = None
     tier: str | None = None
@@ -310,8 +310,8 @@ class CryptoOrderCreate(BaseModel):
     @classmethod
     def normalize_network(cls, v: str):
         network = (v or "").upper()
-        if network not in {"TRC20", "ERC20", "BEP20", "POLYGON", "SOLANA"}:
-            raise ValueError("network must be TRC20, ERC20, BEP20, POLYGON, or SOLANA")
+        if network != "POLYGON":
+            raise ValueError("network must be POLYGON")
         return network
 
 

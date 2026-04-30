@@ -2,7 +2,7 @@ from fastapi import HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from typing import Optional
+from typing import Any, Optional
 import logging
 import uuid
 
@@ -72,6 +72,20 @@ def get_request_id(request: Request) -> str:
     return request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
 
 
+def _json_safe_validation_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    safe_errors: list[dict[str, Any]] = []
+    for error in errors:
+        safe_error = dict(error)
+        ctx = safe_error.get("ctx")
+        if isinstance(ctx, dict):
+            safe_error["ctx"] = {
+                key: str(value) if isinstance(value, Exception) else value
+                for key, value in ctx.items()
+            }
+        safe_errors.append(safe_error)
+    return safe_errors
+
+
 async def http_exception_handler(request: Request, exc: HTTPException):
     request_id = get_request_id(request)
     
@@ -92,7 +106,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     request_id = get_request_id(request)
-    errors = exc.errors()
+    errors = _json_safe_validation_errors(exc.errors())
     
     logger.warning(f"Validation error [{request_id}]: {errors}")
     
