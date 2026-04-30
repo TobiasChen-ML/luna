@@ -2,9 +2,11 @@ from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Query, Depends
 from typing import Any, Optional
 import uuid
+from pydantic import BaseModel, Field
 
 from app.models import BaseResponse, Task, TaskStatus
 from app.services.character_service import character_service
+from app.services.discover_comment_service import discover_comment_service
 from app.services.voice_service import VoiceService
 from app.core.dependencies import get_current_user_required, get_optional_user
 from app.models import User
@@ -26,6 +28,10 @@ _VOICE_PREVIEW_ALIASES: dict[str, str] = {
 }
 
 
+class DiscoverCommentCreate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+
+
 def _strip_mature(character: dict) -> dict:
     return {k: v for k, v in character.items() if k not in _MATURE_FIELDS}
 
@@ -40,6 +46,11 @@ def _resolve_preview_voice_inputs(raw_voice_id: str) -> tuple[str, str]:
     # Keep backwards compatibility: UI may send alias, db id, or provider voice id.
     normalized = (raw_voice_id or "").strip() or "default"
     return _VOICE_PREVIEW_ALIASES.get(normalized, normalized), normalized
+
+
+async def _with_discover_comment_counts(characters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts = await discover_comment_service.count_by_character_ids([char["id"] for char in characters])
+    return [{**char, "comment_count": counts.get(char["id"], 0)} for char in characters]
 
 
 @router.get("/official")
@@ -122,7 +133,7 @@ async def discover_characters(
             limit=limit,
             offset=offset,
         )
-        return characters  # authenticated — return full data
+        return await _with_discover_comment_counts(characters)  # authenticated — return full data
 
     characters = await character_service.discover_characters(
         top_category=top_category,
@@ -131,7 +142,46 @@ async def discover_characters(
         limit=limit,
         offset=offset,
     )
-    return characters
+    return await _with_discover_comment_counts(characters)
+
+
+@router.get("/{character_id}/comments")
+async def list_discover_comments(
+    request: Request,
+    character_id: str,
+) -> list[dict[str, Any]]:
+    character = await character_service.get_character_by_id(character_id)
+    if not character or not character.get("is_public"):
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    return await discover_comment_service.list_comments(character_id)
+
+
+@router.post("/{character_id}/comments")
+async def create_discover_comment(
+    request: Request,
+    character_id: str,
+    data: DiscoverCommentCreate,
+    user: User = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    text = data.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment text is required")
+
+    character = await character_service.get_character_by_id(character_id)
+    if not character or not character.get("is_public"):
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    author_name = getattr(user, "display_name", None) or getattr(user, "email", None) or "User"
+    if "@" in author_name:
+        author_name = author_name.split("@", 1)[0]
+
+    return await discover_comment_service.create_comment(
+        character_id=character_id,
+        user_id=user.id,
+        author_name=author_name,
+        text=text,
+    )
 
 
 @router.post("/ugc", response_model=dict[str, Any])

@@ -25,43 +25,19 @@ interface DiscoverCharacter {
   description?: string;
   tags?: string[];
   top_category?: TopCategory;
+  comment_count?: number;
 }
 
 interface DiscoverComment {
   id: string;
   author: string;
   text: string;
-  timeAgo: string;
   likes: number;
+  created_at: string;
 }
 
 const PAGE_SIZE = 24;
 const GUEST_BROWSE_LIMIT = 12;
-const COMMENT_AUTHORS = [
-  'Maya',
-  'Alex',
-  'Sofia',
-  'Jordan',
-  'Lena',
-  'Noah',
-  'Iris',
-  'Mika',
-  'Riley',
-  'Evan',
-];
-const COMMENT_TEMPLATES = [
-  'The eye contact in this clip feels so natural.',
-  'I started a chat after seeing this and the personality matches the preview.',
-  'This is the kind of calm energy I was looking for tonight.',
-  'The voice and the intro scene work really well together.',
-  'Saved this one. The vibe is warm without feeling generic.',
-  'The background story gives enough detail to make the first message easy.',
-  'I like that the conversation does not feel rushed.',
-  'This preview actually made me curious about the character.',
-  'The style is polished, especially the lighting and expression.',
-  'Feels like a good pick for a slower story-driven chat.',
-];
-const COMMENT_TIMES = ['2m', '8m', '17m', '32m', '1h', '3h', '6h', '1d'];
 
 function getName(char: DiscoverCharacter) {
   return char.first_name || char.name || 'Character';
@@ -83,21 +59,17 @@ function pseudoCount(seed: string, base: number, mod: number) {
   return base + (value % mod);
 }
 
-function getDiscoverComments(char: DiscoverCharacter | null): DiscoverComment[] {
-  if (!char) return [];
-  const count = 6;
-  return Array.from({ length: count }, (_, index) => {
-    const seed = `${char.id}-comment-${index}`;
-    const authorIndex = pseudoCount(seed, 0, COMMENT_AUTHORS.length);
-    const templateIndex = pseudoCount(`${seed}-text`, 0, COMMENT_TEMPLATES.length);
-    return {
-      id: seed,
-      author: COMMENT_AUTHORS[authorIndex],
-      text: COMMENT_TEMPLATES[templateIndex],
-      timeAgo: COMMENT_TIMES[pseudoCount(`${seed}-time`, 0, COMMENT_TIMES.length)],
-      likes: pseudoCount(`${seed}-likes`, 3, 240),
-    };
-  });
+function formatCommentTime(createdAt: string) {
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return '';
+
+  const seconds = Math.max(0, Math.floor((Date.now() - created) / 1000));
+  if (seconds < 60) return 'now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 export function DiscoverVideoFeedPage() {
@@ -107,6 +79,10 @@ export function DiscoverVideoFeedPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({});
   const [showComments, setShowComments] = useState(false);
+  const [commentsByCharacter, setCommentsByCharacter] = useState<Record<string, DiscoverComment[]>>({});
+  const [loadingCommentsFor, setLoadingCommentsFor] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
@@ -147,7 +123,8 @@ export function DiscoverVideoFeedPage() {
     [allVideoCharacters, isAuthenticated]
   );
   const currentCharacter = visibleCharacters[currentIndex] ?? null;
-  const currentComments = useMemo(() => getDiscoverComments(currentCharacter), [currentCharacter]);
+  const currentComments = currentCharacter ? commentsByCharacter[currentCharacter.id] ?? [] : [];
+  const currentCommentsLoaded = currentCharacter ? currentCharacter.id in commentsByCharacter : false;
 
   useEffect(() => {
     if (currentIndex < visibleCharacters.length) return;
@@ -182,6 +159,35 @@ export function DiscoverVideoFeedPage() {
     return () => observer.disconnect();
   }, [visibleCharacters.length]);
 
+  useEffect(() => {
+    if (!showComments || !currentCharacter) return;
+    if (currentCharacter.id in commentsByCharacter) return;
+
+    let cancelled = false;
+    setLoadingCommentsFor(currentCharacter.id);
+    api.get<DiscoverComment[]>(`/characters/${currentCharacter.id}/comments`)
+      .then((response) => {
+        if (cancelled) return;
+        setCommentsByCharacter((prev) => ({
+          ...prev,
+          [currentCharacter.id]: Array.isArray(response.data) ? response.data : [],
+        }));
+      })
+      .catch((error) => {
+        console.error('Failed to load discover comments:', error);
+        if (!cancelled) {
+          setCommentsByCharacter((prev) => ({ ...prev, [currentCharacter.id]: [] }));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCommentsFor(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [commentsByCharacter, currentCharacter, showComments]);
+
   const handlePlayWithMe = useCallback(async (char: DiscoverCharacter) => {
     try {
       await startOfficialChat(navigate, {
@@ -208,6 +214,35 @@ export function DiscoverVideoFeedPage() {
     }
   }, [isAuthenticated, refreshUser]);
 
+  const getCommentCount = useCallback((char: DiscoverCharacter) => {
+    return commentsByCharacter[char.id]?.length ?? char.comment_count ?? 0;
+  }, [commentsByCharacter]);
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!currentCharacter || postingComment) return;
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    const text = commentInput.trim();
+    if (!text) return;
+
+    setPostingComment(true);
+    try {
+      const response = await api.post<DiscoverComment>(`/characters/${currentCharacter.id}/comments`, { text });
+      setCommentsByCharacter((prev) => ({
+        ...prev,
+        [currentCharacter.id]: [response.data, ...(prev[currentCharacter.id] ?? [])],
+      }));
+      setCommentInput('');
+    } catch (error) {
+      console.error('Failed to post discover comment:', error);
+    } finally {
+      setPostingComment(false);
+    }
+  }, [commentInput, currentCharacter, isAuthenticated, navigate, postingComment]);
+
   return (
     <div className="h-[100dvh] bg-black text-white">
       <div ref={containerRef} className="h-full overflow-y-auto snap-y snap-mandatory">
@@ -215,7 +250,7 @@ export function DiscoverVideoFeedPage() {
           const { poster, video } = getDisplayMedia(char);
           const liked = Boolean(likedIds[char.id]);
           const likes = pseudoCount(char.id, 1200, 50000) + (liked ? 1 : 0);
-          const comments = pseudoCount(`${char.id}-comment`, 80, 3000);
+          const comments = getCommentCount(char);
           const shares = pseudoCount(`${char.id}-share`, 40, 1500);
           const storyBackground = char.description?.trim();
 
@@ -359,6 +394,12 @@ export function DiscoverVideoFeedPage() {
             </div>
             {currentCharacter && (
               <div className="mt-4 max-h-[46dvh] space-y-4 overflow-y-auto pr-1">
+                {loadingCommentsFor === currentCharacter.id && !currentCommentsLoaded && (
+                  <div className="py-8 text-center text-sm text-zinc-500">Loading comments...</div>
+                )}
+                {currentCommentsLoaded && currentComments.length === 0 && (
+                  <div className="py-8 text-center text-sm text-zinc-500">No comments yet.</div>
+                )}
                 {currentComments.map((comment) => (
                   <div key={comment.id} className="flex gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-cyan-400 text-xs font-bold text-white">
@@ -367,7 +408,7 @@ export function DiscoverVideoFeedPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white">{comment.author}</span>
-                        <span className="text-xs text-zinc-500">{comment.timeAgo}</span>
+                        <span className="text-xs text-zinc-500">{formatCommentTime(comment.created_at)}</span>
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-zinc-200">{comment.text}</p>
                       <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
@@ -381,13 +422,25 @@ export function DiscoverVideoFeedPage() {
             )}
             <div className="mt-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
               <input
-                value=""
-                readOnly
+                value={commentInput}
+                onChange={(event) => setCommentInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleSubmitComment();
+                  }
+                }}
+                disabled={postingComment}
                 placeholder={isAuthenticated ? 'Add a comment...' : 'Log in to comment'}
                 className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-zinc-500 outline-none"
               />
-              <button type="button" className="text-sm font-semibold text-pink-300" onClick={() => setShowComments(false)}>
-                Post
+              <button
+                type="button"
+                className="text-sm font-semibold text-pink-300 disabled:text-zinc-600"
+                disabled={postingComment || (isAuthenticated && !commentInput.trim())}
+                onClick={handleSubmitComment}
+              >
+                {postingComment ? 'Posting' : 'Post'}
               </button>
             </div>
           </div>
