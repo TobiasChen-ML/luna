@@ -7,7 +7,7 @@ import hmac
 
 from app.models import (
     BaseResponse, SubscriptionTier,
-    USDTOrderCreate, TelegramStarsOrderCreate,
+    USDTOrderCreate, CryptoOrderCreate, TelegramStarsOrderCreate,
     OrderStatus
 )
 from app.services.auth_service import webhook_service
@@ -80,6 +80,41 @@ def _normalize_stars_status(payload: dict[str, Any]) -> str:
         return "pre_checkout"
 
     return ""
+
+
+def _normalize_crypto_status(payload: dict[str, Any]) -> str:
+    raw_status = (
+        payload.get("status")
+        or payload.get("payment_status")
+        or payload.get("state")
+        or payload.get("event")
+        or ""
+    )
+    status = str(raw_status).lower()
+    if status in {"confirmed", "completed", "complete", "paid", "success", "payment_success"}:
+        return "paid"
+    if status in {"failed", "error", "expired", "timeout"}:
+        return "failed"
+    if status in {"cancelled", "canceled"}:
+        return "cancelled"
+    return status
+
+
+def _extract_crypto_order_refs(payload: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    order_id = (
+        payload.get("order_id")
+        or payload.get("merchant_order_id")
+        or payload.get("client_order_id")
+        or metadata.get("order_id")
+    )
+    provider_order_id = (
+        payload.get("provider_order_id")
+        or payload.get("payment_id")
+        or payload.get("invoice_id")
+        or payload.get("id")
+    )
+    return (str(order_id) if order_id else None, str(provider_order_id) if provider_order_id else None)
 
 
 @router.get("/pricing")
@@ -247,40 +282,128 @@ async def get_billing_history(
 
 
 @router.post("/usdt/orders")
-async def create_usdt_order(request: Request, data: USDTOrderCreate) -> dict[str, Any]:
-    return {
-        "order_id": "usdt_order_001",
-        "amount": data.amount,
-        "status": OrderStatus.PENDING,
-        "payment_address": "0x1234...abcd",
-        "created_at": datetime.now().isoformat(),
-    }
+async def create_usdt_order(
+    request: Request,
+    data: USDTOrderCreate,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    if data.pack_id:
+        return await billing_svc.create_crypto_order(
+            user_id=user.id,
+            asset="USDT",
+            network=data.network or "TRC20",
+            product_type="credit_pack",
+            pack_id=data.pack_id,
+            metadata=data.metadata,
+        )
+
+    credits = data.credits
+    if credits is None and data.product_id.startswith("credits_"):
+        try:
+            credits = int(data.product_id.split("_", 1)[1])
+        except (TypeError, ValueError):
+            credits = None
+    if not credits or credits <= 0:
+        raise HTTPException(status_code=400, detail="credits or pack_id is required")
+
+    return await billing_svc.create_usdt_order(
+        user_id=user.id,
+        amount=float(data.amount),
+        credits=int(credits),
+    )
 
 
 @router.get("/usdt/orders/{order_id}")
-async def get_usdt_order(request: Request, order_id: str) -> dict[str, Any]:
-    return {
-        "order_id": order_id,
-        "amount": 10.0,
-        "status": OrderStatus.PENDING,
-        "payment_address": "0x1234...abcd",
-        "created_at": datetime.now().isoformat(),
-    }
+async def get_usdt_order(
+    request: Request,
+    order_id: str,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    order = await billing_svc.get_usdt_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return BillingService._crypto_order_response(order)
 
 
 @router.post("/usdt/orders/{order_id}/submit", response_model=BaseResponse)
-async def submit_usdt_order(request: Request, order_id: str) -> BaseResponse:
+async def submit_usdt_order(
+    request: Request,
+    order_id: str,
+    data: dict[str, Any] | None = None,
+    user = Depends(get_current_user_required),
+) -> BaseResponse:
+    order = await billing_svc.get_usdt_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    tx_hash = (data or {}).get("tx_hash") or (data or {}).get("transaction_hash")
+    if not tx_hash:
+        raise HTTPException(status_code=400, detail="tx_hash is required")
+    await billing_svc.submit_usdt_order(order_id, str(tx_hash))
     return BaseResponse(success=True, message="USDT payment submitted")
 
 
 @router.post("/usdt/orders/{order_id}/refresh")
-async def refresh_usdt_order(request: Request, order_id: str) -> dict[str, Any]:
-    return {
-        "order_id": order_id,
-        "status": OrderStatus.PENDING,
-        "confirmations": 2,
-        "required_confirmations": 6,
-    }
+async def refresh_usdt_order(
+    request: Request,
+    order_id: str,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    order = await billing_svc.get_usdt_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return BillingService._crypto_order_response(order)
+
+
+@router.post("/crypto/orders")
+async def create_crypto_order(
+    request: Request,
+    data: CryptoOrderCreate,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    try:
+        return await billing_svc.create_crypto_order(
+            user_id=user.id,
+            asset=data.asset,
+            network=data.network,
+            product_type=data.product_type,
+            pack_id=data.pack_id,
+            tier=data.tier,
+            billing_period=data.billing_period,
+            metadata=data.metadata,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/crypto/orders/{order_id}")
+async def get_crypto_order(
+    request: Request,
+    order_id: str,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    order = await billing_svc.get_crypto_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return BillingService._crypto_order_response(order)
+
+
+@router.post("/crypto/orders/{order_id}/submit", response_model=BaseResponse)
+async def submit_crypto_order(
+    request: Request,
+    order_id: str,
+    data: dict[str, Any] | None = None,
+    user = Depends(get_current_user_required),
+) -> BaseResponse:
+    order = await billing_svc.get_crypto_order(order_id)
+    if not order or order.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    tx_hash = (data or {}).get("tx_hash") or (data or {}).get("transaction_hash")
+    if not tx_hash:
+        raise HTTPException(status_code=400, detail="tx_hash is required")
+    await billing_svc.submit_usdt_order(order_id, str(tx_hash))
+    return BaseResponse(success=True, message="Crypto payment submitted")
 
 
 @router.post("/telegram-stars/orders")
@@ -332,7 +455,9 @@ async def create_telegram_stars_order(
             matched = pack_map.get(pack_key)
             if matched:
                 credits = int((matched.credits or 0) + (matched.bonus_credits or 0))
-                amount_stars = _usd_cents_to_stars(matched.price_cents)
+                price_cents = getattr(matched, "price_cents", None)
+                if price_cents is not None:
+                    amount_stars = _usd_cents_to_stars(price_cents)
             elif credits is None and pack_key.startswith("credits_"):
                 # Backward-compatible fallback for legacy product ids like credits_50.
                 try:
@@ -534,6 +659,96 @@ async def ccbill_webhook(
         raise HTTPException(status_code=400, detail="Invalid payload")
 
 
+async def _process_crypto_webhook_payload(payload: dict[str, Any]) -> BaseResponse:
+    status = _normalize_crypto_status(payload)
+    order_id, provider_order_id = _extract_crypto_order_refs(payload)
+    resolved_order_id = await billing_svc.resolve_crypto_order_id(order_id, provider_order_id)
+    tx_hash = payload.get("tx_hash") or payload.get("transaction_hash") or payload.get("hash")
+
+    if resolved_order_id:
+        if status == "paid":
+            result = await billing_svc.mark_crypto_order_paid(
+                order_id=resolved_order_id,
+                charge_id=str(tx_hash or provider_order_id or ""),
+                webhook_payload=payload,
+            )
+            logger.info(f"Crypto payment success: order_id={resolved_order_id}, result={result}")
+        elif status == "failed":
+            await billing_svc.mark_crypto_order_failed(resolved_order_id, webhook_payload=payload)
+        elif status == "cancelled":
+            await billing_svc.mark_crypto_order_cancelled(resolved_order_id, webhook_payload=payload)
+        logger.info(f"Crypto webhook processed: order_id={resolved_order_id}, status={status}")
+        return BaseResponse(success=True, message=f"Crypto webhook processed: {status or 'unknown'}")
+
+    # Legacy fallback for providers that post full user/credit data without a cached order.
+    user_id = payload.get("user_id")
+    try:
+        credits = int(payload.get("credits", 0))
+    except (TypeError, ValueError):
+        logger.warning(f"Crypto webhook invalid credits value: {payload.get('credits')}")
+        raise HTTPException(status_code=400, detail="Invalid credits value")
+
+    if credits <= 0 or credits > MAX_CREDITS_PER_TRANSACTION:
+        logger.warning(f"Crypto webhook credits out of bounds: {credits}")
+        raise HTTPException(status_code=400, detail="Credits amount out of allowed range")
+
+    if status == "paid" and user_id:
+        asset = str(payload.get("asset") or payload.get("currency") or "USDT").upper()
+        network = str(payload.get("network") or "").upper()
+        order_ref = str(tx_hash or provider_order_id or order_id or "")
+        await credit_service.add_credits(
+            user_id=user_id,
+            amount=credits,
+            transaction_type="purchase",
+            credit_source="purchased",
+            order_id=order_ref,
+            description=f"Purchased {credits} credits via {asset}{f' {network}' if network else ''}",
+        )
+
+    logger.info(f"Crypto webhook processed via legacy fallback: tx_hash={tx_hash}, status={status}")
+    return BaseResponse(success=True, message=f"Crypto webhook processed: {status or 'unknown'}")
+
+
+@router.post("/webhooks/crypto", response_model=BaseResponse)
+async def crypto_webhook(
+    request: Request,
+    x_webhook_signature: str = Header(None, alias="X-Webhook-Signature"),
+) -> BaseResponse:
+    try:
+        payload = await request.json()
+
+        if not x_webhook_signature:
+            logger.warning("Crypto webhook missing signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        from app.core.config import get_config_value, get_settings
+        settings = get_settings()
+        secret = (
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_WEBHOOK_SECRET")
+            or await get_config_value("USDT_WEBHOOK_SECRET")
+            or settings.ccbill_client_secret
+        )
+        if not secret:
+            logger.error("Crypto webhook secret not configured")
+            raise HTTPException(status_code=503, detail="Webhook processing unavailable")
+
+        if not webhook_service.verify_usdt_signature(payload, x_webhook_signature, secret):
+            logger.warning("Crypto webhook signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_time = payload.get("timestamp", 0)
+        if event_time and abs(time.time() - event_time) > WEBHOOK_TIMESTAMP_TOLERANCE:
+            logger.warning("Crypto webhook timestamp outside tolerance window")
+            raise HTTPException(status_code=400, detail="Webhook expired")
+
+        return await _process_crypto_webhook_payload(payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Crypto webhook error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+
 @router.post("/webhooks/usdt", response_model=BaseResponse)
 async def usdt_webhook(
     request: Request,
@@ -566,40 +781,8 @@ async def usdt_webhook(
             logger.warning("USDT webhook timestamp outside tolerance window")
             raise HTTPException(status_code=400, detail="Webhook expired")
 
-        status = payload.get("status", "")
-        user_id = payload.get("user_id")
-        try:
-            credits = int(payload.get("credits", 0))
-        except (TypeError, ValueError):
-            logger.warning(f"USDT webhook invalid credits value: {payload.get('credits')}")
-            raise HTTPException(status_code=400, detail="Invalid credits value")
-        
-        if credits <= 0 or credits > MAX_CREDITS_PER_TRANSACTION:
-            logger.warning(f"USDT webhook credits out of bounds: {credits}")
-            raise HTTPException(status_code=400, detail="Credits amount out of allowed range")
-        
-        tx_hash = payload.get("tx_hash")
-        
-        if status == "confirmed":
-            if user_id and credits > 0:
-                try:
-                    await credit_service.add_credits(
-                        user_id=user_id,
-                        amount=credits,
-                        transaction_type="purchase",
-                        credit_source="purchased",
-                        order_id=tx_hash,
-                        description=f"Purchased {credits} credits via USDT (tx: {tx_hash})"
-                    )
-                    logger.info(f"USDT payment confirmed: {credits} credits added to user {user_id}")
-                except Exception as e:
-                    logger.error(f"USDT credit add failed: {e}")
-                    raise HTTPException(status_code=500, detail="Failed to add credits")
-            else:
-                logger.warning(f"USDT webhook missing user_id or credits: {payload}")
-        
-        logger.info(f"USDT webhook processed: tx_hash={tx_hash}, status={status}")
-        return BaseResponse(success=True, message=f"USDT webhook processed: {status}")
+        payload.setdefault("asset", "USDT")
+        return await _process_crypto_webhook_payload(payload)
     except HTTPException:
         raise
     except Exception as e:

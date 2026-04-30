@@ -40,6 +40,9 @@ export interface User {
   date_of_birth?: string;  // Stored as "YYYY-MM-DD" format
   subscription_tier: SubscriptionTier;
   credits: number;
+  telegram_id?: string | null;
+  telegram_username?: string | null;
+  telegram_bound_at?: string | null;
   // Two-bucket credit system
   purchased_credits?: number;  // Credits from purchases (never expire)
   monthly_credits_remaining?: number;  // Monthly credits (reset each cycle)

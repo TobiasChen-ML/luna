@@ -103,6 +103,7 @@ __all__ = [
     "SubscriptionCheckoutRequest",
     "CreditPackCheckoutRequest",
     "USDTOrderCreate",
+    "CryptoOrderCreate",
     "TelegramStarsOrderCreate",
     "SupportTicketCreate",
     "SupportTicketFeedback",

@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BadgeCheck, Loader2, MessageCircleMore } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Loader2, MessageCircleMore, Wallet } from 'lucide-react';
 import { Container } from '@/components/layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTelegram } from '@/contexts/TelegramContext';
 import { billingService, type BillingPricingConfig } from '@/services/billingService';
-import { openTelegramMiniApp } from '@/utils/telegram';
 import type { SubscriptionTier } from '@/types';
 
 interface Plan {
@@ -15,6 +14,12 @@ interface Plan {
 }
 
 type SubscriptionCycle = '1m' | '3m' | '12m';
+type CryptoAsset = 'USDT' | 'USDC';
+type CryptoNetwork = 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+const cryptoNetworksByAsset: Record<CryptoAsset, CryptoNetwork[]> = {
+  USDT: ['TRC20', 'POLYGON', 'BEP20', 'ERC20'],
+  USDC: ['POLYGON', 'BEP20', 'ERC20', 'SOLANA'],
+};
 
 interface CycleConfig {
   priceCents: number;
@@ -67,9 +72,13 @@ export function SubscriptionsPage() {
 
   const [selectedTier] = useState<Plan['tier']>('premium');
   const [billingCycle, setBillingCycle] = useState<SubscriptionCycle>('12m');
-  const [loadingMethod, setLoadingMethod] = useState<'telegram' | null>(null);
+  const [loadingMethod, setLoadingMethod] = useState<'telegram' | 'crypto' | 'crypto-submit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>('USDT');
+  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('TRC20');
+  const [cryptoOrder, setCryptoOrder] = useState<Awaited<ReturnType<typeof billingService.createCryptoOrder>> | null>(null);
+  const [txHash, setTxHash] = useState('');
 
   const [pricingConfig, setPricingConfig] = useState<BillingPricingConfig | null>(null);
 
@@ -113,11 +122,6 @@ export function SubscriptionsPage() {
     setError(null);
     setSuccess(null);
     if (!ensureAuth()) return;
-
-    if (!isTma) {
-      openTelegramMiniApp(`subscription_${selectedTier}_${billingCycle}`);
-      return;
-    }
 
     try {
       setLoadingMethod('telegram');
@@ -166,6 +170,61 @@ export function SubscriptionsPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create Telegram Stars payment');
+    } finally {
+      setLoadingMethod(null);
+    }
+  };
+
+  const handleCryptoCheckout = async () => {
+    setError(null);
+    setSuccess(null);
+    setCryptoOrder(null);
+    if (!ensureAuth()) return;
+
+    try {
+      setLoadingMethod('crypto');
+      const order = await billingService.createCryptoOrder({
+        asset: selectedAsset,
+        network: selectedNetwork,
+        product_type: 'subscription',
+        tier: selectedTier,
+        billing_period: billingCycle,
+        pack_id: `subscription_${selectedTier}_${billingCycle}`,
+        metadata: {
+          source: 'subscriptions_page',
+          tier: selectedTier,
+          billing_period: billingCycle,
+          access_model: 'one_time_entitlement',
+        },
+      });
+      setCryptoOrder(order);
+      if (order.checkout_url) {
+        window.location.href = order.checkout_url;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create crypto payment');
+    } finally {
+      setLoadingMethod(null);
+    }
+  };
+
+  const handleCryptoAssetChange = (asset: CryptoAsset) => {
+    setSelectedAsset(asset);
+    setSelectedNetwork(cryptoNetworksByAsset[asset][0]);
+    setCryptoOrder(null);
+    setTxHash('');
+  };
+
+  const handleSubmitCryptoTx = async () => {
+    if (!cryptoOrder || !txHash.trim()) return;
+    try {
+      setLoadingMethod('crypto-submit');
+      await billingService.submitCryptoOrderTx(cryptoOrder.order_id, txHash.trim());
+      const latest = await billingService.getCryptoOrder(cryptoOrder.order_id);
+      setCryptoOrder(latest);
+      setSuccess('Transaction submitted. Premium activates after gateway confirmation.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit transaction');
     } finally {
       setLoadingMethod(null);
     }
@@ -255,9 +314,7 @@ export function SubscriptionsPage() {
                 >
                   <span className="flex items-center gap-2">
                     {loadingMethod === 'telegram' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircleMore className="h-4 w-4" />}
-                    <span className="font-semibold">
-                      {isTma ? 'Pay with Telegram Stars' : 'Continue in Telegram'}
-                    </span>
+                    <span className="font-semibold">Pay with Telegram Stars</span>
                   </span>
                   {isTma && (
                     <span className="flex items-center gap-2">
@@ -272,10 +329,82 @@ export function SubscriptionsPage() {
                   )}
                 </button>
 
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <div className="mb-3 grid grid-cols-2 gap-2">
+                      <select
+                        value={selectedAsset}
+                      onChange={(event) => handleCryptoAssetChange(event.target.value as CryptoAsset)}
+                        className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                      >
+                      <option value="USDT">USDT</option>
+                      <option value="USDC">USDC</option>
+                    </select>
+                    <select
+                      value={selectedNetwork}
+                        onChange={(event) => setSelectedNetwork(event.target.value as CryptoNetwork)}
+                        className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                      >
+                      {cryptoNetworksByAsset[selectedAsset].map((network) => (
+                        <option key={network} value={network}>
+                          {network === 'POLYGON' ? 'Polygon' : network === 'SOLANA' ? 'Solana' : network}
+                        </option>
+                      ))}
+                      </select>
+                  </div>
+                  <button
+                    onClick={handleCryptoCheckout}
+                    disabled={loadingMethod !== null}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-4 py-3 text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60"
+                  >
+                    <span className="flex items-center gap-2">
+                      {loadingMethod === 'crypto' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                      <span className="font-semibold">Pay with {selectedAsset}</span>
+                    </span>
+                    <span className="text-xs text-emerald-200">{selectedNetwork}</span>
+                  </button>
+                  {cryptoOrder && (
+                    <div className="mt-3 space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{cryptoOrder.asset} {cryptoOrder.network}</span>
+                        <span>{cryptoOrder.amount_crypto ?? cryptoOrder.amount} {cryptoOrder.asset}</span>
+                      </div>
+                      {cryptoOrder.payment_address && (
+                        <div className="break-all rounded bg-black/30 p-2 font-mono text-xs">
+                          {cryptoOrder.payment_address}
+                        </div>
+                      )}
+                      {cryptoOrder.payment_uri && (
+                        <a
+                          href={cryptoOrder.payment_uri}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-200 hover:text-emerald-100"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open wallet payment link
+                        </a>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          value={txHash}
+                          onChange={(event) => setTxHash(event.target.value)}
+                          placeholder="Transaction hash"
+                          className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white"
+                        />
+                        <button
+                          onClick={handleSubmitCryptoTx}
+                          disabled={!txHash.trim() || loadingMethod === 'crypto-submit'}
+                          className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          {loadingMethod === 'crypto-submit' ? '...' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               <p className="mt-4 text-xs text-zinc-500 relative z-10">
-                Selected: {selectedPlan.name} {selectedPeriodLabel}. Amount: {billingService.formatPrice(selectedPrice)} / {selectedStars.toLocaleString()} Stars.
+                Selected: {selectedPlan.name} {selectedPeriodLabel}. Amount: {billingService.formatPrice(selectedPrice)} / {selectedStars.toLocaleString()} Stars. Crypto purchases activate a fixed access period, not auto-renewal.
               </p>
               <p className="mt-1 text-xs text-zinc-500 relative z-10">
                 Extra credit packs are available separately and never expire.

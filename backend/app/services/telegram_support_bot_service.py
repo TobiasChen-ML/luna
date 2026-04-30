@@ -4,6 +4,7 @@ import logging
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,12 @@ class TelegramSupportBotService:
         if not chat_id or not text:
             return {"handled": False, "reason": "unsupported_update"}
 
+        bind_token = self._extract_bind_token(text)
+        if bind_token:
+            result = await self._complete_account_bind(bind_token, message)
+            await self.send_message(bot_token=bot_token, chat_id=chat_id, text=result["message"])
+            return {"handled": True, "action": "telegram_bind", "bound": result["bound"]}
+
         answer = self.match_answer(text)
         await self.send_message(bot_token=bot_token, chat_id=chat_id, text=answer)
         return {"handled": True}
@@ -169,6 +176,72 @@ class TelegramSupportBotService:
     def _extract_chat_id(message: dict[str, Any]) -> Optional[int | str]:
         chat = message.get("chat") or {}
         return chat.get("id")
+
+    @staticmethod
+    def _extract_bind_token(text: str) -> Optional[str]:
+        parts = text.strip().split(maxsplit=1)
+        if len(parts) != 2 or parts[0] != "/start":
+            return None
+        token = parts[1].strip()
+        return token if token.startswith("bind_") else None
+
+    async def _complete_account_bind(self, token: str, message: dict[str, Any]) -> dict[str, Any]:
+        from app.models.user import User
+        from app.services.database_service import DatabaseService
+        from app.services.redis_service import RedisService
+
+        redis = RedisService()
+        pending = await redis.get_json(f"telegram:bind:{token}")
+        if not pending or not pending.get("user_id"):
+            return {
+                "bound": False,
+                "message": "This Telegram binding link has expired. Please generate a new link from your RoxyClub profile.",
+            }
+
+        telegram_user = message.get("from") or {}
+        telegram_id = telegram_user.get("id")
+        if not telegram_id:
+            return {
+                "bound": False,
+                "message": "Telegram account information was not available. Please try the binding link again.",
+            }
+
+        db = DatabaseService()
+        user_id = str(pending["user_id"])
+        with db.transaction() as session:
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                return {
+                    "bound": False,
+                    "message": "RoxyClub account not found. Please sign in on Web/PWA and create a new binding link.",
+                }
+
+            metadata = self._load_user_metadata(getattr(user, "user_metadata", None))
+            metadata["telegram"] = {
+                "id": str(telegram_id),
+                "username": telegram_user.get("username"),
+                "first_name": telegram_user.get("first_name"),
+                "last_name": telegram_user.get("last_name"),
+                "bound_at": datetime.utcnow().isoformat(),
+            }
+            user.user_metadata = json.dumps(metadata, ensure_ascii=False)
+
+        await redis.delete(f"telegram:bind:{token}")
+        return {
+            "bound": True,
+            "message": "Telegram account linked. Return to RoxyClub Web/PWA and refresh your profile.",
+        }
+
+    @staticmethod
+    def _load_user_metadata(raw_metadata: Optional[str]) -> dict[str, Any]:
+        if not raw_metadata:
+            return {}
+        try:
+            parsed = json.loads(raw_metadata)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            logger.warning("Failed to parse user metadata JSON during Telegram bind")
+            return {}
 
     async def _telegram_api_post(self, bot_token: str, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         api_url = f"https://api.telegram.org/bot{bot_token}/{method}"

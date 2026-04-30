@@ -241,6 +241,58 @@ class TestUSDTWebhook:
         mock_add.assert_not_called()
 
 
+class TestCryptoWebhook:
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        from app.services.rate_limit_service import RateLimitService
+        monkeypatch.setattr(
+            RateLimitService,
+            "check_rate_limit",
+            lambda self, key, max_requests, window_seconds=60: (True, max_requests, 0),
+        )
+
+    def test_crypto_webhook_marks_cached_order_paid(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+        from app.routers import billing
+
+        with patch.object(webhook_service, "verify_usdt_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.ccbill_client_secret = "test_secret"
+                mock_get_settings.return_value = mock_settings
+                with patch.object(
+                    billing.billing_svc,
+                    "resolve_crypto_order_id",
+                    new_callable=AsyncMock,
+                ) as mock_resolve:
+                    with patch.object(
+                        billing.billing_svc,
+                        "mark_crypto_order_paid",
+                        new_callable=AsyncMock,
+                    ) as mock_paid:
+                        mock_resolve.return_value = "crypto_order_001"
+                        mock_paid.return_value = {"order_id": "crypto_order_001", "status": "paid"}
+                        payload = {
+                            "status": "confirmed",
+                            "provider_order_id": "provider_001",
+                            "tx_hash": "0xcrypto",
+                            "timestamp": time.time(),
+                        }
+                        response = client.post(
+                            "/api/billing/webhooks/crypto",
+                            json=payload,
+                            headers={"X-Webhook-Signature": "sig"},
+                        )
+
+        assert response.status_code == 200
+        mock_resolve.assert_awaited_once()
+        mock_paid.assert_awaited_once_with(
+            order_id="crypto_order_001",
+            charge_id="0xcrypto",
+            webhook_payload=payload,
+        )
+
+
 class TestTelegramStarsWebhook:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch):

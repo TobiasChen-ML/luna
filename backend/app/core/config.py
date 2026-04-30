@@ -93,6 +93,16 @@ class Settings(BaseSettings):
 
     ccbill_client_id: Optional[str] = None
     ccbill_client_secret: Optional[str] = None
+    crypto_payment_address_usdc_polygon: Optional[str] = None
+    crypto_payment_address_usdt_polygon: Optional[str] = None
+    crypto_payment_address_usdc_bep20: Optional[str] = None
+    crypto_payment_address_usdt_bep20: Optional[str] = None
+    crypto_payment_address_usdt_trc20: Optional[str] = None
+    crypto_payment_address_pool_usdc_polygon: Optional[str] = None
+    crypto_payment_address_pool_usdt_polygon: Optional[str] = None
+    crypto_payment_address_pool_usdc_bep20: Optional[str] = None
+    crypto_payment_address_pool_usdt_bep20: Optional[str] = None
+    crypto_payment_address_pool_usdt_trc20: Optional[str] = None
 
     smtp_host: Optional[str] = None
     smtp_port: int = 587
@@ -253,6 +263,17 @@ ENV_TO_SETTINGS_MAP = {
     "CCBILL_CLIENT_ID": "ccbill_client_id",
     "CCBILL_CLIENT_SECRET": "ccbill_client_secret",
     "USDT_WEBHOOK_SECRET": "usdt_webhook_secret",
+    "CRYPTO_PAYMENT_GATEWAY_WEBHOOK_SECRET": "usdt_webhook_secret",
+    "CRYPTO_PAYMENT_ADDRESS_USDC_POLYGON": "crypto_payment_address_usdc_polygon",
+    "CRYPTO_PAYMENT_ADDRESS_USDT_POLYGON": "crypto_payment_address_usdt_polygon",
+    "CRYPTO_PAYMENT_ADDRESS_USDC_BEP20": "crypto_payment_address_usdc_bep20",
+    "CRYPTO_PAYMENT_ADDRESS_USDT_BEP20": "crypto_payment_address_usdt_bep20",
+    "CRYPTO_PAYMENT_ADDRESS_USDT_TRC20": "crypto_payment_address_usdt_trc20",
+    "CRYPTO_PAYMENT_ADDRESS_POOL_USDC_POLYGON": "crypto_payment_address_pool_usdc_polygon",
+    "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_POLYGON": "crypto_payment_address_pool_usdt_polygon",
+    "CRYPTO_PAYMENT_ADDRESS_POOL_USDC_BEP20": "crypto_payment_address_pool_usdc_bep20",
+    "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_BEP20": "crypto_payment_address_pool_usdt_bep20",
+    "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_TRC20": "crypto_payment_address_pool_usdt_trc20",
     "LLM_TIMEOUT_SECONDS": "llm_timeout",
 }
 
@@ -349,15 +370,52 @@ async def get_payment_config() -> dict[str, Any]:
         or await get_config_value("TELEGRAM_STAR_GATEWAY_ENABLED", "false")
         or "false"
     )
+    crypto_gateway_enabled = (
+        await get_config_value("CRYPTO_PAYMENT_GATEWAY_ENABLED")
+        or await get_config_value("USDT_PAYMENT_GATEWAY_ENABLED", "false")
+        or "false"
+    )
+    async def has_crypto_address(asset: str, network: str) -> bool:
+        suffix = f"{asset}_{network}"
+        return bool(
+            await get_config_value(f"CRYPTO_PAYMENT_ADDRESS_POOL_{suffix}")
+            or await get_config_value(f"CRYPTO_PAYMENT_ADDRESS_{suffix}")
+            or await get_config_value(f"CRYPTO_PAYMENT_FALLBACK_ADDRESS_{suffix}")
+        )
+
     return {
         "ccbill_enabled": (await get_config_value("CCBILL_ENABLED", "false") or "false").lower() == "true",
         "ccbill_merchant_id": await get_config_value("CCBILL_MERCHANT_ID"),
         "ccbill_subaccount": await get_config_value("CCBILL_SUBACCOUNT", "0000"),
         "ccbill_flexform_id": await get_config_value("CCBILL_FLEXFORM_ID"),
         "ccbill_salt": await get_config_value("CCBILL_SALT"),
-        "usdt_gateway_enabled": (await get_config_value("USDT_PAYMENT_GATEWAY_ENABLED", "false") or "false").lower() == "true",
-        "usdt_gateway_base_url": await get_config_value("USDT_PAYMENT_GATEWAY_BASE_URL"),
-        "usdt_gateway_api_key": await get_config_value("USDT_PAYMENT_GATEWAY_API_KEY"),
+        "crypto_gateway_enabled": crypto_gateway_enabled.lower() == "true",
+        "crypto_gateway_base_url": (
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_BASE_URL")
+            or await get_config_value("USDT_PAYMENT_GATEWAY_BASE_URL")
+        ),
+        "crypto_gateway_api_key": (
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_API_KEY")
+            or await get_config_value("USDT_PAYMENT_GATEWAY_API_KEY")
+        ),
+        "crypto_gateway_create_path": await get_config_value("CRYPTO_PAYMENT_GATEWAY_CREATE_PATH", "/orders"),
+        "crypto_gateway_webhook_secret_configured": bool(
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_WEBHOOK_SECRET")
+            or await get_config_value("USDT_WEBHOOK_SECRET")
+        ),
+        "crypto_local_addresses_configured": {
+            "USDT_TRC20": await has_crypto_address("USDT", "TRC20"),
+            "USDC_POLYGON": await has_crypto_address("USDC", "POLYGON"),
+        },
+        "usdt_gateway_enabled": crypto_gateway_enabled.lower() == "true",
+        "usdt_gateway_base_url": (
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_BASE_URL")
+            or await get_config_value("USDT_PAYMENT_GATEWAY_BASE_URL")
+        ),
+        "usdt_gateway_api_key": (
+            await get_config_value("CRYPTO_PAYMENT_GATEWAY_API_KEY")
+            or await get_config_value("USDT_PAYMENT_GATEWAY_API_KEY")
+        ),
         "telegram_stars_enabled": telegram_stars_enabled.lower() == "true",
         "telegram_bot_token_configured": bool(await get_config_value("TELEGRAM_BOT_TOKEN")),
         "telegram_webhook_secret_configured": bool(

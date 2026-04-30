@@ -203,6 +203,132 @@ class TestBillingSubscriptionEndpoints:
         assert call["credits"] == 110
         assert call["product_type"] == "credit_pack"
 
+    def test_crypto_credit_pack_order_uses_gateway_service(self, client, monkeypatch):
+        from app.routers import billing
+
+        mock_create = AsyncMock(
+            return_value={
+                "order_id": "crypto_pack_1",
+                "asset": "USDT",
+                "network": "TRC20",
+                "amount_crypto": 9.99,
+                "credits": 110,
+                "product_type": "credit_pack",
+                "status": "pending",
+                "payment_address": "TWallet",
+                "raw": {},
+            }
+        )
+        monkeypatch.setattr(billing.billing_svc, "create_crypto_order", mock_create)
+
+        response = client.post(
+            "/api/billing/crypto/orders",
+            json={
+                "asset": "USDT",
+                "network": "TRC20",
+                "product_type": "credit_pack",
+                "pack_id": "pack_100",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["order_id"] == "crypto_pack_1"
+        call = mock_create.await_args.kwargs
+        assert call["asset"] == "USDT"
+        assert call["network"] == "TRC20"
+        assert call["product_type"] == "credit_pack"
+        assert call["pack_id"] == "pack_100"
+
+    def test_crypto_subscription_order_is_one_time_entitlement(self, client, monkeypatch):
+        from app.routers import billing
+
+        mock_create = AsyncMock(
+            return_value={
+                "order_id": "crypto_sub_1",
+                "asset": "USDC",
+                "network": "POLYGON",
+                "amount_crypto": 13.99,
+                "credits": 100,
+                "product_type": "subscription",
+                "tier": "premium",
+                "billing_period": "1m",
+                "status": "pending",
+                "raw": {},
+            }
+        )
+        monkeypatch.setattr(billing.billing_svc, "create_crypto_order", mock_create)
+
+        response = client.post(
+            "/api/billing/crypto/orders",
+            json={
+                "asset": "USDC",
+                "network": "POLYGON",
+                "product_type": "subscription",
+                "tier": "premium",
+                "billing_period": "1m",
+            },
+        )
+
+        assert response.status_code == 200
+        call = mock_create.await_args.kwargs
+        assert call["product_type"] == "subscription"
+        assert call["tier"] == "premium"
+        assert call["billing_period"] == "1m"
+
+    def test_crypto_order_rejects_unsupported_asset_network_pair(self, client, monkeypatch):
+        from app.routers import billing
+
+        mock_create = AsyncMock(side_effect=ValueError("network must be one of BEP20, ERC20, POLYGON, SOLANA for USDC"))
+        monkeypatch.setattr(billing.billing_svc, "create_crypto_order", mock_create)
+
+        response = client.post(
+            "/api/billing/crypto/orders",
+            json={
+                "asset": "USDC",
+                "network": "TRC20",
+                "product_type": "credit_pack",
+                "pack_id": "pack_100",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "USDC" in response.text
+
+    @pytest.mark.asyncio
+    async def test_local_crypto_order_uses_configured_address_pool(self, monkeypatch):
+        from app.services import billing_service as billing_module
+        from app.services.billing_service import BillingService
+
+        async def config_value(key, default=None):
+            values = {
+                "CRYPTO_PAYMENT_GATEWAY_ENABLED": "false",
+                "USDT_PAYMENT_GATEWAY_ENABLED": "false",
+                "CRYPTO_PAYMENT_ADDRESS_POOL_USDT_TRC20": "TWalletA, TWalletB",
+            }
+            return values.get(key, default)
+
+        monkeypatch.setattr(billing_module, "get_config_value", config_value)
+
+        order = await BillingService()._create_crypto_gateway_order(
+            order_id="00000000-0000-0000-0000-000000000001",
+            user_id="user_001",
+            asset="USDT",
+            network="TRC20",
+            amount_usd_cents=999,
+            credits=100,
+            product_type="credit_pack",
+            pack_id="pack_100",
+            tier=None,
+            billing_period=None,
+            metadata={},
+        )
+
+        assert order["gateway"] == "local"
+        assert order["payment_address"] == "TWalletB"
+        assert order["payment_uri"].startswith("tron:TWalletB?")
+        assert "amount=9.99" in order["payment_uri"]
+
     @pytest.mark.asyncio
     async def test_paid_subscription_order_repairs_missing_credit_grant(self, monkeypatch):
         from app.models.credit_transaction import CreditTransaction

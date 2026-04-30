@@ -2,6 +2,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends, Response, Body
 from typing import Any, Optional
 import hashlib
+import json
 import secrets
 import logging
 
@@ -43,8 +44,26 @@ def _normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
+def _load_user_metadata(raw_metadata: Optional[str]) -> dict[str, Any]:
+    if not raw_metadata:
+        return {}
+    try:
+        parsed = json.loads(raw_metadata)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        logger.warning("Failed to parse user metadata JSON")
+        return {}
+
+
+def _extract_telegram_binding(user: Any) -> dict[str, Any]:
+    metadata = _load_user_metadata(getattr(user, "user_metadata", None))
+    telegram = metadata.get("telegram")
+    return telegram if isinstance(telegram, dict) else {}
+
+
 def _serialize_user(user: Any) -> dict[str, Any]:
     now = datetime.utcnow().isoformat()
+    telegram = _extract_telegram_binding(user)
     return {
         "id": user.id,
         "email": user.email,
@@ -53,6 +72,9 @@ def _serialize_user(user: Any) -> dict[str, Any]:
         "subscription_tier": user.tier or "free",
         "credits": float(user.credits or 0),
         "is_adult": True,
+        "telegram_id": telegram.get("id"),
+        "telegram_username": telegram.get("username"),
+        "telegram_bound_at": telegram.get("bound_at"),
         "created_at": user.created_at.isoformat() if getattr(user, "created_at", None) else now,
         "updated_at": user.updated_at.isoformat() if getattr(user, "updated_at", None) else now,
     }
@@ -212,6 +234,7 @@ async def get_current_user(
     db_user = await db_svc.get_user_by_id(user.id)
     balance = await credit_service.get_balance(user.id)
     now = datetime.utcnow()
+    telegram = _extract_telegram_binding(db_user) if db_user else {}
 
     return User(
         id=user.id,
@@ -221,9 +244,61 @@ async def get_current_user(
         subscription_tier=balance.get("subscription_tier") or getattr(user, 'subscription_tier', 'free'),
         credits=balance.get("total", 0),
         is_admin=getattr(user, 'is_admin', False),
+        telegram_id=telegram.get("id"),
+        telegram_username=telegram.get("username"),
+        telegram_bound_at=telegram.get("bound_at"),
         created_at=(db_user.created_at if db_user and db_user.created_at else now),
         updated_at=(db_user.updated_at if db_user else None),
     )
+
+
+@router.post("/telegram/bind-link")
+async def create_telegram_bind_link(
+    request: Request,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    from app.core.config import get_config_value
+
+    bot_username = (
+        await get_config_value("TELEGRAM_BOT_USERNAME")
+        or get_settings().telegram_bot_username
+        or ""
+    ).strip().lstrip("@")
+    if not bot_username:
+        raise HTTPException(status_code=503, detail="Telegram bot username not configured")
+
+    token = f"bind_{secrets.token_urlsafe(18).replace('-', '_')}"
+    await redis_svc.set_json(
+        f"telegram:bind:{token}",
+        {
+            "user_id": user.id,
+            "created_at": datetime.utcnow().isoformat(),
+            "status": "pending",
+        },
+        ex=900,
+    )
+
+    return {
+        "success": True,
+        "bind_token": token,
+        "bind_url": f"https://t.me/{bot_username}?start={token}",
+        "expires_in": 900,
+    }
+
+
+@router.get("/telegram/bind-status")
+async def get_telegram_bind_status(
+    request: Request,
+    user = Depends(get_current_user_required),
+) -> dict[str, Any]:
+    db_user = await db_svc.get_user_by_id(user.id)
+    telegram = _extract_telegram_binding(db_user) if db_user else {}
+    return {
+        "bound": bool(telegram.get("id")),
+        "telegram_id": telegram.get("id"),
+        "telegram_username": telegram.get("username"),
+        "telegram_bound_at": telegram.get("bound_at"),
+    }
 
 
 @router.put("/me/profile", response_model=BaseResponse)

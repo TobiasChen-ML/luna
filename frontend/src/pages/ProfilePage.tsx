@@ -6,7 +6,7 @@ import { LanguageSwitcher } from '@/i18n';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/services/authService';
 import { api } from '@/services/api';
-import { Flag, PencilLine, User, X } from 'lucide-react';
+import { Flag, Loader2, MessageCircleMore, PencilLine, User, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTelegramBackButton } from '@/hooks/useTelegramBackButton';
 
@@ -88,6 +88,8 @@ export function ProfilePage() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
+  const [telegramBinding, setTelegramBinding] = useState(false);
+  const [telegramBindError, setTelegramBindError] = useState('');
 
   const openModal = (type: 'nickname' | 'gender' | 'password') => {
     setModalError('');
@@ -153,6 +155,18 @@ export function ProfilePage() {
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
+    }
+  };
+
+  const handleTelegramBind = async () => {
+    setTelegramBinding(true);
+    setTelegramBindError('');
+    try {
+      const link = await authService.createTelegramBindLink();
+      window.location.href = link.bind_url;
+    } catch {
+      setTelegramBindError('Failed to create Telegram binding link. Please try again.');
+      setTelegramBinding(false);
     }
   };
 
@@ -261,6 +275,36 @@ export function ProfilePage() {
                     className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400"
                   >
                     {t('subscription.upgrade')}
+                  </Button>
+                )}
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 md:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-lg font-semibold text-white">Telegram</p>
+                  <p className="text-sm text-zinc-400">
+                    {user?.telegram_id
+                      ? `Linked${user.telegram_username ? `: @${user.telegram_username}` : ''}`
+                      : 'Link Telegram to use Stars purchases from Web/PWA on this account.'}
+                  </p>
+                  {telegramBindError && <p className="mt-2 text-sm text-rose-400">{telegramBindError}</p>}
+                </div>
+                {user?.telegram_id ? (
+                  <span className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm font-medium text-emerald-300">
+                    Linked
+                  </span>
+                ) : (
+                  <Button
+                    onClick={handleTelegramBind}
+                    disabled={telegramBinding}
+                    className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-60"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      {telegramBinding ? <Loader2 size={16} className="animate-spin" /> : <MessageCircleMore size={16} />}
+                      Link Telegram
+                    </span>
                   </Button>
                 )}
               </div>

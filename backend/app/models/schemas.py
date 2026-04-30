@@ -108,6 +108,9 @@ class User(BaseModel):
     subscription_tier: SubscriptionTier = SubscriptionTier.FREE
     credits: float = 0
     is_admin: bool = False
+    telegram_id: str | None = None
+    telegram_username: str | None = None
+    telegram_bound_at: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -280,6 +283,36 @@ class CreditPackCheckoutRequest(BaseModel):
 class USDTOrderCreate(BaseModel):
     amount: float
     product_id: str
+    credits: int | None = None
+    pack_id: str | None = None
+    network: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class CryptoOrderCreate(BaseModel):
+    asset: str = "USDT"
+    network: str = "TRC20"
+    product_type: str = "credit_pack"
+    pack_id: str | None = None
+    tier: str | None = None
+    billing_period: str | None = None
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("asset")
+    @classmethod
+    def normalize_asset(cls, v: str):
+        asset = (v or "").upper()
+        if asset not in {"USDT", "USDC"}:
+            raise ValueError("asset must be USDT or USDC")
+        return asset
+
+    @field_validator("network")
+    @classmethod
+    def normalize_network(cls, v: str):
+        network = (v or "").upper()
+        if network not in {"TRC20", "ERC20", "BEP20", "POLYGON", "SOLANA"}:
+            raise ValueError("network must be TRC20, ERC20, BEP20, POLYGON, or SOLANA")
+        return network
 
 
 class TelegramStarsOrderCreate(BaseModel):

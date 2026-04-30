@@ -131,7 +131,7 @@ export function PlanSelector({ currentTier, pricingConfig, onSelectPlan }: PlanS
         </button>
       </div>
       <p className="text-center text-xs text-zinc-500">
-        Need more usage? Extra credit packs are activated in Telegram with Stars.
+        Need more usage? Extra credit packs can be activated with Telegram Stars, USDT, or USDC.
       </p>
 
       {/* Plans Grid */}

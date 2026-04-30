@@ -174,6 +174,21 @@ export const authService = {
     return user;
   },
 
+  async createTelegramBindLink(): Promise<{ bind_url: string; expires_in: number }> {
+    const response = await api.post<{ bind_url: string; expires_in: number }>('/auth/telegram/bind-link');
+    return response.data;
+  },
+
+  async getTelegramBindStatus(): Promise<{
+    bound: boolean;
+    telegram_id?: string | null;
+    telegram_username?: string | null;
+    telegram_bound_at?: string | null;
+  }> {
+    const response = await api.get('/auth/telegram/bind-status');
+    return response.data;
+  },
+
   async checkin(): Promise<{ success: boolean; credits_granted: number; new_balance: number; message: string } | null> {
     try {
       const response = await api.post('/auth/checkin');

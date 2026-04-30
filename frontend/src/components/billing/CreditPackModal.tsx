@@ -2,12 +2,11 @@
  * CreditPackModal - Modal for purchasing credit packs
  */
 import { useState, useEffect } from 'react';
-import { X, Coins, Sparkles, Loader2, MessageCircleMore } from 'lucide-react';
+import { X, Coins, Sparkles, Loader2, MessageCircleMore, Wallet, ExternalLink } from 'lucide-react';
 import { Button } from '../common/Button';
 import type { CreditPack } from '../../types';
 import { billingService } from '../../services/billingService';
 import { useTelegram } from '../../contexts/TelegramContext';
-import { openTelegramMiniApp } from '../../utils/telegram';
 
 interface CreditPackModalProps {
   isOpen: boolean;
@@ -16,13 +15,23 @@ interface CreditPackModalProps {
 
 const STAR_USD_CENTS = 2.04;
 const usdCentsToStars = (priceCents: number) => Math.max(1, Math.round(priceCents / STAR_USD_CENTS));
+type CryptoAsset = 'USDT' | 'USDC';
+type CryptoNetwork = 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+const cryptoNetworksByAsset: Record<CryptoAsset, CryptoNetwork[]> = {
+  USDT: ['TRC20', 'POLYGON', 'BEP20', 'ERC20'],
+  USDC: ['POLYGON', 'BEP20', 'ERC20', 'SOLANA'],
+};
 
 export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
-  const { isTma, webApp } = useTelegram();
+  const { webApp } = useTelegram();
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>('USDT');
+  const [selectedNetwork, setSelectedNetwork] = useState<CryptoNetwork>('TRC20');
+  const [cryptoOrder, setCryptoOrder] = useState<Awaited<ReturnType<typeof billingService.createCryptoOrder>> | null>(null);
+  const [txHash, setTxHash] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -45,11 +54,6 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
   };
 
   const handleTelegramPurchase = async (pack: CreditPack) => {
-    if (!isTma) {
-      openTelegramMiniApp(`credits_${pack.id}`);
-      return;
-    }
-
     try {
       setPurchasing(`${pack.id}:telegram`);
       setError(null);
@@ -89,6 +93,55 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start Telegram Stars payment');
+      setPurchasing(null);
+    }
+  };
+
+  const handleCryptoPurchase = async (pack: CreditPack) => {
+    try {
+      setPurchasing(`${pack.id}:crypto`);
+      setError(null);
+      setCryptoOrder(null);
+      const order = await billingService.createCryptoOrder({
+        asset: selectedAsset,
+        network: selectedNetwork,
+        product_type: 'credit_pack',
+        pack_id: pack.id,
+        metadata: {
+          source: 'billing_credit_pack_modal',
+          product: 'credit_pack',
+        },
+      });
+      setCryptoOrder(order);
+      if (order.checkout_url) {
+        window.location.href = order.checkout_url;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start crypto payment');
+    } finally {
+      setPurchasing(null);
+    }
+  };
+
+  const handleCryptoAssetChange = (asset: CryptoAsset) => {
+    setSelectedAsset(asset);
+    setSelectedNetwork(cryptoNetworksByAsset[asset][0]);
+    setCryptoOrder(null);
+    setTxHash('');
+  };
+
+  const handleSubmitCryptoTx = async () => {
+    if (!cryptoOrder || !txHash.trim()) return;
+    try {
+      setPurchasing(`${cryptoOrder.order_id}:submit`);
+      setError(null);
+      await billingService.submitCryptoOrderTx(cryptoOrder.order_id, txHash.trim());
+      const latest = await billingService.getCryptoOrder(cryptoOrder.order_id);
+      setCryptoOrder(latest);
+      setError('Transaction submitted. Credits activate after gateway confirmation.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit transaction');
+    } finally {
       setPurchasing(null);
     }
   };
@@ -146,6 +199,70 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
                 </div>
               )}
 
+              <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 p-3">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  Crypto payment
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={selectedAsset}
+                    onChange={(event) => handleCryptoAssetChange(event.target.value as CryptoAsset)}
+                    className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                  >
+                    <option value="USDT">USDT</option>
+                    <option value="USDC">USDC</option>
+                  </select>
+                  <select
+                    value={selectedNetwork}
+                    onChange={(event) => setSelectedNetwork(event.target.value as CryptoNetwork)}
+                    className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                  >
+                    {cryptoNetworksByAsset[selectedAsset].map((network) => (
+                      <option key={network} value={network}>
+                        {network === 'POLYGON' ? 'Polygon' : network === 'SOLANA' ? 'Solana' : network}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {cryptoOrder && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{cryptoOrder.asset} {cryptoOrder.network}</span>
+                      <span>{cryptoOrder.amount_crypto ?? cryptoOrder.amount} {cryptoOrder.asset}</span>
+                    </div>
+                    {cryptoOrder.payment_address && (
+                      <div className="break-all rounded bg-black/30 p-2 font-mono text-xs">
+                        {cryptoOrder.payment_address}
+                      </div>
+                    )}
+                    {cryptoOrder.payment_uri && (
+                      <a
+                        href={cryptoOrder.payment_uri}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-200 hover:text-emerald-100"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open wallet payment link
+                      </a>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        value={txHash}
+                        onChange={(event) => setTxHash(event.target.value)}
+                        placeholder="Transaction hash"
+                        className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSubmitCryptoTx}
+                        disabled={!txHash.trim() || purchasing === `${cryptoOrder.order_id}:submit`}
+                      >
+                        Submit
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {packs.map((pack) => (
                 <div
                   key={pack.id}
@@ -195,7 +312,30 @@ export function CreditPackModal({ isOpen, onClose }: CreditPackModalProps) {
                         ) : (
                           <>
                             <MessageCircleMore className="w-4 h-4 mr-1" />
-                            {isTma ? 'Telegram Stars' : 'Continue in Telegram'}
+                            Pay with Telegram Stars
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2"
+                        onClick={() => handleCryptoPurchase(pack)}
+                        disabled={purchasing !== null}
+                      >
+                        {purchasing === `${pack.id}:crypto` ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            {cryptoOrder?.checkout_url ? (
+                              <ExternalLink className="w-4 h-4 mr-1" />
+                            ) : (
+                              <Wallet className="w-4 h-4 mr-1" />
+                            )}
+                            Pay {selectedAsset}
                           </>
                         )}
                       </Button>

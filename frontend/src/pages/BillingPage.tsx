@@ -151,12 +151,15 @@ export default function BillingPage() {
 
         {!isTma && (
           <div className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-5">
-            <h2 className="text-lg font-semibold text-sky-100">Purchases happen in Telegram</h2>
+            <h2 className="text-lg font-semibold text-sky-100">Web and PWA payments</h2>
             <p className="mt-1 text-sm text-sky-200/90">
-              Web and PWA access can use your active benefits. To upgrade or buy credits,
-              continue in the Telegram Mini App and pay with Telegram Stars.
+              Buy credits here with USDT or USDC. Premium can be purchased as a fixed access
+              period because crypto payments do not auto-renew like a card subscription.
             </p>
-            <Button className="mt-4" onClick={() => openTelegramMiniApp('billing')}>
+            <Button className="mt-4" onClick={() => setShowCreditModal(true)}>
+              Buy Credits
+            </Button>
+            <Button className="ml-3 mt-4" variant="outline" onClick={() => openTelegramMiniApp('billing')}>
               Continue in Telegram
             </Button>
           </div>

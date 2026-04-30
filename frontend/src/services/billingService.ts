@@ -100,6 +100,21 @@ export interface CheckoutResponse {
 export interface GatewayOrderResponse {
   order_id: string;
   status: string;
+  asset?: string;
+  network?: string;
+  amount?: number;
+  amount_crypto?: number;
+  amount_usd_cents?: number;
+  credits?: number;
+  product_type?: 'credit_pack' | 'subscription';
+  pack_id?: string;
+  tier?: SubscriptionTier;
+  billing_period?: string;
+  payment_address?: string;
+  wallet_address?: string;
+  payment_uri?: string;
+  checkout_url?: string;
+  expires_at?: string;
   raw: Record<string, unknown>;
 }
 
@@ -287,6 +302,53 @@ export const billingService = {
   },
 
   // ==================== USDT Gateway ====================
+
+  async createCryptoOrder(payload: {
+    asset: 'USDT' | 'USDC';
+    network: 'TRC20' | 'ERC20' | 'BEP20' | 'POLYGON' | 'SOLANA';
+    product_type: 'credit_pack' | 'subscription';
+    pack_id?: string;
+    tier?: SubscriptionTier;
+    billing_period?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<GatewayOrderResponse> {
+    const response = await authFetch(`${API_BASE}/billing/crypto/orders`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create crypto order');
+    }
+
+    return response.json();
+  },
+
+  async getCryptoOrder(orderId: string): Promise<GatewayOrderResponse> {
+    const response = await authFetch(`${API_BASE}/billing/crypto/orders/${orderId}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to query crypto order');
+    }
+
+    return response.json();
+  },
+
+  async submitCryptoOrderTx(orderId: string, tx_hash: string): Promise<{ success: boolean; message: string }> {
+    const response = await authFetch(`${API_BASE}/billing/crypto/orders/${orderId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ tx_hash }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to submit crypto transaction');
+    }
+
+    return response.json();
+  },
 
   async createUsdtOrder(payload: {
     amount_usdt: number;
@@ -505,4 +567,3 @@ export interface SupportTicket {
 }
 
 export default billingService;
-
