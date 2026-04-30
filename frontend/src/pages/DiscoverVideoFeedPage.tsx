@@ -27,8 +27,41 @@ interface DiscoverCharacter {
   top_category?: TopCategory;
 }
 
+interface DiscoverComment {
+  id: string;
+  author: string;
+  text: string;
+  timeAgo: string;
+  likes: number;
+}
+
 const PAGE_SIZE = 24;
 const GUEST_BROWSE_LIMIT = 12;
+const COMMENT_AUTHORS = [
+  'Maya',
+  'Alex',
+  'Sofia',
+  'Jordan',
+  'Lena',
+  'Noah',
+  'Iris',
+  'Mika',
+  'Riley',
+  'Evan',
+];
+const COMMENT_TEMPLATES = [
+  'The eye contact in this clip feels so natural.',
+  'I started a chat after seeing this and the personality matches the preview.',
+  'This is the kind of calm energy I was looking for tonight.',
+  'The voice and the intro scene work really well together.',
+  'Saved this one. The vibe is warm without feeling generic.',
+  'The background story gives enough detail to make the first message easy.',
+  'I like that the conversation does not feel rushed.',
+  'This preview actually made me curious about the character.',
+  'The style is polished, especially the lighting and expression.',
+  'Feels like a good pick for a slower story-driven chat.',
+];
+const COMMENT_TIMES = ['2m', '8m', '17m', '32m', '1h', '3h', '6h', '1d'];
 
 function getName(char: DiscoverCharacter) {
   return char.first_name || char.name || 'Character';
@@ -48,6 +81,23 @@ function pseudoCount(seed: string, base: number, mod: number) {
   let value = 0;
   for (let i = 0; i < seed.length; i += 1) value = (value * 31 + seed.charCodeAt(i)) % 100000;
   return base + (value % mod);
+}
+
+function getDiscoverComments(char: DiscoverCharacter | null): DiscoverComment[] {
+  if (!char) return [];
+  const count = 6;
+  return Array.from({ length: count }, (_, index) => {
+    const seed = `${char.id}-comment-${index}`;
+    const authorIndex = pseudoCount(seed, 0, COMMENT_AUTHORS.length);
+    const templateIndex = pseudoCount(`${seed}-text`, 0, COMMENT_TEMPLATES.length);
+    return {
+      id: seed,
+      author: COMMENT_AUTHORS[authorIndex],
+      text: COMMENT_TEMPLATES[templateIndex],
+      timeAgo: COMMENT_TIMES[pseudoCount(`${seed}-time`, 0, COMMENT_TIMES.length)],
+      likes: pseudoCount(`${seed}-likes`, 3, 240),
+    };
+  });
 }
 
 export function DiscoverVideoFeedPage() {
@@ -97,6 +147,7 @@ export function DiscoverVideoFeedPage() {
     [allVideoCharacters, isAuthenticated]
   );
   const currentCharacter = visibleCharacters[currentIndex] ?? null;
+  const currentComments = useMemo(() => getDiscoverComments(currentCharacter), [currentCharacter]);
 
   useEffect(() => {
     if (currentIndex < visibleCharacters.length) return;
@@ -288,23 +339,57 @@ export function DiscoverVideoFeedPage() {
       {showComments && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-end" onClick={() => setShowComments(false)}>
           <div
-            className="w-full rounded-t-2xl border-t border-white/10 bg-zinc-950 p-5"
+            className="w-full max-h-[72dvh] rounded-t-2xl border-t border-white/10 bg-zinc-950 p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold">Comments</h3>
-            <p className="mt-2 text-zinc-400 text-sm">
-              Comment interaction is now in UI preview mode. Backend posting can be connected next.
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Comments</h3>
+                {currentCharacter && (
+                  <p className="mt-0.5 text-xs text-zinc-400">{getName(currentCharacter)} preview discussion</p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/15"
+                onClick={() => setShowComments(false)}
+              >
+                Close
+              </button>
+            </div>
             {currentCharacter && (
-              <p className="mt-3 text-sm text-zinc-200">Now viewing: {getName(currentCharacter)}</p>
+              <div className="mt-4 max-h-[46dvh] space-y-4 overflow-y-auto pr-1">
+                {currentComments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-cyan-400 text-xs font-bold text-white">
+                      {comment.author.slice(0, 1)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">{comment.author}</span>
+                        <span className="text-xs text-zinc-500">{comment.timeAgo}</span>
+                      </div>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-200">{comment.text}</p>
+                      <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
+                        <span>{comment.likes} likes</span>
+                        <span>Reply</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-            <button
-              type="button"
-              className="mt-5 w-full rounded-xl bg-white/10 py-2.5 text-sm font-semibold hover:bg-white/15"
-              onClick={() => setShowComments(false)}
-            >
-              Close
-            </button>
+            <div className="mt-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
+              <input
+                value=""
+                readOnly
+                placeholder={isAuthenticated ? 'Add a comment...' : 'Log in to comment'}
+                className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-zinc-500 outline-none"
+              />
+              <button type="button" className="text-sm font-semibold text-pink-300" onClick={() => setShowComments(false)}>
+                Post
+              </button>
+            </div>
           </div>
         </div>
       )}

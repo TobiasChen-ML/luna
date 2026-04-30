@@ -1,4 +1,7 @@
+from contextlib import contextmanager
 from unittest.mock import AsyncMock
+
+import pytest
 
 
 class TestBillingSubscriptionEndpoints:
@@ -199,3 +202,82 @@ class TestBillingSubscriptionEndpoints:
         call = mock_create.await_args.kwargs
         assert call["credits"] == 110
         assert call["product_type"] == "credit_pack"
+
+    @pytest.mark.asyncio
+    async def test_paid_subscription_order_repairs_missing_credit_grant(self, monkeypatch):
+        from app.models.credit_transaction import CreditTransaction
+        from app.models.user import User
+        from app.services.billing_service import BillingService
+        from app.services.credit_service import credit_service
+
+        stored_order = {
+            "order_id": "stars_sub_repair",
+            "status": "paid",
+            "user_id": "test_user_001",
+            "credits": 100,
+            "product_type": "subscription",
+            "tier": "premium",
+            "billing_period": "1m",
+            "credits_applied": False,
+            "subscription_applied": False,
+        }
+        user = User(id="test_user_001", email="test@example.com")
+
+        class Query:
+            def __init__(self, result):
+                self.result = result
+
+            def filter(self, *args, **kwargs):
+                return self
+
+            def first(self):
+                return self.result
+
+        class Session:
+            def query(self, model):
+                if model is CreditTransaction:
+                    return Query(None)
+                if model is User:
+                    return Query(user)
+                return Query(None)
+
+        class Db:
+            @contextmanager
+            def transaction(self):
+                yield Session()
+
+        class Redis:
+            def __init__(self):
+                self.saved_order = None
+                self.deleted_keys = []
+
+            async def get_json(self, key):
+                return dict(stored_order)
+
+            async def set_json(self, key, value, ex=None):
+                self.saved_order = value
+                return True
+
+            async def delete(self, key):
+                self.deleted_keys.append(key)
+                return True
+
+        redis = Redis()
+        add_credits = AsyncMock(return_value=True)
+        monkeypatch.setattr(credit_service, "add_credits", add_credits)
+
+        result = await BillingService(redis=redis, db=Db()).mark_telegram_stars_order_paid(
+            order_id="stars_sub_repair",
+            charge_id="charge_001",
+            webhook_payload={"status": "paid"},
+        )
+
+        assert result["status"] == "paid"
+        assert result["already_processed"] is True
+        assert result["credits_applied"] is True
+        assert result["subscription_applied"] is True
+        add_credits.assert_awaited_once()
+        assert add_credits.await_args.kwargs["amount"] == 100
+        assert add_credits.await_args.kwargs["transaction_type"] == "subscription"
+        assert redis.saved_order["credits_applied"] is True
+        assert "user:balance:test_user_001" in redis.deleted_keys

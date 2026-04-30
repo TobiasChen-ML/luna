@@ -683,13 +683,6 @@ class BillingService:
             raise ValueError("Order not found")
 
         current_status = order.get("status")
-        if current_status == "paid":
-            return {
-                "order_id": order_id,
-                "status": "paid",
-                "already_processed": True,
-                "credits_applied": bool(order.get("credits_applied")),
-            }
         if current_status in {"failed", "cancelled"}:
             raise ValueError(f"Cannot mark {current_status} order as paid")
 
@@ -701,6 +694,7 @@ class BillingService:
         product_type = str(order.get("product_type") or "credit_pack").lower()
         transaction_type = "subscription" if product_type == "subscription" else "purchase"
         credit_source = "monthly" if product_type == "subscription" else "purchased"
+        already_paid = current_status == "paid"
 
         with self.db.transaction() as session:
             existing_tx = (
@@ -714,6 +708,15 @@ class BillingService:
             )
 
         credits_applied = existing_tx is not None
+        if already_paid and bool(order.get("credits_applied")) and credits_applied:
+            return {
+                "order_id": order_id,
+                "status": "paid",
+                "already_processed": True,
+                "credits_applied": True,
+                "subscription_applied": bool(order.get("subscription_applied")),
+            }
+
         if not credits_applied:
             await credit_service.add_credits(
                 user_id=user_id,
@@ -730,7 +733,7 @@ class BillingService:
             )
             credits_applied = True
 
-        subscription_applied = False
+        subscription_applied = bool(order.get("subscription_applied"))
         if product_type == "subscription":
             period = str(order.get("billing_period") or "1m").lower()
             period_days = {"1m": 30, "3m": 90, "12m": 365, "month": 30, "year": 365}.get(period, 30)
@@ -747,14 +750,18 @@ class BillingService:
                 user.subscription_end_date = start + timedelta(days=period_days)
                 user.last_monthly_credit_grant = now_dt
                 subscription_applied = True
+            try:
+                await self.redis.delete(f"user:balance:{user_id}")
+            except Exception as exc:
+                logger.debug(f"Failed to clear balance cache for Telegram Stars subscription {order_id}: {exc}")
 
         now = datetime.utcnow().isoformat()
         order["status"] = "paid"
         order["charge_id"] = charge_id or order.get("charge_id")
-        order["paid_at"] = now
+        order["paid_at"] = order.get("paid_at") or now
         order["updated_at"] = now
         order["credits_applied"] = credits_applied
-        order["subscription_applied"] = subscription_applied or order.get("subscription_applied", False)
+        order["subscription_applied"] = subscription_applied
         order["webhook_payload"] = webhook_payload or order.get("webhook_payload")
 
         await self.redis.set_json(
@@ -766,7 +773,7 @@ class BillingService:
         return {
             "order_id": order_id,
             "status": "paid",
-            "already_processed": False,
+            "already_processed": already_paid,
             "credits_applied": credits_applied,
             "subscription_applied": bool(order.get("subscription_applied")),
         }
