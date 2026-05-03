@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Body, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from pydantic import BaseModel
 import logging
 import json
+import io
 
 from ..services.voice_service import VoiceService
 from ..services.voice_call_service import voice_call_service
-from ..services.credit_service import credit_service
+from ..services.voice_turn_service import voice_turn_service
+from ..services.credit_service import credit_service, InsufficientCreditsError
 from ..models.schemas import BaseResponse
 from ..core.config import get_config_value, settings
 
@@ -194,4 +197,70 @@ async def get_call_status(
         "status": call_data.get("status"),
         "duration_seconds": duration,
         "start_time": call_data.get("start_time"),
+    }
+
+
+@router.post("/turn")
+async def voice_turn(
+    audio: UploadFile = File(...),
+    session_id: str = Form(...),
+    character_id: str = Form(...),
+    input_duration: float = Form(0.0),
+    language: str = Form("zh"),
+    user_id: str = Depends(get_current_user),
+) -> StreamingResponse:
+    """Single push-to-talk turn: audio in → audio out (MP3 stream).
+
+    Response headers:
+      X-Transcript-In   — what the user said
+      X-Transcript-Out  — character's reply text
+      X-Emotion         — detected emotion label
+      X-Credits-Used    — credits deducted this turn
+    """
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+
+    try:
+        result = await voice_turn_service.process_turn(
+            audio_bytes=audio_bytes,
+            session_id=session_id,
+            character_id=character_id,
+            user_id=user_id,
+            input_duration_seconds=input_duration,
+            language=language,
+        )
+    except InsufficientCreditsError:
+        raise HTTPException(status_code=402, detail="Insufficient credits")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    from urllib.parse import quote
+    return StreamingResponse(
+        io.BytesIO(result.audio_bytes),
+        media_type="audio/mpeg",
+        headers={
+            "X-Transcript-In": quote(result.transcript_in, safe=" "),
+            "X-Transcript-Out": quote(result.transcript_out, safe=" "),
+            "X-Emotion": result.emotion,
+            "X-Credits-Used": str(result.credits_used),
+            "X-Session-Total-Seconds": str(round(result.session_total_seconds, 1)),
+        },
+    )
+
+
+@router.get("/turn/session-duration/{session_id}")
+async def get_voice_session_duration(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict:
+    from ..services.redis_service import RedisService
+    redis = RedisService()
+    key = f"voice_turn_session:{session_id}:duration"
+    total = await redis.get_json(key) or 0.0
+    credits_used = round((total / 60) * 3, 4)
+    return {
+        "session_id": session_id,
+        "total_seconds": round(total, 1),
+        "credits_used": credits_used,
     }

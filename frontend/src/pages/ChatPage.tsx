@@ -13,6 +13,7 @@ import {
   AgeVerificationModal,
   RealtimeCallModal,
 } from '@/components/chat';
+import { PushToTalkModal } from '@/components/chat/PushToTalkModal';
 import { RelationshipDashboardCard } from '@/components/chat/RelationshipDashboardCard';
 import { SceneChoices } from '@/components/chat/SceneChoices';
 import { StoryCompletionModal } from '@/components/story';
@@ -1254,9 +1255,20 @@ function ChatContent() {
         </aside>
       </div>
       
-      {currentCharacter && (
-        <RealtimeCallModal
+      {currentCharacter && sessionId && (
+        <PushToTalkModal
           isOpen={isRealtimeCallOpen}
+          characterId={currentCharacter.id}
+          sessionId={sessionId}
+          characterName={currentCharacter.first_name}
+          onClose={() => setIsRealtimeCallOpen(false)}
+        />
+      )}
+
+      {/* LiveKit modal kept for future real-time agent upgrade */}
+      {false && currentCharacter && (
+        <RealtimeCallModal
+          isOpen={false}
           characterId={currentCharacter.id}
           sessionId={sessionId}
           characterName={currentCharacter.first_name}

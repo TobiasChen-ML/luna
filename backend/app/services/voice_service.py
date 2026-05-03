@@ -9,6 +9,7 @@ from ..core.config import get_settings, get_config_value
 from ..core.exceptions import ProviderError
 from .redis_service import RedisService
 from .database_service import DatabaseService
+from .emotion_voice_mapper import get_voice_settings
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,24 @@ class VoiceService:
             logger.warning(f"Failed to resolve voice from DB: {e}")
         return None
 
+    async def speech_to_text(
+        self,
+        audio_bytes: bytes,
+        language: str = "zh",
+        filename: str = "audio.webm",
+    ) -> str:
+        el_base_url = await get_config_value("ELEVENLABS_BASE_URL", self.settings.elevenlabs_base_url)
+        el_api_key = await get_config_value("ELEVENLABS_API_KEY", self.settings.elevenlabs_api_key)
+        response = await self.client.post(
+            f"{el_base_url}/speech-to-text",
+            headers={"xi-api-key": el_api_key},
+            files={"file": (filename, audio_bytes, "audio/webm")},
+            data={"model_id": "scribe_v1", "language_code": language},
+        )
+        if response.status_code != 200:
+            raise ProviderError(f"ElevenLabs STT error: {response.text}")
+        return response.json().get("text", "")
+
     async def _elevenlabs_tts(
         self,
         text: str,
@@ -121,10 +140,14 @@ class VoiceService:
         model_id: Optional[str],
         speed: float,
         output_format: str,
+        emotion: str = "default",
     ) -> dict:
         voice_id = voice_id or "default"
         model_id = model_id or "eleven_multilingual_v2"
-        
+
+        voice_settings = get_voice_settings(emotion)
+        voice_settings["speed"] = speed
+
         el_base_url = await get_config_value("ELEVENLABS_BASE_URL", self.settings.elevenlabs_base_url)
         el_api_key = await get_config_value("ELEVENLABS_API_KEY", self.settings.elevenlabs_api_key)
         response = await self.client.post(
@@ -136,11 +159,7 @@ class VoiceService:
             json={
                 "text": text,
                 "model_id": model_id,
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "speed": speed,
-                },
+                "voice_settings": voice_settings,
             },
         )
         
@@ -315,10 +334,15 @@ class VoiceService:
         text: str,
         voice_id: str,
         provider: str = "elevenlabs",
+        emotion: str = "default",
+        speed: float = 1.0,
     ) -> AsyncIterator[bytes]:
         cleaned_text = self._clean_text_for_tts(text)
-        
+
         if provider == "elevenlabs":
+            voice_settings = get_voice_settings(emotion)
+            voice_settings["speed"] = speed
+
             el_base_url = await get_config_value("ELEVENLABS_BASE_URL", self.settings.elevenlabs_base_url)
             el_api_key = await get_config_value("ELEVENLABS_API_KEY", self.settings.elevenlabs_api_key)
             async with self.client.stream(
@@ -330,11 +354,8 @@ class VoiceService:
                 },
                 json={
                     "text": cleaned_text,
-                    "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {
-                        "stability": 0.5,
-                        "similarity_boost": 0.75,
-                    },
+                    "model_id": "eleven_flash_v2_5",
+                    "voice_settings": voice_settings,
                 },
             ) as response:
                 if response.status_code != 200:
