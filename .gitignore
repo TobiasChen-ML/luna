@@ -1,6 +1,9 @@
 # === User-requested high-priority ignores ===
 # Deploy / ops scripts (local-only, not committed)
 deploy/
+_deploy.py
+deploy.sh
+deploy.bat
 
 
 # Ignore database files
