@@ -1266,15 +1266,15 @@ function ChatContent() {
       )}
 
       {/* LiveKit modal kept for future real-time agent upgrade */}
-      {false && currentCharacter && (
+      {false && currentCharacter ? (
         <RealtimeCallModal
           isOpen={false}
-          characterId={currentCharacter.id}
+          characterId={currentCharacter?.id ?? ''}
           sessionId={sessionId}
-          characterName={currentCharacter.first_name}
+          characterName={currentCharacter?.first_name ?? ''}
           onClose={() => setIsRealtimeCallOpen(false)}
         />
-      )}
+      ) : null}
 
       {/* Gallery Modal */}
       <GalleryModal
@@ -1343,6 +1343,4 @@ export function ChatPage() {
     </ChatProvider>
   );
 }
-
-
 
