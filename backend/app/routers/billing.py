@@ -891,7 +891,11 @@ async def telegram_stars_webhook(
             return BaseResponse(success=True, message="Telegram Stars pre-checkout processed")
 
         if not order_id:
-            logger.warning(f"Telegram Stars webhook missing order_id/payload: {payload}")
+            if not successful_payment and not pre_checkout_query and not status:
+                logger.info("Ignoring non-payment Telegram update on Stars webhook")
+                return BaseResponse(success=True, message="Telegram update ignored")
+
+            logger.warning(f"Telegram Stars payment webhook missing order_id/payload: {payload}")
             raise HTTPException(status_code=400, detail="order_id required")
 
         if status in ["paid", "successful"]:

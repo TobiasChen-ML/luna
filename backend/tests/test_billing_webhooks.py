@@ -542,6 +542,30 @@ class TestTelegramStarsWebhook:
             webhook_payload=payload,
         )
 
+    def test_telegram_stars_ignores_plain_telegram_messages(self, client: TestClient):
+        from app.services.auth_service import webhook_service
+
+        with patch.object(webhook_service, "verify_telegram_signature", return_value=True):
+            with patch("app.core.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.telegram_bot_token = "test_bot_token"
+                mock_get_settings.return_value = mock_settings
+
+                payload = {
+                    "update_id": 266343222,
+                    "message": {
+                        "message_id": 12,
+                        "from": {"id": 8598574739, "is_bot": False},
+                        "chat": {"id": 8598574739, "type": "private"},
+                        "text": "hello",
+                    },
+                }
+                response = client.post("/api/billing/webhooks/telegram-stars", json=payload)
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert response.json()["message"] == "Telegram update ignored"
+
 
 class TestWebhookCreditIntegration:
     @pytest.fixture(autouse=True)
