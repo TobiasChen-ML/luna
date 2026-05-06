@@ -1,50 +1,49 @@
-import { api } from '@/services/api';
+import { auth } from '@/config/firebase';
 
-export interface RealtimeVoiceSessionResponse {
-  token: string;
-  room?: string;
-  room_name?: string;
-  livekit_url?: string;
-  server_url?: string;
-  url?: string;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+export interface RealtimeVoiceSocketRequest {
+  characterId: string;
+  sessionId?: string | null;
 }
 
-export interface RealtimeVoiceSessionRequest {
-  character_id: string;
-  session_id?: string | null;
-}
-
-export interface RealtimeVoiceSession {
-  token: string;
-  roomName: string;
-  serverUrl: string;
-}
-
-export async function generateRealtimeVoiceSession(
-  request: RealtimeVoiceSessionRequest
-): Promise<RealtimeVoiceSession> {
-  const response = await api.post<RealtimeVoiceSessionResponse>('/voice/generate_token', {
-    character_id: request.character_id,
-    session_id: request.session_id ?? undefined,
-  });
-
-  const serverUrl =
-    response.data.livekit_url ||
-    response.data.server_url ||
-    response.data.url ||
-    import.meta.env.VITE_LIVEKIT_URL ||
-    import.meta.env.VITE_LIVEKIT_SERVER_URL ||
-    '';
-
-  const roomName = response.data.room_name || response.data.room || '';
-
-  if (!response.data.token || !roomName || !serverUrl) {
-    throw new Error('Invalid realtime voice session response');
+export async function openRealtimeVoiceSocket(
+  request: RealtimeVoiceSocketRequest
+): Promise<WebSocket> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error('请先登录后再发起实时通话');
   }
 
-  return {
-    token: response.data.token,
-    roomName,
-    serverUrl,
-  };
+  const socket = new WebSocket(
+    buildRealtimeVoiceWebSocketUrl({
+      characterId: request.characterId,
+      sessionId: request.sessionId,
+      token,
+    })
+  );
+  socket.binaryType = 'arraybuffer';
+  return socket;
+}
+
+export function buildRealtimeVoiceWebSocketUrl({
+  characterId,
+  sessionId,
+  token,
+}: RealtimeVoiceSocketRequest & { token: string }): string {
+  const url = new URL('/api/realtime-voice/ws', resolveWebSocketOrigin(BASE_URL));
+  url.searchParams.set('character_id', characterId);
+  if (sessionId) {
+    url.searchParams.set('session_id', sessionId);
+  }
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
+function resolveWebSocketOrigin(apiBaseUrl: string): string {
+  const browserOrigin =
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  const apiUrl = new URL(apiBaseUrl, browserOrigin);
+  apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  return apiUrl.origin;
 }

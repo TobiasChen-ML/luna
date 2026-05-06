@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { useTelegramBackButton } from '@/hooks/useTelegramBackButton';
+import { useTelegram } from '@/contexts/TelegramContext';
 import { ChatProvider, useChatContext } from '@/contexts/ChatContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeoContext } from '@/contexts/GeoContext';
@@ -13,7 +14,6 @@ import {
   AgeVerificationModal,
   RealtimeCallModal,
 } from '@/components/chat';
-import { PushToTalkModal } from '@/components/chat/PushToTalkModal';
 import { RelationshipDashboardCard } from '@/components/chat/RelationshipDashboardCard';
 import { SceneChoices } from '@/components/chat/SceneChoices';
 import { StoryCompletionModal } from '@/components/story';
@@ -74,6 +74,7 @@ function ChatContent() {
   const [searchParams] = useSearchParams();
   // TMA: native back button navigates to the character list
   useTelegramBackButton(() => navigate('/discover'));
+  const { isTma } = useTelegram();
   const { user, refreshUser, isAuthenticated } = useAuth();
   useGeoContext();
   const {
@@ -884,17 +885,19 @@ function ChatContent() {
                 <ShieldCheck size={16} />
                 <span className="hidden sm:inline">Consent</span>
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRealtimeCallOpen(true)}
-                disabled={!currentCharacter || !sessionId || isSessionLoading}
-                className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
-                title="通话"
-              >
-                <Video size={16} />
-                <span className="hidden sm:inline">通话</span>
-              </Button>
+              {!isTma && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsRealtimeCallOpen(true)}
+                  disabled={!currentCharacter || !sessionId || isSessionLoading}
+                  className="hidden h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 lg:flex"
+                  title="通话"
+                >
+                  <Video size={16} />
+                  <span className="hidden sm:inline">通话</span>
+                </Button>
+              )}
 
             </>
           )}
@@ -937,18 +940,20 @@ function ChatContent() {
                   <ShieldCheck size={16} />
                   <span>Consent</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMobileActionsOpen(false);
-                    setIsRealtimeCallOpen(true);
-                  }}
-                  disabled={!currentCharacter || !sessionId || isSessionLoading}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600 disabled:hover:bg-transparent"
-                >
-                  <Video size={16} />
-                  <span>Call</span>
-                </button>
+                {!isTma && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileActionsOpen(false);
+                      setIsRealtimeCallOpen(true);
+                    }}
+                    disabled={!currentCharacter || !sessionId || isSessionLoading}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600 disabled:hover:bg-transparent"
+                  >
+                    <Video size={16} />
+                    <span>Call</span>
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -1256,7 +1261,7 @@ function ChatContent() {
       </div>
       
       {currentCharacter && sessionId && (
-        <PushToTalkModal
+        <RealtimeCallModal
           isOpen={isRealtimeCallOpen}
           characterId={currentCharacter.id}
           sessionId={sessionId}
@@ -1264,17 +1269,6 @@ function ChatContent() {
           onClose={() => setIsRealtimeCallOpen(false)}
         />
       )}
-
-      {/* LiveKit modal kept for future real-time agent upgrade */}
-      {false && currentCharacter ? (
-        <RealtimeCallModal
-          isOpen={false}
-          characterId={currentCharacter?.id ?? ''}
-          sessionId={sessionId}
-          characterName={currentCharacter?.first_name ?? ''}
-          onClose={() => setIsRealtimeCallOpen(false)}
-        />
-      ) : null}
 
       {/* Gallery Modal */}
       <GalleryModal
