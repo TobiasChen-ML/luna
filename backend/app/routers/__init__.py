@@ -39,6 +39,7 @@ from app.routers.memory import router as memory_router
 from app.routers.inference import router as inference_router
 from app.routers.voices import router as voices_router
 from app.routers.rewards import router as rewards_router
+from app.routers.realtime_voice import router as realtime_voice_router
 
 __all__ = [
     "auth_router",
@@ -79,4 +80,5 @@ __all__ = [
     "inference_router",
     "voices_router",
     "rewards_router",
+    "realtime_voice_router",
 ]

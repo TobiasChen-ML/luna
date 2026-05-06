@@ -51,6 +51,7 @@ from app.routers import (
     inference_router,
     voices_router,
     rewards_router,
+    realtime_voice_router,
 )
 from app.routers.script_library import router as script_library_router
 from app.routers.admin.prompts import router as admin_prompts_router
@@ -231,6 +232,7 @@ app.include_router(memory_router)
 app.include_router(inference_router)
 app.include_router(voices_router)
 app.include_router(rewards_router)
+app.include_router(realtime_voice_router)
 
 
 @app.get("/health")
