@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -26,6 +27,94 @@ class TestTelegramSupportBotService:
         answer = service.match_answer("something unrelated")
 
         assert "Mini App support page" in answer
+
+    def test_start_sends_welcome_card(self):
+        service = TelegramSupportBotService()
+        service.send_welcome_card = AsyncMock(return_value={"ok": True})  # type: ignore[method-assign]
+
+        result = asyncio.run(
+            service.handle_update(
+                {"message": {"text": "/start", "chat": {"id": 12345}}},
+                bot_token="test-token",
+            )
+        )
+
+        assert result == {"handled": True, "action": "welcome"}
+        service.send_welcome_card.assert_awaited_once()
+
+    def test_callback_routes_to_recharge_card(self):
+        service = TelegramSupportBotService()
+        service.answer_callback_query = AsyncMock(return_value={"ok": True})  # type: ignore[method-assign]
+        service.send_recharge_card = AsyncMock(return_value={"ok": True})  # type: ignore[method-assign]
+
+        result = asyncio.run(
+            service.handle_update(
+                {
+                    "callback_query": {
+                        "id": "callback-1",
+                        "data": "recharge",
+                        "message": {"chat": {"id": 12345}},
+                    }
+                },
+                bot_token="test-token",
+            )
+        )
+
+        assert result == {"handled": True, "action": "recharge"}
+        service.answer_callback_query.assert_awaited_once()
+        service.send_recharge_card.assert_awaited_once()
+
+    def test_character_card_sends_photo_with_chat_button(self, monkeypatch):
+        import app.services.character_service as character_service_module
+
+        service = TelegramSupportBotService()
+        character = {
+            "id": "char_1",
+            "name": "Luna",
+            "first_name": "Luna",
+            "slug": "luna",
+            "top_category": "girls",
+            "is_official": True,
+            "is_public": True,
+            "avatar_url": "https://example.com/luna.jpg",
+            "personality_summary": "Warm and curious.",
+            "personality_tags": ["sweet", "playful"],
+        }
+        monkeypatch.setattr(
+            character_service_module.character_service,
+            "get_character_by_id",
+            AsyncMock(return_value=character),
+        )
+        service.send_photo = AsyncMock(return_value={"ok": True})  # type: ignore[method-assign]
+        service._web_url = AsyncMock(return_value="https://roxyclub.ai/ai-girlfriend/luna")  # type: ignore[method-assign]
+
+        result = asyncio.run(
+            service.send_character_card(
+                bot_token="test-token",
+                chat_id=12345,
+                character_id="char_1",
+            )
+        )
+
+        assert result == {"ok": True}
+        kwargs = service.send_photo.await_args.kwargs
+        assert kwargs["photo"] == "https://example.com/luna.jpg"
+        assert "Luna" in kwargs["caption"]
+        assert kwargs["reply_markup"]["inline_keyboard"][0][0]["url"].endswith("/ai-girlfriend/luna")
+
+    def test_stars_status_uses_telegram_balance(self):
+        service = TelegramSupportBotService()
+        service._telegram_api_post = AsyncMock(  # type: ignore[method-assign]
+            return_value={"ok": True, "result": {"amount": 42}}
+        )
+        service.send_message = AsyncMock(return_value={"ok": True})  # type: ignore[method-assign]
+        service._mini_app_url = AsyncMock(return_value="https://t.me/RoxyClubBot/app?startapp=purchase")  # type: ignore[method-assign]
+
+        asyncio.run(service.send_stars_status(bot_token="test-token", chat_id=12345))
+
+        kwargs = service.send_message.await_args.kwargs
+        assert "Bot Star balance: 42" in kwargs["text"]
+        assert "Recharge with Stars" in kwargs["reply_markup"]["inline_keyboard"][0][0]["text"]
 
 
 class TestTelegramBotWebhook:
