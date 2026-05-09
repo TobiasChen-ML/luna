@@ -34,6 +34,8 @@ from app.services.credit_service import credit_service
 from app.services.auth_service import jwt_service
 from app.core.dependencies import get_firebase_service
 from app.services.script_library_service import script_library_service
+from app.services.credit_service import check_feature_access
+from app.services.milestone_service import write_milestone, check_and_write_streak_milestones
 from app.core.database import db
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -1125,24 +1127,130 @@ async def chat_stream(request: Request, data: ChatStreamRequest) -> EventSourceR
                             "previous_stage": rel_update.get("previous_stage"),
                         }
                     ).to_sse()
+                    new_stage = rel_update.get("stage")
+                    prev_stage = rel_update.get("previous_stage")
+                    if new_stage and prev_stage and new_stage != prev_stage:
+                        asyncio.create_task(write_milestone(
+                            user_id=user_id,
+                            character_id=data.character_id,
+                            milestone_type="stage_up",
+                            description=f"Relationship reached {new_stage}",
+                        ))
+                        # Propose story generation on stage-up if eligible
+                        if user_db_id and await _maybe_propose_story(
+                            user_db_id=user_db_id,
+                            session_id=session_id,
+                        ):
+                            yield SSEEvent(
+                                event=EventType.STORY_PROPOSAL,
+                                data={
+                                    "session_id": session_id,
+                                    "character_id": data.character_id,
+                                    "trigger": "stage_up",
+                                    "new_stage": new_stage,
+                                    "message": f"Your relationship has deepened. Shall I turn your story into an interactive novel?",
+                                },
+                            ).to_sse()
+                    asyncio.create_task(check_and_write_streak_milestones(
+                        user_id=user_id,
+                        character_id=data.character_id,
+                    ))
             except Exception as e:
                 logger.warning(
                     f"Relationship analysis skipped: user_id={user_id}, "
                     f"character_id={data.character_id}, error={e}"
                 )
             
+            try:
+                # In active story mode, emit node choices and advance the node.
+                # Otherwise fall back to AI-generated choices.
+                current_session = await chat_history_service.get_session(session_id)
+                active_script_id = (current_session or {}).get("script_id")
+                current_node_id = (current_session or {}).get("script_node_id")
+
+                if active_script_id and current_node_id:
+                    script = await script_service.get_script(active_script_id)
+                    node = await script_service.get_node(current_node_id)
+                    node_choices = (node or {}).get("choices") or []
+                    node_type = (node or {}).get("node_type", "scene")
+
+                    if node_type == "ending" or node_type == "ENDING":
+                        yield SSEEvent(
+                            event=EventType.STORY_COMPLETED,
+                            data={
+                                "story_id": active_script_id,
+                                "story_title": (script or {}).get("title", active_script_id),
+                                "session_id": session_id,
+                                "ending_type": "neutral",
+                                "rewards": {},
+                                "completion_time_minutes": None,
+                                "narrative": (node or {}).get("narrative", ""),
+                            },
+                        ).to_sse()
+                        # Clear story mode from session
+                        await db.execute(
+                            "UPDATE chat_sessions SET script_id = NULL, script_node_id = NULL, script_state = NULL WHERE id = ?",
+                            (session_id,),
+                        )
+                    else:
+                        next_node = await _advance_story_node(session_id, active_script_id, current_node_id)
+                        if next_node and next_node.get("node_type") in ("ending", "ENDING"):
+                            yield SSEEvent(
+                                event=EventType.STORY_COMPLETED,
+                                data={
+                                    "story_id": active_script_id,
+                                    "story_title": (script or {}).get("title", active_script_id),
+                                    "session_id": session_id,
+                                    "ending_type": "neutral",
+                                    "rewards": {},
+                                    "completion_time_minutes": None,
+                                    "narrative": next_node.get("narrative", ""),
+                                },
+                            ).to_sse()
+                            await db.execute(
+                                "UPDATE chat_sessions SET script_id = NULL, script_node_id = NULL, script_state = NULL WHERE id = ?",
+                                (session_id,),
+                            )
+                        elif node_choices:
+                            yield SSEEvent(
+                                event=EventType.SCENE_CHOICES,
+                                data={
+                                    "choices": node_choices,
+                                    "scene_state": {
+                                        "description": (node or {}).get("narrative", "")[:200],
+                                        "active": True,
+                                        "story_mode": True,
+                                        "next_node_id": (next_node or {}).get("id"),
+                                    },
+                                },
+                            ).to_sse()
+                else:
+                    choices_event = await _maybe_inject_choices(
+                        session_id=session_id,
+                        character=character,
+                        last_ai_message=full_response,
+                        llm=llm,
+                    )
+                    if choices_event:
+                        yield SSEEvent(
+                            event=EventType.SCENE_CHOICES,
+                            data=choices_event,
+                        ).to_sse()
+            except Exception as e:
+                logger.debug(f"Choice injection skipped: {e}")
+
             yield SSEEvent(
                 event=EventType.STREAM_END,
                 data={"session_id": session_id}
             ).to_sse()
-            
+
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield SSEEvent(
                 event=EventType.ERROR,
                 data={"message": str(e), "code": "STREAM_ERROR"}
             ).to_sse()
-    
+
     return EventSourceResponse(event_generator())
 
 
@@ -2112,5 +2220,463 @@ async def get_group_session_messages(
         raise HTTPException(status_code=404, detail="Session not found")
     
     messages = await group_chat_service.get_group_messages(session_id, limit)
-    
+
     return {"session_id": session_id, "messages": messages}
+
+
+# ---------------------------------------------------------------------------
+# Choice injection helper
+# ---------------------------------------------------------------------------
+
+_CHOICES_SCHEMA = {
+    "type": "object",
+    "required": ["choices"],
+    "properties": {
+        "choices": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {"type": "string"},
+        },
+        "scene_description": {"type": "string"},
+    },
+}
+
+_CHOICES_SYSTEM = (
+    "You are a narrative game designer. Given the last AI message in a romantic/intimate chat, "
+    "generate 2-3 short, varied response choices for the player that feel natural and advance the story. "
+    "Each choice should be under 12 words. Return ONLY valid JSON."
+)
+
+
+async def _advance_story_node(
+    session_id: str,
+    script_id: str,
+    current_node_id: str,
+) -> Optional[dict[str, Any]]:
+    """Advance the session to the next sequential story node. Returns the new current node."""
+    try:
+        nodes = await script_service.list_nodes(script_id)
+        if not nodes:
+            return None
+        ids = [n["id"] for n in nodes]
+        try:
+            idx = ids.index(current_node_id)
+        except ValueError:
+            return None
+        if idx + 1 >= len(nodes):
+            return None
+        next_node = nodes[idx + 1]
+        await script_service.update_session_script_state(
+            session_id,
+            node_id=next_node["id"],
+            script_state="active",
+        )
+        return next_node
+    except Exception as e:
+        logger.warning(f"Failed to advance story node: {e}")
+        return None
+
+
+async def _maybe_propose_story(
+    user_db_id: str,
+    session_id: str,
+) -> bool:
+    """Return True when conditions are met for a story proposal."""
+    try:
+        if not user_db_id or not await check_feature_access(user_db_id, "story_generation"):
+            return False
+        row = await db.execute(
+            "SELECT COUNT(*) AS cnt FROM chat_messages WHERE session_id = ? AND role = 'user'",
+            (session_id,),
+            fetch=True,
+        )
+        if int((row or {}).get("cnt", 0)) < 10:
+            return False
+        # Don't propose if a generated story already exists for this session
+        existing = await db.execute(
+            "SELECT id FROM scripts WHERE source_session_id = ?",
+            (session_id,),
+            fetch=True,
+        )
+        return not existing
+    except Exception:
+        return False
+
+
+async def _maybe_inject_choices(
+    *,
+    session_id: str,
+    character: Optional[dict[str, Any]],
+    last_ai_message: str,
+    llm: "LLMService",
+) -> Optional[dict[str, Any]]:
+    rows = await db.execute(
+        "SELECT COUNT(*) as cnt FROM chat_messages WHERE session_id = ? AND role = 'user'",
+        (session_id,),
+        fetch=True,
+    )
+    msg_count = int((rows or {}).get("cnt", 0))
+    if msg_count == 0 or msg_count % 5 != 0:
+        return None
+
+    char_name = (
+        (character or {}).get("first_name")
+        or (character or {}).get("name")
+        or "her"
+    )
+    prompt = (
+        f"{char_name} just said: \"{last_ai_message[:300]}\"\n\n"
+        "Generate 2-3 short response choices for the player."
+    )
+    result = await llm.generate_structured(
+        messages=[
+            {"role": "system", "content": _CHOICES_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        schema=_CHOICES_SCHEMA,
+        temperature=0.8,
+    )
+    choices = result.data.get("choices", [])
+    if not choices:
+        return None
+    return {
+        "choices": choices,
+        "scene_state": {
+            "description": result.data.get("scene_description", ""),
+            "active": True,
+            "turn": msg_count,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# P0: Generate story from session
+# ---------------------------------------------------------------------------
+
+@router.post("/generate-story", response_model=dict[str, Any])
+async def generate_story(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    user_id = _get_user_id(request)
+    user_db_id = _get_user_db_id(request)
+
+    if not user_db_id or user_id == "guest":
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    character_id = str(data.get("character_id") or "").strip()
+    session_id = str(data.get("session_id") or "").strip()
+    if not character_id or not session_id:
+        raise HTTPException(status_code=422, detail="character_id and session_id required")
+
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("user_id") != user_id or session.get("character_id") != character_id:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    has_access = await check_feature_access(user_db_id, "story_generation")
+    if not has_access:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "FEATURE_LOCKED",
+                "feature": "story_generation",
+                "message": "Story generation requires Story+ or Creator subscription",
+                "upgrade_url": "/billing",
+            },
+        )
+
+    story_cost = 5.0
+    try:
+        balance = await credit_service.get_balance(user_db_id)
+        if balance["total"] < story_cost:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "required": story_cost,
+                    "available": balance["total"],
+                },
+            )
+        await credit_service.deduct_credits(
+            user_id=user_db_id,
+            amount=story_cost,
+            usage_type="story_generation",
+            character_id=character_id,
+            session_id=session_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Credit deduction failed for story generation: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process credits")
+
+    from app.services.story_generator_service import generate_story_from_session
+
+    script_id = f"script_{uuid.uuid4().hex[:12]}"
+
+    async def _run_and_notify():
+        sid = await generate_story_from_session(
+            session_id=session_id,
+            user_id=user_id,
+            character_id=character_id,
+            script_id=script_id,
+        )
+        from app.core.redis_client import redis_client
+
+        if sid:
+            await redis_client.publish(
+                EventType.STORY_GENERATED.value,
+                json.dumps({
+                    "script_id": sid,
+                    "session_id": session_id,
+                    "character_id": character_id,
+                    "user_id": user_db_id,
+                    "status": "ready",
+                }),
+            )
+        else:
+            await credit_service.refund_credits_simple(
+                user_id=user_db_id,
+                amount=story_cost,
+                usage_type="story_generation_failed",
+                character_id=character_id,
+                session_id=session_id,
+            )
+            await redis_client.publish(
+                EventType.STORY_GENERATED.value,
+                json.dumps({
+                    "script_id": script_id,
+                    "session_id": session_id,
+                    "character_id": character_id,
+                    "user_id": user_db_id,
+                    "status": "failed",
+                }),
+            )
+
+    asyncio.create_task(_run_and_notify())
+
+    return {"script_id": script_id, "status": "generating", "message": "Story is being crafted..."}
+
+
+# ---------------------------------------------------------------------------
+# P0: Select narrative choice
+# ---------------------------------------------------------------------------
+
+_SCENE_ILLUSTRATION_INTERVAL = 5  # messages between illustrations
+
+
+async def _trigger_scene_illustration(
+    user_id: str,
+    session_id: str,
+    character_id: str,
+    choice_text: str,
+) -> None:
+    """Generate a scene illustration for Story+ users after every N choices."""
+    try:
+        if not await check_feature_access(user_id, "scene_illustration"):
+            return
+
+        # Throttle: only illustrate every _SCENE_ILLUSTRATION_INTERVAL user messages
+        row = await db.execute(
+            "SELECT COUNT(*) AS cnt FROM chat_messages WHERE session_id = ? AND role = 'user'",
+            (session_id,),
+            fetch=True,
+        )
+        msg_count = (row or {}).get("cnt", 0)
+        if msg_count % _SCENE_ILLUSTRATION_INTERVAL != 0:
+            return
+
+        await credit_service.deduct_credits(
+            user_id=user_id,
+            amount=1,
+            usage_type="scene_illustration",
+            character_id=character_id,
+            session_id=session_id,
+        )
+
+        character = await character_service.get_character_by_id(character_id)
+        if not character:
+            return
+
+        media = MediaService.get_instance()
+        image_provider = media.get_image_provider()
+
+        avatar_url = character.get("profile_image_url") or character.get("cover_url")
+        task_id = str(uuid.uuid4())
+
+        scene_prompt = (
+            f"cinematic scene illustration: {choice_text[:120]}, "
+            f"anime style, soft lighting, romantic atmosphere, no text"
+        )
+        negative_prompt = "text, watermark, low quality, blurry, nsfw"
+
+        if avatar_url:
+            import httpx
+            import base64
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(avatar_url)
+            if resp.status_code == 200:
+                from app.services.media import IPAdapterConfig
+                avatar_b64 = base64.b64encode(resp.content).decode()
+                task_id = await image_provider.txt2img_async(
+                    prompt=scene_prompt,
+                    negative_prompt=negative_prompt,
+                    width=768,
+                    height=432,
+                    ip_adapters=[IPAdapterConfig(image_base64=avatar_b64, strength=0.3)],
+                )
+            else:
+                task_id = await image_provider.txt2img_async(
+                    prompt=scene_prompt,
+                    negative_prompt=negative_prompt,
+                    width=768,
+                    height=432,
+                )
+        else:
+            task_id = await image_provider.txt2img_async(
+                prompt=scene_prompt,
+                negative_prompt=negative_prompt,
+                width=768,
+                height=432,
+            )
+
+        result = await image_provider.wait_for_task(task_id, timeout_seconds=90)
+        if not result.image_url:
+            return
+
+        from app.core.redis_client import redis_client
+        await redis_client.publish(
+            "image_done",
+            json.dumps({
+                "message_id": task_id,
+                "image_url": result.image_url,
+                "task_id": task_id,
+                "session_id": session_id,
+                "is_scene_illustration": True,
+            }),
+        )
+        logger.debug(f"Scene illustration published for session {session_id}")
+    except Exception as e:
+        logger.debug(f"Scene illustration skipped: {e}")
+
+
+@router.post("/select-choice", response_model=dict[str, Any])
+async def select_choice(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    user_id = _get_user_id(request)
+    user_db_id = _get_user_db_id(request)
+    session_id = str(data.get("session_id") or "").strip()
+    choice_text = str(data.get("choice_text") or "").strip()
+    record_message = bool(data.get("record_message", True))
+
+    if not session_id or not choice_text:
+        raise HTTPException(status_code=422, detail="session_id and choice_text required")
+
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    character_id = session.get("character_id", "")
+
+    if record_message:
+        await chat_history_service.save_message(
+            ChatMessageCreateModel(
+                session_id=session_id,
+                role="user",
+                content=choice_text,
+                character_id=character_id,
+                user_id=user_id,
+            )
+        )
+
+    if user_db_id:
+        asyncio.create_task(_trigger_scene_illustration(
+            user_id=user_db_id,
+            session_id=session_id,
+            character_id=character_id,
+            choice_text=choice_text,
+        ))
+
+    return {"success": True, "session_id": session_id, "choice_recorded": choice_text}
+
+
+# ---------------------------------------------------------------------------
+# P0: Story mode — start and exit
+# ---------------------------------------------------------------------------
+
+@router.post("/start-story", response_model=dict[str, Any])
+async def start_story(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    """Bind a generated script to the current session and begin character-led story mode."""
+    user_id = _get_user_id(request)
+    session_id = str(data.get("session_id") or "").strip()
+    script_id = str(data.get("script_id") or "").strip()
+
+    if not session_id or not script_id:
+        raise HTTPException(status_code=422, detail="session_id and script_id required")
+
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    script = await script_service.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    source_session_id = script.get("source_session_id")
+    if source_session_id and source_session_id != session_id:
+        raise HTTPException(status_code=403, detail="Script does not belong to this session")
+
+    nodes = await script_service.list_nodes(script_id)
+    first_node = nodes[0] if nodes else None
+
+    await db.execute(
+        """UPDATE chat_sessions
+           SET script_id = ?, script_node_id = ?, script_state = 'active', updated_at = ?
+           WHERE id = ?""",
+        (
+            script_id,
+            first_node["id"] if first_node else None,
+            datetime.utcnow().isoformat(),
+            session_id,
+        ),
+    )
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "script_id": script_id,
+        "script_title": script.get("title", ""),
+        "first_node": {
+            "id": first_node["id"] if first_node else None,
+            "title": (first_node or {}).get("title", ""),
+            "narrative": (first_node or {}).get("narrative", ""),
+            "choices": (first_node or {}).get("choices") or [],
+        } if first_node else None,
+    }
+
+
+@router.post("/exit-story", response_model=dict[str, Any])
+async def exit_story(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    """Exit story mode and return to free-form chat."""
+    user_id = _get_user_id(request)
+    session_id = str(data.get("session_id") or "").strip()
+
+    if not session_id:
+        raise HTTPException(status_code=422, detail="session_id required")
+
+    session = await chat_history_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    await db.execute(
+        """UPDATE chat_sessions
+           SET script_id = NULL, script_node_id = NULL, script_state = NULL, updated_at = ?
+           WHERE id = ?""",
+        (datetime.utcnow().isoformat(), session_id),
+    )
+
+    return {"success": True, "session_id": session_id}

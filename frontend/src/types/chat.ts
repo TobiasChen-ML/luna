@@ -33,6 +33,7 @@ export interface Message {
   transcript?: string;
   error?: string;
   script_context?: MessageScriptContext;
+  is_scene_illustration?: boolean;
   metadata?: {
     source?: 'voice_call' | 'text_chat' | 'group_chat';
     assistant_id?: string;

@@ -246,8 +246,29 @@ export function ChatInput({
     return () => window.removeEventListener('triggerShootPhoto', handleTriggerShootPhoto);
   }, [disabled, onGenerateImage, toggleImagePrompt]);
 
+  // Keyboard avoidance for iOS Safari — offset the input by the amount the
+  // visual viewport has shrunk from the layout viewport.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handleResize = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--keyboard-offset', `${offset}px`);
+    };
+    vv.addEventListener('resize', handleResize);
+    vv.addEventListener('scroll', handleResize);
+    return () => {
+      vv.removeEventListener('resize', handleResize);
+      vv.removeEventListener('scroll', handleResize);
+      document.documentElement.style.removeProperty('--keyboard-offset');
+    };
+  }, []);
+
   return (
-    <div className="sticky bottom-0 left-0 right-0 border-t border-white/10 bg-zinc-900/95 backdrop-blur-md px-2 py-3 sm:p-4 pb-safe z-20 flex-shrink-0">
+    <div
+      className="sticky bottom-0 left-0 right-0 border-t border-white/10 bg-zinc-900/95 backdrop-blur-md px-2 py-3 sm:p-4 pb-safe z-20 flex-shrink-0"
+      style={{ marginBottom: 'var(--keyboard-offset, 0px)' }}
+    >
       <div className="max-w-4xl mx-auto">
         <div ref={actionsRowRef} className="flex items-center gap-2 sm:gap-3">
 

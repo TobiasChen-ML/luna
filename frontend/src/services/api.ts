@@ -153,3 +153,40 @@ export function clearAuthTokens(): void {
 export function hasValidTokens(): boolean {
   return tokenStorage.hasTokens();
 }
+
+export async function generateStoryFromChat(
+  characterId: string,
+  sessionId: string,
+): Promise<{ script_id: string; status: string }> {
+  const response = await api.post('/chat/generate-story', {
+    character_id: characterId,
+    session_id: sessionId,
+  });
+  return response.data;
+}
+
+export async function getScript<T = unknown>(scriptId: string): Promise<T> {
+  const response = await api.get(`/scripts/${scriptId}`);
+  return response.data;
+}
+
+export async function getScriptNodes<T = unknown>(scriptId: string): Promise<T[]> {
+  const response = await api.get<{ nodes: T[] }>(`/scripts/${scriptId}/nodes`);
+  return response.data.nodes;
+}
+
+export async function startStory(
+  sessionId: string,
+  scriptId: string,
+): Promise<{ success: boolean; script_title: string; first_node: unknown }> {
+  const response = await api.post('/chat/start-story', {
+    session_id: sessionId,
+    script_id: scriptId,
+  });
+  return response.data;
+}
+
+export async function exitStory(sessionId: string): Promise<{ success: boolean }> {
+  const response = await api.post('/chat/exit-story', { session_id: sessionId });
+  return response.data;
+}

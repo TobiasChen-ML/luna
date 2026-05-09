@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
-from typing import Optional
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from typing import Any, Optional
 import logging
 
+from ..core.database import db
 from ..services.memory_service import MemoryService
 from ..services.embedding_service import embedding_service
 from ..services.vector_store import memory_vector_store, global_memory_vector_store
@@ -21,13 +23,28 @@ router = APIRouter(prefix="/context", tags=["memory"])
 memory_service = MemoryService()
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
+async def get_current_user(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> str:
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    else:
+        token = request.cookies.get("access_token")
+
+    if token:
+        from ..services.auth_service import jwt_service
+
+        payload = jwt_service.verify_token(token)
+        if payload and payload.get("sub"):
+            return str(payload["sub"])
+
     from ..services import FirebaseService
-    
-    if not authorization or not authorization.startswith("Bearer "):
+
+    if not token:
         raise HTTPException(status_code=401, detail="Missing authorization")
-    
-    token = authorization[7:]
+
     decoded = FirebaseService().verify_token(token)
     if not decoded:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -242,10 +259,108 @@ async def rebuild_vector_store(
     user_id: str = Depends(get_current_user),
 ) -> dict:
     from ..migrations.migrate_memory_embeddings import rebuild_vector_store
-    
+
     try:
         await rebuild_vector_store()
         return {"status": "success", "message": "Vector store rebuilt successfully"}
     except Exception as e:
         logger.error(f"Failed to rebuild vector store: {e}")
         raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# P2: "Our Story" — relationship timeline
+# ---------------------------------------------------------------------------
+
+@router.get("/{character_id}/our-story")
+async def get_our_story(
+    character_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return relationship timeline data for the OurStoryPage."""
+    from ..services.character_service import character_service
+    from ..services.relationship_service import relationship_service
+
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    rel = await relationship_service.get_relationship(user_id, character_id)
+
+    # First message timestamp
+    first_msg_row = await db.execute(
+        """
+        SELECT created_at FROM chat_messages
+        WHERE user_id = ? AND character_id = ? AND role = 'user'
+        ORDER BY created_at ASC LIMIT 1
+        """,
+        (user_id, character_id),
+        fetch=True,
+    )
+    first_met_str = (first_msg_row or {}).get("created_at")
+    days_together = 0
+    if first_met_str:
+        try:
+            first_met = datetime.fromisoformat(first_met_str.replace("Z", "+00:00"))
+            if first_met.tzinfo is None:
+                first_met = first_met.replace(tzinfo=timezone.utc)
+            days_together = (datetime.now(timezone.utc) - first_met).days
+        except Exception:
+            pass
+
+    # Key memories (top 10 by decayed_importance)
+    memory_rows = await db.execute(
+        """
+        SELECT id, content, layer, importance, decayed_importance, created_at
+        FROM memories
+        WHERE user_id = ? AND character_id = ?
+        ORDER BY decayed_importance DESC LIMIT 10
+        """,
+        (user_id, character_id),
+        fetch_all=True,
+    )
+
+    # Milestones
+    milestone_rows = await db.execute(
+        """
+        SELECT id, milestone_type, description, occurred_at
+        FROM relationship_milestones
+        WHERE user_id = ? AND character_id = ?
+        ORDER BY occurred_at ASC
+        """,
+        (user_id, character_id),
+        fetch_all=True,
+    )
+
+    # Generated stories
+    story_rows = await db.execute(
+        """
+        SELECT id, title, cover_image_url, created_at
+        FROM scripts
+        WHERE source_session_id IS NOT NULL
+          AND character_id = ?
+          AND EXISTS (
+              SELECT 1 FROM chat_messages cm
+              WHERE cm.session_id = scripts.source_session_id
+                AND cm.user_id = ?
+          )
+        ORDER BY created_at DESC LIMIT 10
+        """,
+        (character_id, user_id),
+        fetch_all=True,
+    )
+
+    return {
+        "character": {
+            "id": character_id,
+            "name": character.get("first_name", ""),
+            "avatar_url": character.get("profile_image_url") or character.get("cover_url"),
+        },
+        "first_met": first_met_str,
+        "days_together": days_together,
+        "relationship_stage": (rel or {}).get("stage", "stranger"),
+        "relationship": rel,
+        "key_memories": [dict(r) for r in (memory_rows or [])],
+        "milestones": [dict(r) for r in (milestone_rows or [])],
+        "generated_stories": [dict(r) for r in (story_rows or [])],
+    }

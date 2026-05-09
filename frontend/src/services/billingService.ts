@@ -6,7 +6,7 @@ import { auth } from '@/config/firebase';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Types
-export type SubscriptionTier = 'free' | 'premium';
+export type SubscriptionTier = 'free' | 'premium' | 'story_plus' | 'creator';
 export type BillingPeriod = 'month' | 'year';
 export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'incomplete';
 export type PaymentType = 'subscription' | 'credit_pack' | 'refund';
@@ -519,6 +519,8 @@ export const billingService = {
     const names: Record<SubscriptionTier, string> = {
       free: 'Free',
       premium: 'Premium',
+      story_plus: 'Story+',
+      creator: 'Creator',
     };
     return names[tier] || tier;
   },

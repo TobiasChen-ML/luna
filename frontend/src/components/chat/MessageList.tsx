@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Message } from '@/types/chat';
 import { MessageBubble, InnerMonologueBubble } from './MessageBubble';
+import { SceneImageBanner } from './SceneImageBanner';
 import { TypingIndicator } from './TypingIndicator';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useChatContext } from '@/contexts/ChatContext';
@@ -153,15 +154,22 @@ export function MessageList({ messages, isTyping, characterName, characterAvatar
         </div>
       )}
 
-      {displayMessages.map((message) => (
-        <MessageBubble
-          key={message.id}
-          message={message}
-          characterName={characterName}
-          characterAvatar={safeCharacterAvatar}
-          sessionId={sessionId}
-        />
-      ))}
+      {displayMessages.map((message) =>
+        message.is_scene_illustration && message.image_url ? (
+          <SceneImageBanner
+            key={message.id}
+            imageUrl={message.image_url}
+          />
+        ) : (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            characterName={characterName}
+            characterAvatar={safeCharacterAvatar}
+            sessionId={sessionId}
+          />
+        )
+      )}
 
       {thinkingContent && (
         <InnerMonologueBubble

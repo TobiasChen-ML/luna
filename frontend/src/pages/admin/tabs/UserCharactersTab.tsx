@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, RefreshCw, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Edit, Loader2, RefreshCw, Search } from 'lucide-react';
 import { api } from '@/services/api';
 
 interface Character {
@@ -14,6 +15,7 @@ interface Character {
 }
 
 export default function UserCharactersTab() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [total, setTotal] = useState(0);
@@ -100,6 +102,7 @@ export default function UserCharactersTab() {
               <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">分类</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">状态</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-zinc-300">创建时间</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-zinc-300">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
@@ -119,11 +122,23 @@ export default function UserCharactersTab() {
                 <td className="px-4 py-3 text-zinc-400 text-sm">
                   {character.created_at ? new Date(character.created_at).toLocaleDateString() : '-'}
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/admin/characters/${character.id}/edit`)}
+                      className="p-2 hover:bg-zinc-700 rounded-lg text-zinc-400"
+                      title="内容管理"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
             {characters.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                   暂无用户角色数据
                 </td>
               </tr>

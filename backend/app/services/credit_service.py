@@ -564,4 +564,21 @@ class CreditService:
         return True
 
 
+_FEATURE_TIERS: dict[str, set[str]] = {
+    "story_generation": {"premium", "story_plus", "creator", "vip"},
+    "scene_illustration": {"premium", "story_plus", "creator", "vip"},
+    "publish_scripts": {"creator", "vip"},
+}
+
+
+async def check_feature_access(user_id: str, feature: str) -> bool:
+    """Return True if the user's subscription tier grants access to the feature."""
+    try:
+        balance = await credit_service.get_balance(user_id)
+        tier = balance.get("subscription_tier", "free") or "free"
+        return tier in _FEATURE_TIERS.get(feature, set())
+    except Exception:
+        return False
+
+
 credit_service = CreditService()

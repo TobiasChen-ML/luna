@@ -13,8 +13,17 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 logger = logging.getLogger(__name__)
 
 
+def _get_stream_user_id(request: Request) -> str | None:
+    user_db_id = getattr(request.state, "user_db_id", None)
+    if user_db_id:
+        return str(user_db_id)
+    user_id = getattr(request.state, "user_id", None)
+    return str(user_id) if user_id else None
+
+
 @router.get("/stream")
 async def notification_stream(request: Request) -> EventSourceResponse:
+    user_id = _get_stream_user_id(request)
     channels = [
         "video_completed",
         "video_failed",
@@ -23,6 +32,7 @@ async def notification_stream(request: Request) -> EventSourceResponse:
         "credit_update",
         "audio_uploaded",
         "task_status",
+        "story_generated",
     ]
 
     async def event_generator():
@@ -60,6 +70,10 @@ async def notification_stream(request: Request) -> EventSourceResponse:
                         payload = json.loads(raw_data)
                     except json.JSONDecodeError:
                         payload = {"message": raw_data}
+
+                    payload_user_id = payload.get("user_id") if isinstance(payload, dict) else None
+                    if payload_user_id and (not user_id or str(payload_user_id) != user_id):
+                        continue
 
                     yield {
                         "event": channel,

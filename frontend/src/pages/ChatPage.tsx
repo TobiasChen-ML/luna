@@ -15,7 +15,7 @@ import {
 } from '@/components/chat';
 import { RelationshipDashboardCard } from '@/components/chat/RelationshipDashboardCard';
 import { SceneChoices } from '@/components/chat/SceneChoices';
-import { StoryCompletionModal } from '@/components/story';
+import { StoryCompletionModal, StoryViewerModal, StoryProposalCard } from '@/components/story';
 import { RelationshipLockModal } from '@/components/character/RelationshipLockModal';
 import { Button, CommingSoonModal, GalleryModal, LanguageModal } from '@/components/common';
 import {
@@ -41,8 +41,9 @@ import {
   ChevronRight,
   MoreVertical,
   Video,
+  BookOpen,
 } from 'lucide-react';
-import { api } from '@/services/api';
+import { api, generateStoryFromChat, exitStory } from '@/services/api';
 import { notificationService } from '@/services/notificationService';
 import type { Character } from '@/types';
 import type { VideoLoraAction } from '@/services/videoLoraService';
@@ -92,6 +93,8 @@ function ChatContent() {
     // Story completion
     storyCompletedData,
     clearStoryCompletedData,
+    storyProposal,
+    clearStoryProposal,
     // Scene banner
     sceneBanner,
     ageVerificationRequired,
@@ -122,6 +125,10 @@ function ChatContent() {
   const [isCommingSoonModalOpen, setIsCommingSoonModalOpen] = useState(false);
   const isAdultMode = true;
   const [isRealtimeCallOpen, setIsRealtimeCallOpen] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [generatedScriptId, setGeneratedScriptId] = useState<string | null>(null);
+  const [isInStoryMode, setIsInStoryMode] = useState(false);
   const desktopLayoutRef = useRef<HTMLDivElement | null>(null);
   const mediaTouchStartXRef = useRef<number | null>(null);
   const desktopNavWidth = isDesktopNavCollapsed ? 82 : 220;
@@ -138,6 +145,12 @@ function ChatContent() {
   const characterIdFromUrl = slug ? slugResolvedId : searchParams.get('character');
   const failedCharacterLoadRef = useRef<string | null>(null);
   const prewarmKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (storyCompletedData) {
+      setIsInStoryMode(false);
+    }
+  }, [storyCompletedData]);
 
   useEffect(() => {
     const mobileBreakpoint = window.matchMedia('(max-width: 1023px)');
@@ -707,9 +720,40 @@ function ChatContent() {
   };
 
   // PRD v3: Scene choice selection
-  const handleSceneChoiceSelect = (choice: string) => {
-    handleSendMessage(choice);
+  const handleSceneChoiceSelect = async (choice: string) => {
+    if (sessionId) {
+      try {
+        await api.post('/chat/select-choice', {
+          session_id: sessionId,
+          choice_text: choice,
+          record_message: false,
+        });
+      } catch (err) {
+        console.debug('Choice side-effect request failed:', err);
+      }
+    }
+    await handleSendMessage(choice, { immediate: true });
     clearSceneChoices();
+  };
+
+  const handleGenerateStory = async () => {
+    if (!currentCharacter || !sessionId || isGeneratingStory) return;
+    setIsGeneratingStory(true);
+    try {
+      const resp = await generateStoryFromChat(currentCharacter.id, sessionId);
+      if (resp.status === 'generating') {
+        setGeneratedScriptId(resp.script_id ?? null);
+        setShowStoryModal(true);
+      }
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: { code?: string } } } };
+      const code = e?.response?.data?.detail?.code;
+      if (code === 'FEATURE_LOCKED') {
+        navigate('/subscriptions');
+      }
+    } finally {
+      setIsGeneratingStory(false);
+    }
   };
 
   useEffect(() => {
@@ -789,7 +833,7 @@ function ChatContent() {
   return (
     <div className="relative z-20 flex h-full min-h-[100dvh] w-full flex-col overflow-hidden">
       {/* Top Bar */}
-      <div className="relative bg-zinc-900 border-b border-white/10 px-2 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-4 flex-shrink-0">
+      <div className="relative bg-zinc-900 border-b border-white/10 px-2 sm:px-4 py-2 sm:py-3 pt-safe flex items-center gap-2 sm:gap-4 flex-shrink-0">
         {/* Mobile Menu Button */}
         <button
           type="button"
@@ -862,6 +906,44 @@ function ChatContent() {
 
           {currentCharacter && (
             <>
+              {/* Story mode indicator / exit button */}
+              {isInStoryMode && sessionId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 flex border-purple-500/50 text-purple-300 hover:bg-purple-500/10"
+                  onClick={async () => {
+                    try {
+                      await exitStory(sessionId);
+                      setIsInStoryMode(false);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  title="Exit story mode"
+                >
+                  <BookOpen size={16} />
+                  <span className="hidden sm:inline">Exit Story</span>
+                </Button>
+              )}
+
+              {/* Generate Story Button — visible when 10+ messages and not in story mode */}
+              {!isInStoryMode && messages.length >= 10 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 items-center gap-2 p-2 sm:h-auto sm:px-3 flex border-primary-500/40 text-primary-400 hover:bg-primary-500/10"
+                  onClick={handleGenerateStory}
+                  disabled={isGeneratingStory}
+                  title="Generate story from our conversation"
+                >
+                  <Sparkles size={16} />
+                  <span className="hidden sm:inline">
+                    {isGeneratingStory ? 'Crafting...' : 'Story'}
+                  </span>
+                </Button>
+              )}
+
               {/* Gallery Button */}
               <Button
                 variant="outline"
@@ -914,6 +996,17 @@ function ChatContent() {
             </button>
             {currentCharacter && (
               <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileActionsOpen(false);
+                    navigate(`/character/${currentCharacter.id}/our-story`);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-white/10 hover:text-white"
+                >
+                  <BookHeart size={16} />
+                  <span>Our Story</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1134,6 +1227,21 @@ function ChatContent() {
                 sessionId={sessionId || undefined}
               />
 
+              {/* Story proposal card — shown on relationship stage-up */}
+              {storyProposal && sessionId && (
+                <StoryProposalCard
+                  sessionId={storyProposal.sessionId}
+                  characterId={storyProposal.characterId}
+                  message={storyProposal.message}
+                  onAccepted={(scriptId) => {
+                    clearStoryProposal();
+                    setGeneratedScriptId(scriptId);
+                    setShowStoryModal(true);
+                  }}
+                  onDismiss={clearStoryProposal}
+                />
+              )}
+
               {/* PRD v3: Scene Choices (priority over regular suggestions) */}
               {sceneChoices && sceneChoices.choices.length > 0 && (
                 <SceneChoices
@@ -1271,6 +1379,26 @@ function ChatContent() {
         characterId={currentCharacter?.id || ''}
         characterName={currentCharacter?.first_name || ''}
       />
+
+      {/* Story Viewer Modal — generated story from chat session */}
+      {showStoryModal && currentCharacter && sessionId && (
+        <StoryViewerModal
+          characterName={currentCharacter.first_name || 'Character'}
+          characterAvatar={safeCharacterAvatar || undefined}
+          sessionId={sessionId}
+          characterId={currentCharacter.id}
+          scriptId={generatedScriptId ?? undefined}
+          onClose={() => {
+            setShowStoryModal(false);
+            setGeneratedScriptId(null);
+          }}
+          onStoryModeStarted={() => {
+            setIsInStoryMode(true);
+            setShowStoryModal(false);
+            setGeneratedScriptId(null);
+          }}
+        />
+      )}
 
       {/* Story Completion Modal */}
       {storyCompletedData && sessionId && (

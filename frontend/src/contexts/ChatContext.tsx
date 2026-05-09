@@ -75,6 +75,9 @@ interface ChatContextValue {
   // Story completion
   storyCompletedData: StoryCompletedEvent | null;
   clearStoryCompletedData: () => void;
+  // Story proposal (triggered on stage-up)
+  storyProposal: { sessionId: string; characterId: string; message: string } | null;
+  clearStoryProposal: () => void;
   // Scene banner (script scene / recap)
   sceneBanner: { scene: string | null; synopsis: string | null } | null;
   ageVerificationRequired: boolean;
@@ -225,6 +228,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // Story completion
   const [storyCompletedData, setStoryCompletedData] = useState<StoryCompletedEvent | null>(null);
+  const [storyProposal, setStoryProposal] = useState<{ sessionId: string; characterId: string; message: string } | null>(null);
 
   // Scene banner (script scene / recap)
   const [sceneBanner, setSceneBanner] = useState<{ scene: string | null; synopsis: string | null } | null>(null);
@@ -398,6 +402,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             status: 'ready',
             timestamp: new Date().toISOString(),
             character_id: currentCharacterRef.current?.id || '',
+            is_scene_illustration: data.is_scene_illustration,
           },
         ];
       });
@@ -1445,7 +1450,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             story_title: event.data.story_title,
             ending_type: event.data.ending_type,
             rewards: event.data.rewards,
-            completion_time_minutes: event.data.completion_time_minutes,
+            completion_time_minutes: event.data.completion_time_minutes ?? 0,
           });
           console.log('Story completed:', event.data.story_title, '- Ending:', event.data.ending_type);
           break;
@@ -1454,6 +1459,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setAgeVerificationRequired(true);
           setAgeVerificationMessage(event.data.message || 'Age verification is required to continue.');
           setIsTyping(false);
+          break;
+
+        case 'story_proposal':
+          setStoryProposal({
+            sessionId: event.data.session_id,
+            characterId: event.data.character_id,
+            message: event.data.message,
+          });
+          break;
+
+        case 'story_node_advanced':
+        case 'story_mode_started':
+        case 'story_mode_exited':
           break;
 
         case 'video_intent_declined': {
@@ -1693,6 +1711,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setStoryCompletedData(null);
   }, []);
 
+  const clearStoryProposal = useCallback(() => {
+    setStoryProposal(null);
+  }, []);
+
   const clearAgeVerificationRequired = useCallback(() => {
     setAgeVerificationRequired(false);
     setAgeVerificationMessage(null);
@@ -1769,6 +1791,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Story completion
     storyCompletedData,
     clearStoryCompletedData,
+    storyProposal,
+    clearStoryProposal,
     // Scene banner
     sceneBanner,
     ageVerificationRequired,

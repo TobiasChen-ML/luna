@@ -276,13 +276,13 @@ class CharacterService:
             "avatar_card_url", "profile_image_url", "preview_video_url",
             "mature_image_url", "mature_cover_url", "mature_video_url",
             "voice_id", "meta_title", "meta_description", "seo_optimized",
-            "is_public", "lifecycle_status"
+            "is_official", "is_public", "lifecycle_status"
         ]
         
         for field in update_fields:
             value = getattr(data, field, None)
             if value is not None:
-                if field in ["seo_optimized", "is_public"]:
+                if field in ["seo_optimized", "is_official", "is_public"]:
                     updates.append(f"{field} = ?")
                     params.append(1 if value else 0)
                 else:

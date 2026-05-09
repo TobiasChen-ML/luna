@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request, HTTPException, Depends, Response
+from fastapi import APIRouter, Request, HTTPException, Depends, Response, UploadFile, File, Form
 from typing import Any, Optional
 import hashlib
+import mimetypes
+import re
 import secrets
 import hmac
+import uuid
 
 from app.models import (
     BaseResponse, Character, CharacterCreate, CharacterUpdate,
@@ -298,6 +301,56 @@ async def delete_character_admin(
 
 admin_api_router = APIRouter(prefix="/api/admin/api", tags=["admin-api"])
 
+CHARACTER_IMAGE_MEDIA_FIELDS = {
+    "avatar_url",
+    "cover_url",
+    "profile_image_url",
+    "mature_image_url",
+    "mature_cover_url",
+}
+CHARACTER_VIDEO_MEDIA_FIELDS = {
+    "preview_video_url",
+    "mature_video_url",
+}
+CHARACTER_MEDIA_FIELDS = CHARACTER_IMAGE_MEDIA_FIELDS | CHARACTER_VIDEO_MEDIA_FIELDS
+
+
+def _normalize_character_media_field(field: str, allowed_fields: set[str]) -> str:
+    normalized = str(field or "").strip()
+    if normalized not in allowed_fields:
+        allowed = ", ".join(sorted(allowed_fields))
+        raise HTTPException(status_code=400, detail=f"Invalid media field. Allowed: {allowed}")
+    return normalized
+
+
+def _sanitize_media_filename(filename: Optional[str], content_type: str) -> str:
+    raw_name = (filename or "character-media").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    stem = raw_name.rsplit(".", 1)[0] if "." in raw_name else raw_name
+    stem = re.sub(r"[^a-zA-Z0-9._-]+", "-", stem).strip(".-")[:80] or "character-media"
+    guessed_ext = mimetypes.guess_extension(content_type) or ""
+    existing_ext = ""
+    if "." in raw_name:
+        existing_ext = "." + raw_name.rsplit(".", 1)[-1].lower()
+    ext = existing_ext if existing_ext and len(existing_ext) <= 8 else guessed_ext
+    return f"{uuid.uuid4().hex}-{stem}{ext or '.bin'}"
+
+
+def _resolve_media_source_url(character: dict[str, Any], data: dict[str, Any]) -> tuple[str, Optional[str]]:
+    source_url = str(data.get("source_url") or "").strip()
+    if source_url:
+        return source_url, None
+
+    source_field = str(data.get("source_field") or "").strip()
+    if source_field:
+        source_field = _normalize_character_media_field(source_field, CHARACTER_IMAGE_MEDIA_FIELDS)
+        return str(character.get(source_field) or "").strip(), source_field
+
+    for field in ("mature_image_url", "profile_image_url", "avatar_url", "mature_cover_url", "cover_url"):
+        value = str(character.get(field) or "").strip()
+        if value:
+            return value, field
+    return "", None
+
 
 @admin_api_router.post("/characters/batch-delete", response_model=BaseResponse)
 async def batch_delete_characters(
@@ -468,6 +521,206 @@ async def update_character_api(
         raise HTTPException(status_code=404, detail="Character not found")
     
     return character
+
+
+@admin_api_router.post("/characters/{character_id}/media/upload")
+async def upload_character_media_api(
+    request: Request,
+    character_id: str,
+    field: str = Form(...),
+    file: UploadFile = File(...),
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.models.character import CharacterUpdate
+    from app.services.character_service import character_service
+    from app.services.storage_service import storage_service
+
+    target_field = _normalize_character_media_field(field, CHARACTER_MEDIA_FIELDS)
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    guessed_content_type = mimetypes.guess_type(file.filename or "")[0]
+    content_type = file.content_type or guessed_content_type or "application/octet-stream"
+    is_image_field = target_field in CHARACTER_IMAGE_MEDIA_FIELDS
+    if is_image_field and not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are supported for this field")
+    if not is_image_field and not content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Only video uploads are supported for this field")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    max_bytes = 25 * 1024 * 1024 if is_image_field else 250 * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="Uploaded file is too large")
+
+    folder = f"characters/{character_id}/{'images' if is_image_field else 'videos'}"
+    media_url = await storage_service.upload_bytes(
+        content=content,
+        folder=folder,
+        filename=_sanitize_media_filename(file.filename, content_type),
+        content_type=content_type,
+    )
+    updated = await character_service.update_character(
+        character_id,
+        CharacterUpdate(**{target_field: media_url}),
+    )
+
+    return {
+        "success": True,
+        "field": target_field,
+        "url": media_url,
+        "character": updated or character,
+    }
+
+
+@admin_api_router.post("/characters/{character_id}/media/generate-image")
+async def generate_character_image_media_api(
+    request: Request,
+    character_id: str,
+    data: dict[str, Any],
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.models.character import CharacterUpdate
+    from app.services.character_factory import character_factory
+    from app.services.character_service import character_service
+
+    target_field = _normalize_character_media_field(
+        data.get("target_field") or "mature_image_url",
+        CHARACTER_IMAGE_MEDIA_FIELDS,
+    )
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    novita = await character_factory._get_novita_image_provider()
+    if not novita:
+        raise HTTPException(status_code=503, detail="Novita image provider not configured")
+
+    source_url, source_field = _resolve_media_source_url(character, data)
+    name = str(character.get("name") or character.get("first_name") or "Character")
+    summary = str(character.get("personality_summary") or character.get("description") or "").strip()
+    prompt = str(data.get("prompt") or "").strip()
+    if not prompt:
+        prompt = (
+            f"high quality cinematic portrait photo of {name}, {summary}, "
+            "natural pose, expressive eyes, detailed skin, photorealistic"
+        )
+    negative_prompt = str(data.get("negative_prompt") or "").strip() or (
+        "low quality, bad anatomy, blurry, watermark, deformed, disfigured, bad hands"
+    )
+
+    try:
+        width = int(data.get("width") or 768)
+        height = int(data.get("height") or 1024)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="width and height must be integers")
+
+    image_url = await character_factory._generate_mature_variant(
+        novita,
+        name=name,
+        prompt=prompt,
+        base_image_urls=[source_url] if source_url else [],
+        negative_prompt=negative_prompt,
+        width=width,
+        height=height,
+        log_label=f"admin-{target_field}",
+    )
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Image generation returned no usable result")
+
+    updated = await character_service.update_character(
+        character_id,
+        CharacterUpdate(**{target_field: image_url}),
+    )
+
+    return {
+        "success": True,
+        "field": target_field,
+        "source_field": source_field,
+        "url": image_url,
+        "character": updated or character,
+    }
+
+
+@admin_api_router.post("/characters/{character_id}/media/generate-video")
+async def generate_character_video_media_api(
+    request: Request,
+    character_id: str,
+    data: dict[str, Any],
+    admin: User = Depends(get_admin_user),
+) -> dict[str, Any]:
+    from app.models.character import CharacterUpdate
+    from app.services.character_factory import character_factory
+    from app.services.character_service import character_service
+    from app.services.storage_service import storage_service
+
+    target_field = _normalize_character_media_field(
+        data.get("target_field") or "mature_video_url",
+        CHARACTER_VIDEO_MEDIA_FIELDS,
+    )
+    character = await character_service.get_character_by_id(character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    source_url, source_field = _resolve_media_source_url(character, data)
+    if not source_url:
+        raise HTTPException(status_code=400, detail="An image source is required for img2video")
+
+    provider = character_factory._get_novita_video_provider()
+    if not provider:
+        raise HTTPException(status_code=503, detail="Novita video provider not configured")
+
+    name = str(character.get("name") or character.get("first_name") or "Character")
+    prompt = str(data.get("prompt") or "").strip()
+    if not prompt:
+        prompt = (
+            f"{name}, subtle natural motion, eye contact, cinematic camera movement, "
+            "smooth animation, coherent anatomy, high quality"
+        )
+
+    try:
+        result = await provider.generate_video(
+            prompt=prompt,
+            init_image=source_url,
+            width=int(data.get("width") or 832),
+            height=int(data.get("height") or 480),
+            steps=int(data.get("steps") or 30),
+            guidance_scale=float(data.get("guidance_scale") or 5.0),
+            flow_shift=float(data.get("flow_shift") or 5.0),
+            enable_safety_checker=False,
+            timeout_seconds=int(data.get("timeout_seconds") or 600),
+        )
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Video generation parameters are invalid")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Video generation failed: {e}")
+
+    if not result or not result.video_url:
+        raise HTTPException(status_code=500, detail="Video generation returned no usable result")
+
+    try:
+        video_url = await storage_service.upload_from_url(
+            result.video_url,
+            folder=f"characters/{character_id}/videos",
+        )
+    except Exception:
+        video_url = result.video_url
+
+    updated = await character_service.update_character(
+        character_id,
+        CharacterUpdate(**{target_field: video_url}),
+    )
+
+    return {
+        "success": True,
+        "field": target_field,
+        "source_field": source_field,
+        "url": video_url,
+        "character": updated or character,
+    }
 
 
 @admin_api_router.get("/characters/{character_id}/story-bindings")

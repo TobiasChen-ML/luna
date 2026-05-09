@@ -22,11 +22,15 @@ interface SubscriptionCardProps {
 const tierColors: Record<SubscriptionTier, string> = {
   free: 'text-zinc-400',
   premium: 'text-amber-400',
+  story_plus: 'text-primary-400',
+  creator: 'text-amber-400',
 };
 
 const tierBadgeColors: Record<SubscriptionTier, string> = {
   free: 'bg-zinc-800 text-zinc-300',
   premium: 'bg-gradient-to-r from-amber-900/50 to-orange-900/50 text-amber-300 border border-amber-500/30',
+  story_plus: 'bg-gradient-to-r from-primary-900/50 to-primary-800/50 text-primary-300 border border-primary-500/30',
+  creator: 'bg-gradient-to-r from-amber-900/50 to-orange-900/50 text-amber-300 border border-amber-500/30',
 };
 
 export function SubscriptionCard({

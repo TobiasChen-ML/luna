@@ -1,71 +1,107 @@
 from datetime import datetime
-from fastapi import APIRouter, Request, HTTPException
-from typing import Any
+from fastapi import APIRouter, Request, HTTPException, Query
+from typing import Any, Optional
 
 from app.models import BaseResponse
 from app.services.media_trigger_service import media_trigger_service
+from app.services.script_service import script_service
+from app.core.database import db
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"])
 
 
+def _get_user_id(request: Request) -> str:
+    user_id = getattr(request.state, "user_id", None)
+    return str(user_id) if user_id else "guest"
+
+
+async def _session_belongs_to_user(session_id: str | None, user_id: str) -> bool:
+    if not session_id:
+        return False
+    row = await db.execute(
+        "SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?",
+        (session_id, user_id),
+        fetch=True,
+    )
+    return bool(row)
+
+
+async def _assert_script_access(script: dict[str, Any], request: Request) -> None:
+    source_session_id = script.get("source_session_id")
+    if not source_session_id:
+        if script.get("is_public") is False:
+            raise HTTPException(status_code=403, detail="Script is private")
+        return
+    user_id = _get_user_id(request)
+    if user_id == "guest" or not await _session_belongs_to_user(source_session_id, user_id):
+        raise HTTPException(status_code=403, detail="Script does not belong to this user")
+
+
 @router.get("")
-async def list_scripts(request: Request) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": "script_001",
-            "title": "Sample Script",
-            "description": "A sample script",
-            "content": "Script content here...",
-            "creator_id": "creator_001",
-            "is_public": True,
-            "created_at": datetime.now().isoformat(),
-        }
-    ]
+async def list_scripts(
+    request: Request,
+    source_session_id: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, Any]:
+    if source_session_id:
+        if not await _session_belongs_to_user(source_session_id, _get_user_id(request)):
+            raise HTTPException(status_code=403, detail="Session does not belong to this user")
+        rows = await db.execute(
+            """
+            SELECT *
+            FROM scripts
+            WHERE source_session_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (source_session_id, limit),
+            fetch_all=True,
+        )
+    else:
+        rows = await db.execute(
+            """
+            SELECT *
+            FROM scripts
+            WHERE source_session_id IS NULL
+              AND is_public = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+            fetch_all=True,
+        )
+
+    items = [script_service._row_to_dict(row) for row in (rows or [])]
+    return {"items": items, "total": len(items)}
 
 
 @router.post("", response_model=dict[str, Any])
 async def create_script(request: Request, data: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": "script_new",
-        "title": data.get("title", "New Script"),
-        "description": data.get("description", ""),
-        "character_id": data.get("character_id", ""),
-        "genre": data.get("genre", ""),
-        "world_setting": data.get("world_setting", ""),
-        "user_role": data.get("user_role", ""),
-        "user_role_description": data.get("user_role_description", ""),
-        "opening_line": data.get("opening_line", ""),
-        "scenes": data.get("scenes", []),
-        "npcs": data.get("npcs", []),
-        "triggers": data.get("triggers", []),
-        "tags": data.get("tags", []),
-        "status": "draft",
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat(),
-    }
+    from app.models.script import ScriptCreate
+
+    try:
+        return await script_service.create_script(ScriptCreate(**data))
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.get("/{script_id}/nodes")
+async def get_script_nodes(request: Request, script_id: str) -> dict[str, Any]:
+    script = await script_service.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    await _assert_script_access(script, request)
+    nodes = await script_service.list_nodes(script_id)
+    return {"script_id": script_id, "nodes": nodes}
 
 
 @router.get("/{script_id}")
 async def get_script(request: Request, script_id: str) -> dict[str, Any]:
-    return {
-        "id": script_id,
-        "title": "Sample Script",
-        "description": "A sample script",
-        "character_id": "char_001",
-        "genre": "romance",
-        "world_setting": "Modern City",
-        "user_role": "Main Character",
-        "user_role_description": "The protagonist",
-        "opening_line": "Hello there!",
-        "scenes": [],
-        "npcs": [],
-        "triggers": [],
-        "tags": ["romance"],
-        "play_count": 0,
-        "likes": 0,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat(),
-    }
+    script = await script_service.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    await _assert_script_access(script, request)
+    return script
 
 
 @router.put("/{script_id}")

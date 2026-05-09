@@ -180,6 +180,7 @@ class CharacterUpdate(BaseModel):
     meta_description: Optional[str] = None
     seo_optimized: Optional[bool] = None
     
+    is_official: Optional[bool] = None
     is_public: Optional[bool] = None
     lifecycle_status: Optional[str] = None
     

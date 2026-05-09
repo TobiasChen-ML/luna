@@ -30,6 +30,7 @@ export type NotificationEventType =
   | 'credit_update'
   | 'audio_uploaded'
   | 'task_status'
+  | 'story_generated'
   | 'heartbeat'
   | 'error';
 
@@ -53,6 +54,7 @@ export interface ImageDoneNotification {
   task_id?: string;
   session_id?: string;
   holding_message_id?: string;
+  is_scene_illustration?: boolean;
 }
 
 export interface ImageFailedNotification {
@@ -87,6 +89,13 @@ export interface TaskStatusNotification {
   error_code?: string;
 }
 
+export interface StoryGeneratedNotification {
+  script_id: string;
+  session_id: string;
+  character_id: string;
+  status: 'ready' | 'failed';
+}
+
 export interface HeartbeatNotification {
   timestamp: string;
 }
@@ -104,6 +113,7 @@ export type NotificationPayload = {
   credit_update: CreditUpdateNotification;
   audio_uploaded: AudioUploadedNotification;
   task_status: TaskStatusNotification;
+  story_generated: StoryGeneratedNotification;
   heartbeat: HeartbeatNotification;
   error: ErrorNotification;
 };

@@ -77,8 +77,8 @@ class ScriptService:
         rows = await db.execute(query, tuple(params), fetch_all=True)
         return [self._row_to_dict(row) for row in rows]
     
-    async def create_script(self, data: ScriptCreate) -> dict:
-        script_id = generate_script_id()
+    async def create_script(self, data: ScriptCreate, script_id: Optional[str] = None) -> dict:
+        script_id = script_id or generate_script_id()
         now = datetime.utcnow().isoformat()
         
         slug = data.slug or script_id

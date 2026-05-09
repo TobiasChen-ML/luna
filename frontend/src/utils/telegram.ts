@@ -108,6 +108,11 @@ export interface TelegramWebApp {
   onEvent(eventType: string, callback: () => void): void;
   offEvent(eventType: string, callback: () => void): void;
   sendData(data: string): void;
+  HapticFeedback?: {
+    impactOccurred(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): void;
+    notificationOccurred(type: 'error' | 'success' | 'warning'): void;
+    selectionChanged(): void;
+  };
 }
 
 declare global {

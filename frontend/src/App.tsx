@@ -50,6 +50,7 @@ import { RewardsPage } from '@/pages/RewardsPage';
 import { MatureSettingsPage } from '@/pages/MatureSettingsPage';
 import { GenerateImageCharactersPage } from '@/pages/GenerateImageCharactersPage';
 import { GenerateImageComposerPage } from '@/pages/GenerateImageComposerPage';
+import { OurStoryPage } from '@/pages/OurStoryPage';
 
 import BillingPage from '@/pages/BillingPage';
 import BillingSuccessPage from '@/pages/billing/SuccessPage';
@@ -283,6 +284,14 @@ function AppRoutes() {
           element={
             <MainLayout showHeader={false} showFooter={false} showBottomNav={false}>
               <DiscoverCharacterProfilePage />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/character/:characterId/our-story"
+          element={
+            <MainLayout showHeader={false} showFooter={false} showBottomNav={false}>
+              <OurStoryPage />
             </MainLayout>
           }
         />

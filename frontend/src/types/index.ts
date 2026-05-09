@@ -1,5 +1,5 @@
 // Subscription tier type
-export type SubscriptionTier = 'free' | 'premium';
+export type SubscriptionTier = 'free' | 'premium' | 'story_plus' | 'creator';
 
 // Discovery / categorisation types
 export type TopCategory = 'girls' | 'anime' | 'guys';

@@ -76,7 +76,12 @@ export type SSEEventType =
   | 'tool_call'
   | 'task_status'
   | 'thinking_delta'
-  | 'thinking_done';
+  | 'thinking_done'
+  // Story mode events
+  | 'story_proposal'
+  | 'story_node_advanced'
+  | 'story_mode_started'
+  | 'story_mode_exited';
 
 // ==================== Event Payloads ====================
 
@@ -359,6 +364,30 @@ export interface ThinkingDoneEvent {
   full_content: string;
 }
 
+export interface StoryProposalEvent {
+  session_id: string;
+  character_id: string;
+  trigger: string;
+  new_stage?: string;
+  message: string;
+}
+
+export interface StoryNodeAdvancedEvent {
+  script_id: string;
+  node_id: string;
+  node_title: string;
+  is_ending: boolean;
+}
+
+export interface StoryModeStartedEvent {
+  session_id: string;
+  script_id: string;
+}
+
+export interface StoryModeExitedEvent {
+  session_id: string;
+}
+
 export interface ToolCallEvent {
   tool_name: string;
   phase: 'requested' | 'submitted' | 'completed' | 'failed' | string;
@@ -413,7 +442,12 @@ export type SSEEventData =
   | { type: 'tool_call'; data: ToolCallEvent }
   | { type: 'task_status'; data: TaskStatusEvent }
   | { type: 'thinking_delta'; data: ThinkingDeltaEvent }
-  | { type: 'thinking_done'; data: ThinkingDoneEvent };
+  | { type: 'thinking_done'; data: ThinkingDoneEvent }
+  // Story mode events
+  | { type: 'story_proposal'; data: StoryProposalEvent }
+  | { type: 'story_node_advanced'; data: StoryNodeAdvancedEvent }
+  | { type: 'story_mode_started'; data: StoryModeStartedEvent }
+  | { type: 'story_mode_exited'; data: StoryModeExitedEvent };
 
 export type SSEStreamEvent = SSEEventData & { id?: string };
 

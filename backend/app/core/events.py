@@ -34,6 +34,12 @@ class EventType(str, Enum):
     RELATIONSHIP_UPDATE = "relationship_update"
     SCRIPT_STATE_UPDATED = "script_state_updated"
     STORY_COMPLETED = "story_completed"
+    SCENE_CHOICES = "scene_choices"
+    STORY_GENERATED = "story_generated"
+    STORY_PROPOSAL = "story_proposal"
+    STORY_NODE_ADVANCED = "story_node_advanced"
+    STORY_MODE_STARTED = "story_mode_started"
+    STORY_MODE_EXITED = "story_mode_exited"
 
 
 class SSEEvent(BaseModel):

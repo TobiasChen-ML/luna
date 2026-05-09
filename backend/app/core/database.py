@@ -318,10 +318,13 @@ class Database:
                 is_public INTEGER DEFAULT 1,
                 is_official INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'draft',
+                source_session_id TEXT,
+                cover_image_url TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_scripts_character ON scripts(character_id);
+            CREATE INDEX IF NOT EXISTS idx_scripts_source_session ON scripts(source_session_id);
 
             CREATE TABLE IF NOT EXISTS script_nodes (
                 id TEXT PRIMARY KEY,
@@ -378,6 +381,16 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_story_progress_user ON story_progress(user_id);
             CREATE INDEX IF NOT EXISTS idx_story_progress_story ON story_progress(story_id);
             CREATE INDEX IF NOT EXISTS idx_story_progress_archived ON story_progress(archived);
+
+            CREATE TABLE IF NOT EXISTS relationship_milestones (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                character_id TEXT NOT NULL,
+                milestone_type TEXT NOT NULL,
+                description TEXT,
+                occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_milestones_user_char ON relationship_milestones(user_id, character_id);
 
             CREATE TABLE IF NOT EXISTS story_nodes (
                 id TEXT PRIMARY KEY,
@@ -470,6 +483,8 @@ class Database:
                 price_cents INTEGER NOT NULL,
                 monthly_equivalent_cents INTEGER NOT NULL,
                 discount_percent INTEGER DEFAULT 0,
+                tier_id TEXT,
+                monthly_credits INTEGER DEFAULT 100,
                 is_active INTEGER DEFAULT 1,
                 display_order INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
